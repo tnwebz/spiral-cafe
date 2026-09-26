@@ -89,7 +89,7 @@ export default function Home() {
                 Welcome to Spiral Cafe
               </h2>
               <p className="text-xs sm:text-sm text-beige/90 mt-1 max-w-lg leading-relaxed">
-                Enjoy fresh artisan coffees, crispy loaded fries, gourmet burgers, wood-fired pizzas, and signature drinks under the starry sky.
+                Enjoy gourmet smash burgers, crispy chicken wings, artisan sandos, creamy pastas, specialty coffees, and refreshing coolers under the starry sky.
               </p>
 
               <div className="flex flex-wrap items-center gap-3 mt-4 pt-3 border-t border-cream/15 text-xs text-cream/90">

@@ -104,7 +104,7 @@ export default function HeroBanner({
           </div>
           <input
             type="text"
-            placeholder="Search fries, burgers, pizzas, drinks..."
+            placeholder="Search wings, smash burgers, sandos, pasta, shakes..."
             value={searchQuery}
             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
             className="block w-full pl-11 pr-12 py-3.5 bg-cream text-[#4A2117] placeholder:text-[#8C5E51]/70 rounded-full border border-beige focus:outline-none focus:ring-2 focus:ring-cream shadow-xl text-sm font-medium transition-all"

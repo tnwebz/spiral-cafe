@@ -21,7 +21,7 @@ export default function CategorySlider() {
           </p>
         </div>
         <Link 
-          href="/menu?category=fries" 
+          href="/menu" 
           className="text-xs sm:text-sm font-bold text-primary hover:text-primary-dark transition-colors px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20"
         >
           View All Menu

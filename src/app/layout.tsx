@@ -16,7 +16,7 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: "Spiral Cafe - Rooftop Dining & Digital Menu",
-  description: "Explore delicious Fries, Sandwiches, Burgers, Pizzas, and Drinks at Spiral Cafe, Chengalpattu.",
+  description: "Explore gourmet Smash Burgers, Wings, Sandos, Creamy Pastas, Specialty Coffees, Coolers & Shakes at Spiral Cafe, Chengalpattu.",
   icons: {
     icon: "/logo.png",
   },

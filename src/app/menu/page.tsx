@@ -43,7 +43,7 @@ function MenuContent() {
               </h1>
             </div>
             <span className="text-[11px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/15">
-              5 Categories
+              {menuData.length} Categories
             </span>
           </div>
 
@@ -54,7 +54,7 @@ function MenuContent() {
             </div>
             <input
               type="text"
-              placeholder="Search fries, sandwiches, burgers, pizzas, drinks..."
+              placeholder="Search wings, smash burgers, sandos, pasta, coffee, shakes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="block w-full pl-10 pr-4 py-2.5 bg-card border border-border rounded-full text-foreground focus:outline-none focus:ring-2 focus:ring-primary/60 transition-all placeholder:text-muted-foreground/70 text-xs sm:text-sm font-medium shadow-xs"
@@ -148,7 +148,7 @@ function MenuContent() {
         {displayedCategories.length === 0 && (
           <div className="text-center py-16 text-muted-foreground bg-card rounded-3xl border border-border p-8">
             <p className="text-base font-semibold text-foreground">No menu items found.</p>
-            <p className="text-xs text-muted-foreground mt-1">Try searching for fries, sandwiches, burgers, pizzas, or drinks.</p>
+            <p className="text-xs text-muted-foreground mt-1">Try searching for wings, smash burgers, sandos, fries, pasta, coffee, or shakes.</p>
           </div>
         )}
       </div>
