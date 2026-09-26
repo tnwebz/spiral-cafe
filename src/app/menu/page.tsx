@@ -8,10 +8,16 @@ import BottomNav from "@/components/BottomNav";
 import MenuItemCard from "@/components/Menu/MenuItemCard";
 import { menuData } from "@/data/menu";
 
+import { useCart } from "@/context/CartContext";
+import { ShoppingBag } from "lucide-react";
+
 function MenuContent() {
   const searchParams = useSearchParams();
   const categoryParam = searchParams.get("category");
+  const tableParam = searchParams.get("table");
   
+  const { tableNumber, setTableNumber, openCart, totalItems } = useCart();
+
   // Default to 'all' or specific query param if provided
   const [activeCategory, setActiveCategory] = useState(categoryParam || "all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -21,6 +27,12 @@ function MenuContent() {
       setActiveCategory(categoryParam.toLowerCase());
     }
   }, [categoryParam]);
+
+  useEffect(() => {
+    if (tableParam) {
+      setTableNumber(tableParam);
+    }
+  }, [tableParam, setTableNumber]);
 
   // Filter menuData based on active category
   const displayedCategories = activeCategory === "all"
@@ -42,9 +54,19 @@ function MenuContent() {
                 Spiral Cafe Menu
               </h1>
             </div>
-            <span className="text-[11px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/15">
-              {menuData.length} Categories
-            </span>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-[#8C5E51] bg-muted px-2.5 py-1 rounded-full border border-border">
+                {tableNumber}
+              </span>
+              <button
+                onClick={openCart}
+                className="text-[11px] font-bold text-cream bg-primary hover:bg-primary-dark px-3 py-1 rounded-full shadow-xs cursor-pointer flex items-center gap-1.5 transition-transform active:scale-95"
+              >
+                <ShoppingBag size={12} />
+                <span>Basket ({totalItems})</span>
+              </button>
+            </div>
           </div>
 
           {/* Search Bar */}

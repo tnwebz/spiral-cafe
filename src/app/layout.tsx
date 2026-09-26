@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
+import { CartProvider } from "@/context/CartContext";
+import FloatingCartBar from "@/components/Menu/FloatingCartBar";
+import CartOrdersSheet from "@/components/Menu/CartOrdersSheet";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -39,9 +42,13 @@ export default function RootLayout({
       className={`${inter.variable} ${poppins.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans bg-background text-foreground selection:bg-primary/20">
-        <SmoothScroll>
-          {children}
-        </SmoothScroll>
+        <CartProvider>
+          <SmoothScroll>
+            {children}
+          </SmoothScroll>
+          <FloatingCartBar />
+          <CartOrdersSheet />
+        </CartProvider>
       </body>
     </html>
   );

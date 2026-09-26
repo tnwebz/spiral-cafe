@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { Star, Flame, ChefHat, Sparkles } from "lucide-react";
+import { Star, Flame, ChefHat, Sparkles, Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/context/CartContext";
 
 export type BadgeType = "veg" | "non-veg" | "bestseller" | "chef-choice" | "new" | "spicy";
 
@@ -21,6 +22,7 @@ export interface MenuItemCardProps {
 }
 
 export default function MenuItemCard({
+  id,
   name,
   price,
   originalPrice,
@@ -32,6 +34,10 @@ export default function MenuItemCard({
   index = 0,
 }: MenuItemCardProps) {
   const calculatedOriginalPrice = originalPrice || Math.round(price * 1.35);
+  const itemId = id || name.toLowerCase().replace(/\s+/g, "-");
+
+  const { getItemQuantity, addToCart, increaseQuantity, decreaseQuantity } = useCart();
+  const quantity = getItemQuantity(itemId);
 
   return (
     <motion.div
@@ -119,9 +125,9 @@ export default function MenuItemCard({
           </div>
         </div>
 
-        {/* Pricing Line: ₹240  ₹349 (slashed) */}
-        <div className="flex items-baseline justify-between pt-2 border-t border-border/50">
-          <div className="flex items-baseline gap-2">
+        {/* Pricing Line & Add to Cart / Quantity Controller */}
+        <div className="flex items-center justify-between pt-2.5 border-t border-border/50 gap-2">
+          <div className="flex items-baseline gap-1.5 shrink-0">
             <span className="font-sans font-extrabold text-xl sm:text-2xl text-primary">
               ₹{price}
             </span>
@@ -130,9 +136,46 @@ export default function MenuItemCard({
             </span>
           </div>
 
-          <span className="text-[11px] font-semibold text-primary/90 bg-muted px-2.5 py-1 rounded-full">
-            Spiral Special
-          </span>
+          {/* Ordering Quantity Control */}
+          <div>
+            {quantity === 0 ? (
+              <button
+                onClick={() =>
+                  addToCart({
+                    id: itemId,
+                    name,
+                    price,
+                    image,
+                    description,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-cream hover:bg-primary-dark font-heading font-bold text-xs rounded-full shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus size={13} strokeWidth={3} />
+                <span>Add</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-[#FFF8F3] border border-[#B73F1D]/40 rounded-full p-1 shadow-xs">
+                <button
+                  onClick={() => decreaseQuantity(itemId)}
+                  className="w-7 h-7 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-cream flex items-center justify-center font-bold transition-all active:scale-90 cursor-pointer"
+                  aria-label="Decrease quantity"
+                >
+                  <Minus size={13} strokeWidth={3} />
+                </button>
+                <span className="font-heading font-bold text-sm text-[#4A2117] min-w-[18px] text-center">
+                  {quantity}
+                </span>
+                <button
+                  onClick={() => increaseQuantity(itemId)}
+                  className="w-7 h-7 rounded-full bg-primary text-cream hover:bg-primary-dark flex items-center justify-center font-bold transition-all active:scale-90 cursor-pointer"
+                  aria-label="Increase quantity"
+                >
+                  <Plus size={13} strokeWidth={3} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>

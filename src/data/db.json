@@ -1,0 +1,90 @@
+{
+  "orders": [
+    {
+      "id": "ord_1790438509256_dju0k",
+      "orderNumber": "ORD-151687",
+      "tableNumber": "Table 08",
+      "customerSessionId": "sess_test_table08",
+      "items": [
+        {
+          "id": "item-1790438509256-0",
+          "productId": "sd-1",
+          "name": "French Onion Melt",
+          "price": 210,
+          "quantity": 2,
+          "lineTotal": 420,
+          "image": "/sample.jpg"
+        },
+        {
+          "id": "item-1790438509256-1",
+          "productId": "pa-4",
+          "name": "Pesto Chicken",
+          "price": 290,
+          "quantity": 1,
+          "lineTotal": 290,
+          "image": "/sample.jpg"
+        }
+      ],
+      "subtotal": 710,
+      "tax": 36,
+      "packagingFee": 0,
+      "serviceCharge": 0,
+      "grandTotal": 746,
+      "status": "COMPLETED",
+      "paymentStatus": "PAID",
+      "paymentMethod": "ONLINE",
+      "notes": "Crispy bread please",
+      "createdAt": "2026-09-26T16:01:49.256Z",
+      "updatedAt": "2026-09-26T16:01:51.016Z",
+      "preparingAt": "2026-09-26T16:01:50.042Z",
+      "readyAt": "2026-09-26T16:01:50.504Z",
+      "completedAt": "2026-09-26T16:01:51.016Z"
+    },
+    {
+      "id": "ord_1790438509293_1nhb0",
+      "orderNumber": "ORD-312823",
+      "tableNumber": "Table 12",
+      "customerSessionId": "sess_test_table12",
+      "items": [
+        {
+          "id": "item-1790438509293-0",
+          "productId": "bg-1",
+          "name": "Oklahoma Chicken Smash",
+          "price": 240,
+          "quantity": 1,
+          "lineTotal": 240,
+          "image": "/sample.jpg"
+        },
+        {
+          "id": "item-1790438509293-1",
+          "productId": "sq-3",
+          "name": "Drippy Cheese Fries",
+          "price": 170,
+          "quantity": 1,
+          "lineTotal": 170,
+          "image": "/sample.jpg"
+        }
+      ],
+      "subtotal": 410,
+      "tax": 21,
+      "packagingFee": 0,
+      "serviceCharge": 0,
+      "grandTotal": 431,
+      "status": "READY",
+      "paymentStatus": "PENDING_CASH",
+      "paymentMethod": "CASH",
+      "createdAt": "2026-09-26T16:01:49.293Z",
+      "updatedAt": "2026-09-26T16:01:51.427Z",
+      "preparingAt": "2026-09-26T16:01:51.036Z",
+      "readyAt": "2026-09-26T16:01:51.059Z"
+    }
+  ],
+  "config": {
+    "taxPercentage": 5,
+    "packagingFee": 0,
+    "serviceCharge": 0,
+    "kitchenPin": "1234",
+    "cafeName": "Spiral Cafe",
+    "currencySymbol": "₹"
+  }
+}
