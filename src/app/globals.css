@@ -1,0 +1,132 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-poppins);
+  
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  
+  --color-cream: var(--cream);
+  --color-beige: var(--beige);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-terracotta-light: var(--terracotta-light);
+  
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.5);
+}
+
+:root {
+  /* Spiral Cafe Terracotta Palette */
+  --primary: #B73F1D;           /* Burnt orange / Primary Terracotta */
+  --primary-dark: #9D3E22;      /* Deep reddish brown */
+  --secondary: #A7402E;        /* Muted brick */
+  --terracotta-light: #AD4F33; /* Soft clay */
+  --cream: #FFF8F3;            /* Warm Cream */
+  --beige: #E2C7BA;            /* Soft Beige */
+  --accent: #BE7860;           /* Peach Accent */
+  
+  --background: #FFF8F3;       /* Warm Cream base */
+  --foreground: #4A2117;       /* Dark Terracotta roast for maximum contrast */
+  --card: #FFFFFF;             /* Crisp pure white card surface */
+  --card-foreground: #4A2117;
+  --popover: #FFFFFF;
+  --popover-foreground: #4A2117;
+  
+  --primary-foreground: #FFF8F3;
+  --secondary-foreground: #FFF8F3;
+  --accent-foreground: #FFF8F3;
+  
+  --muted: #F7ECE4;            /* Light linen tinted surface */
+  --muted-foreground: #8C5E51; /* Warm muted roast */
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  
+  --border: #EBDAD0;           /* Warm subtle clay outline */
+  --input: #EBDAD0;
+  --ring: #B73F1D;
+  --radius: 1rem;
+}
+
+.dark {
+  --background: #23100B;
+  --foreground: #FFF8F3;
+  --card: #321913;
+  --card-foreground: #FFF8F3;
+  --popover: #321913;
+  --popover-foreground: #FFF8F3;
+  --primary: #D95D39;
+  --primary-dark: #B73F1D;
+  --secondary: #BE7860;
+  --terracotta-light: #E2C7BA;
+  --cream: #FFF8F3;
+  --beige: #4A2117;
+  --accent: #BE7860;
+  --primary-foreground: #FFF8F3;
+  --secondary-foreground: #FFF8F3;
+  --accent-foreground: #FFF8F3;
+  --muted: #3D2018;
+  --muted-foreground: #D3B3A5;
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --border: #4D2B22;
+  --input: #4D2B22;
+  --ring: #D95D39;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-color: #FFF8F3;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(183, 63, 29, 0.04) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(190, 120, 96, 0.04) 0px, transparent 50%);
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Custom smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #FFF8F3;
+}
+::-webkit-scrollbar-thumb {
+  background: #E2C7BA;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #BE7860;
+}
