@@ -42,34 +42,38 @@
 }
 
 :root {
-  /* Spiral Cafe Terracotta Palette */
-  --primary: #B73F1D;           /* Burnt orange / Primary Terracotta */
-  --primary-dark: #9D3E22;      /* Deep reddish brown */
-  --secondary: #A7402E;        /* Muted brick */
-  --terracotta-light: #AD4F33; /* Soft clay */
-  --cream: #FFF8F3;            /* Warm Cream */
+  /* Spiral Cafe Commercial Restaurant Management & Menu Palette */
+  --primary: #CA340A;           /* Primary Vibrant Terracotta */
+  --primary-dark: #A72B08;      /* Deep brick roast */
+  --secondary: #B8320C;        /* Rich terracotta accent */
+  --terracotta-light: #E2C7BA; /* Soft clay */
+  --cream: #FFF9F5;            /* Warm Cream background */
   --beige: #E2C7BA;            /* Soft Beige */
-  --accent: #BE7860;           /* Peach Accent */
+  --accent: #CA340A;           /* Primary Accent */
   
-  --background: #FFF8F3;       /* Warm Cream base */
-  --foreground: #4A2117;       /* Dark Terracotta roast for maximum contrast */
+  --background: #FFF9F5;       /* Warm Cream base */
+  --foreground: #2C1710;       /* Dark Espresso text */
+  --surface-dark: #3A1710;     /* Deep operational surface */
   --card: #FFFFFF;             /* Crisp pure white card surface */
-  --card-foreground: #4A2117;
+  --card-foreground: #2C1710;
   --popover: #FFFFFF;
-  --popover-foreground: #4A2117;
+  --popover-foreground: #2C1710;
   
-  --primary-foreground: #FFF8F3;
-  --secondary-foreground: #FFF8F3;
-  --accent-foreground: #FFF8F3;
+  --primary-foreground: #FFF9F5;
+  --secondary-foreground: #FFF9F5;
+  --accent-foreground: #FFF9F5;
   
-  --muted: #F7ECE4;            /* Light linen tinted surface */
-  --muted-foreground: #8C5E51; /* Warm muted roast */
-  --destructive: #DC2626;
+  --muted: #F8ECE4;            /* Soft warm surface tint */
+  --muted-foreground: #8C5E51; /* Muted espresso subtitle */
+  --destructive: #B91C1C;
   --destructive-foreground: #FFFFFF;
+  --success: #15803D;
+  --warning: #D97706;
+  --info: #2563EB;
   
-  --border: #EBDAD0;           /* Warm subtle clay outline */
-  --input: #EBDAD0;
-  --ring: #B73F1D;
+  --border: #F0DDD3;           /* Clean warm border (rgba(202, 52, 10, 0.15)) */
+  --input: #F0DDD3;
+  --ring: #CA340A;
   --radius: 1rem;
 }
 
@@ -126,6 +130,46 @@
 ::-webkit-scrollbar-thumb {
   background: #E2C7BA;
   border-radius: 9999px;
+}
+
+/* 58mm Thermal Receipt Print Engine */
+@media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .printable-thermal-receipt,
+  .printable-thermal-receipt * {
+    visibility: visible;
+  }
+  .printable-thermal-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 58mm;
+    max-width: 58mm;
+    margin: 0 auto;
+    padding: 2mm 3.5mm;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #BE7860;

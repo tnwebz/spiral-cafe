@@ -4,7 +4,7 @@ import { createOrder, getAllOrders, getSessionOrders } from "@/lib/db";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { tableNumber, customerSessionId, items, notes } = body;
+    const { tableNumber, customerSessionId, items, notes, customerPhone, customerId } = body;
 
     if (!customerSessionId || typeof customerSessionId !== "string") {
       return NextResponse.json(
@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
     const order = createOrder({
       tableNumber: tableNumber || "Table 01",
       customerSessionId,
+      customerId,
+      customerPhone,
       items,
       notes,
     });

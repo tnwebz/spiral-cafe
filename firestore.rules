@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true || 
+        request.auth.token.role == 'ADMIN'
+      );
+    }
+    
+    function isStaff() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'ADMIN' || 
+        request.auth.token.role == 'KITCHEN' || 
+        request.auth.token.role == 'CASHIER'
+      );
+    }
+
+    // Public Digital Menu (Anyone can read active menu items; only authenticated Admin can create/update/delete)
+    match /menu_items/{itemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Orders collection
+    match /orders/{orderId} {
+      // Any guest can place an order with valid initial state
+      allow create: if request.resource.data.status == 'PENDING'
+                    && request.resource.data.grandTotal > 0
+                    && request.resource.data.items.size() > 0;
+      
+      // Staff can read all orders; guest can read their own session order
+      allow read: if isStaff() || (
+        request.auth != null && resource.data.customerSessionId == request.auth.uid
+      );
+      
+      // Only authorized staff / admin can update order status and payment confirmations
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Invoices collection (Immutable records)
+    match /invoices/{invoiceId} {
+      // Secure read via token or staff
+      allow read: if isStaff() || resource.data.secureToken == request.auth.token.secureToken;
+      // Only admin / system can generate invoices
+      allow create: if isStaff();
+      allow update, delete: if false; // Invoices are immutable
+    }
+
+    // Customers and Sessions
+    match /customers/{customerId} {
+      allow read, write: if isStaff();
+    }
+
+    match /customer_sessions/{sessionId} {
+      allow read, write: if isStaff() || isAuthenticated();
+    }
+
+    // Settlements & Cash register audit
+    match /settlements/{settlementId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Audit logs (Readonly for Admin, no direct updates)
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // Cafe Config
+    match /config/{configDoc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

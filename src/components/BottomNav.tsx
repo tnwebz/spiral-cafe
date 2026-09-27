@@ -20,7 +20,7 @@ export default function BottomNav() {
   ).length;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#FFF8F3]/95 backdrop-blur-xl border-t border-[#EBDAD0] shadow-[0_-4px_20px_rgba(74,33,23,0.06)]">
+    <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#FFF8F3]/95 backdrop-blur-xl border-t border-[#EBDAD0] shadow-[0_-4px_20px_rgba(74,33,23,0.06)] md:hidden">
       <nav className="flex items-center justify-around px-2 py-2 max-w-md mx-auto">
         <Link
           href="/"

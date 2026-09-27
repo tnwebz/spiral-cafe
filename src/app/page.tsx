@@ -45,7 +45,7 @@ export default function Home() {
       {/* Hero Section with Terracotta theme, logo, search bar, & auto-sliding best sellers */}
       <HeroBanner searchQuery={searchQuery} onSearchChange={setSearchQuery} />
 
-      <div className="max-w-md mx-auto sm:max-w-xl md:max-w-3xl lg:max-w-5xl px-4 pt-2">
+      <div className="max-w-md mx-auto sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl px-4 sm:px-6 lg:px-8 pt-2">
         {/* Search Results if user types in search bar */}
         {searchQuery.trim() ? (
           <section className="py-6">
@@ -53,7 +53,7 @@ export default function Home() {
               Search Results ({allFilteredItems.length})
             </h2>
             {allFilteredItems.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
                 {allFilteredItems.map((item, idx) => (
                   <MenuItemCard key={item.id} index={idx} {...item} />
                 ))}
@@ -75,7 +75,7 @@ export default function Home() {
         ) : (
           <>
             {/* Soft Opening Special Showcase Card inspired by the poster */}
-            <div className="mt-4 mb-2 p-5 rounded-3xl bg-gradient-to-br from-[#B73F1D] to-[#9D3E22] text-cream shadow-lg border border-beige/30 relative overflow-hidden">
+            <div className="mt-4 mb-2 p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#B73F1D] to-[#9D3E22] text-cream shadow-lg border border-beige/30 relative overflow-hidden">
               <div className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-cream/10 blur-xl pointer-events-none" />
               
               <div className="flex items-center gap-2 mb-2">
@@ -85,10 +85,10 @@ export default function Home() {
                 <span className="text-xs text-beige font-semibold">Doors are open</span>
               </div>
 
-              <h2 className="font-heading font-extrabold text-xl sm:text-2xl text-cream leading-tight">
+              <h2 className="font-heading font-extrabold text-xl sm:text-2xl lg:text-3xl text-cream leading-tight">
                 Welcome to Spiral Cafe
               </h2>
-              <p className="text-xs sm:text-sm text-beige/90 mt-1 max-w-lg leading-relaxed">
+              <p className="text-xs sm:text-sm text-beige/90 mt-1 max-w-2xl leading-relaxed">
                 Enjoy gourmet smash burgers, crispy chicken wings, artisan sandos, creamy pastas, specialty coffees, and refreshing coolers under the starry sky.
               </p>
 
@@ -127,8 +127,8 @@ export default function Home() {
               </div>
 
               {menuData.map((category) => {
-                // Select 2 items per category for a rich showcase on home page
-                const topItems = category.items.slice(0, 2);
+                // Select top items per category for a rich showcase on home page
+                const topItems = category.items.slice(0, 4);
 
                 if (!topItems.length) return null;
 
@@ -154,8 +154,8 @@ export default function Home() {
                       </Link>
                     </div>
 
-                    {/* 2-Column Responsive Card Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Responsive Card Grid: 1 col on mobile, 2 on tablet, 3 on desktop, 4 on large */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
                       {topItems.map((item, idx) => (
                         <MenuItemCard key={item.id} index={idx} {...item} />
                       ))}

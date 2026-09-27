@@ -19,6 +19,7 @@ export interface MenuItemCardProps {
   badges?: BadgeType[];
   description?: string;
   index?: number;
+  available?: boolean;
 }
 
 export default function MenuItemCard({
@@ -32,6 +33,7 @@ export default function MenuItemCard({
   badges = [],
   description,
   index = 0,
+  available = true,
 }: MenuItemCardProps) {
   const calculatedOriginalPrice = originalPrice || Math.round(price * 1.35);
   const itemId = id || name.toLowerCase().replace(/\s+/g, "-");
@@ -45,10 +47,10 @@ export default function MenuItemCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-20px" }}
       transition={{ duration: 0.4, delay: Math.min(index * 0.04, 0.25) }}
-      className="bg-card rounded-3xl overflow-hidden border border-border/80 shadow-[0_6px_20px_rgba(74,33,23,0.05)] hover:shadow-[0_12px_32px_rgba(183,63,29,0.12)] transition-all duration-300 flex flex-col group h-full"
+      className="bg-card rounded-3xl overflow-hidden border border-border/80 shadow-[0_6px_20px_rgba(74,33,23,0.05)] hover:shadow-[0_14px_32px_rgba(183,63,29,0.12)] md:hover:-translate-y-1 transition-all duration-300 flex flex-col group h-full justify-between"
     >
       {/* Top Half: Image with Badge Overlay */}
-      <div className="relative w-full h-44 sm:h-52 bg-muted overflow-hidden">
+      <div className="relative w-full h-44 sm:h-48 md:h-44 lg:h-48 bg-muted overflow-hidden shrink-0">
         <Image
           src={image}
           alt={name}
@@ -84,7 +86,7 @@ export default function MenuItemCard({
       </div>
 
       {/* Bottom Half: Details */}
-      <div className="p-4 flex flex-col justify-between flex-1 gap-2 bg-card">
+      <div className="p-4 md:p-4.5 flex flex-col justify-between flex-1 gap-2 bg-card">
         <div>
           {/* Name & Veg/Non-Veg icon */}
           <div className="flex items-start gap-2 mb-1.5">
@@ -108,9 +110,9 @@ export default function MenuItemCard({
             </h3>
           </div>
 
-          {/* Description snippet if available */}
+          {/* Description snippet with consistent minimum height */}
           {description && (
-            <p className="text-xs text-muted-foreground line-clamp-2 mb-2 leading-relaxed">
+            <p className="text-xs text-muted-foreground line-clamp-2 min-h-[32px] mb-1 leading-relaxed">
               {description}
             </p>
           )}
@@ -138,7 +140,11 @@ export default function MenuItemCard({
 
           {/* Ordering Quantity Control */}
           <div>
-            {quantity === 0 ? (
+            {!available ? (
+              <span className="inline-block px-3 py-1.5 bg-zinc-200 text-zinc-600 font-heading font-extrabold text-[11px] rounded-full uppercase tracking-wider cursor-not-allowed">
+                SOLD OUT
+              </span>
+            ) : quantity === 0 ? (
               <button
                 onClick={() =>
                   addToCart({

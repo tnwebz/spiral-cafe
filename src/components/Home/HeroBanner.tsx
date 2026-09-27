@@ -63,9 +63,9 @@ export default function HeroBanner({
       </div>
 
       {/* Brand Header: Logo & Cafe Identity */}
-      <div className="relative z-20 px-4 pt-2 max-w-md mx-auto sm:max-w-xl w-full flex items-center justify-between pb-3">
-        <div className="flex items-center gap-3">
-          <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-cream/95 p-1 shadow-md border border-beige/40 flex items-center justify-center shrink-0">
+      <div className="relative z-20 px-4 sm:px-6 lg:px-8 pt-2 max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full flex items-center justify-between pb-3">
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-cream/95 p-1 shadow-md border border-beige/40 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <Image
               src="/logo.png"
               alt="Spiral Cafe Logo"
@@ -86,18 +86,46 @@ export default function HeroBanner({
               <span>Chengalpattu Rooftop Experience</span>
             </p>
           </div>
-        </div>
+        </Link>
+
+        {/* Desktop Header Nav Links */}
+        <nav className="hidden md:flex items-center gap-2">
+          <Link
+            href="/"
+            className="px-3.5 py-1.5 rounded-full text-xs font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/10 transition-colors"
+          >
+            Home
+          </Link>
+          <Link
+            href="/menu"
+            className="px-4 py-1.5 rounded-full text-xs font-heading font-bold bg-cream text-primary shadow-sm hover:bg-white transition-all"
+          >
+            Explore Menu
+          </Link>
+          <Link
+            href="/offers"
+            className="px-3.5 py-1.5 rounded-full text-xs font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/10 transition-colors"
+          >
+            Combos
+          </Link>
+          <Link
+            href="/contact"
+            className="px-3.5 py-1.5 rounded-full text-xs font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/10 transition-colors"
+          >
+            Visit Us
+          </Link>
+        </nav>
 
         {/* Soft Opening / Status Pill */}
-        <div className="bg-cream/15 backdrop-blur-md border border-cream/25 px-3 py-1 rounded-full text-right shrink-0">
-          <span className="text-[10px] font-bold text-cream tracking-wider uppercase flex items-center gap-1">
+        <div className="bg-cream/15 backdrop-blur-md border border-cream/25 px-3.5 py-1.5 rounded-full text-right shrink-0">
+          <span className="text-[10px] sm:text-xs font-bold text-cream tracking-wider uppercase flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Open Now
           </span>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="relative z-20 px-4 pt-1 max-w-md mx-auto sm:max-w-xl w-full">
+      <div className="relative z-20 px-4 sm:px-6 lg:px-8 pt-1 max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto w-full">
         <div className="relative flex items-center">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-primary">
             <Search className="h-5 w-5 text-[#B73F1D]" />
@@ -121,7 +149,7 @@ export default function HeroBanner({
 
       {/* Best Selling Slider Section */}
       <div
-        className="relative z-10 my-auto px-4 pt-5 pb-1 max-w-md mx-auto sm:max-w-xl w-full flex flex-col items-center"
+        className="relative z-10 my-auto px-4 sm:px-6 lg:px-8 pt-5 pb-1 max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto w-full flex flex-col items-center"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onTouchStart={() => setIsPaused(true)}
@@ -143,7 +171,7 @@ export default function HeroBanner({
         </div>
 
         {/* Sliding Card Container */}
-        <div className="relative w-full h-[290px] sm:h-[310px] overflow-hidden rounded-3xl shadow-2xl border border-cream/20 bg-card">
+        <div className="relative w-full h-[290px] sm:h-[310px] md:h-[330px] overflow-hidden rounded-3xl shadow-2xl border border-cream/20 bg-card">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentIndex}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -18,8 +18,11 @@ import {
   Sparkles,
   ArrowRight,
   Edit2,
+  Check,
 } from "lucide-react";
 import { useCart, PlacedOrder } from "@/context/CartContext";
+
+const TABLES = Array.from({ length: 15 }, (_, i) => `Table ${String(i + 1).padStart(2, "0")}`);
 
 export default function CartOrdersSheet() {
   const {
@@ -47,28 +50,40 @@ export default function CartOrdersSheet() {
   } = useCart();
 
   const [orderNotes, setOrderNotes] = useState("");
-  const [editingTable, setEditingTable] = useState(false);
-  const [tempTable, setTempTable] = useState(tableNumber);
+  const [showTableModal, setShowTableModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [selectedTable, setSelectedTable] = useState(tableNumber || "Table 01");
   const [paymentModalOrder, setPaymentModalOrder] = useState<PlacedOrder | null>(null);
   const [onlineProcessing, setOnlineProcessing] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (tableNumber) {
+      setSelectedTable(tableNumber);
+    }
+  }, [tableNumber]);
+
   if (!isCartOpen) return null;
 
-  const handleConfirmOrder = async () => {
-    setOrderError(null);
-    const res = await placeOrder(orderNotes);
-    if (!res.success) {
-      setOrderError(res.error || "Failed to place order.");
-    } else {
-      setOrderNotes("");
+  const handleSelectTable = (table: string) => {
+    setTableNumber(table);
+    setSelectedTable(table);
+    setShowTableModal(false);
+    // As requested: "by clicking that the table number have to show from 1-15 by clicking that the confirm order have to open"
+    if (cart.length > 0) {
+      setShowConfirmModal(true);
     }
   };
 
-  const handleSaveTable = () => {
-    if (tempTable.trim()) {
-      setTableNumber(tempTable);
-      setEditingTable(false);
+  const handleFinalConfirmOrder = async () => {
+    setOrderError(null);
+    const targetTable = selectedTable || tableNumber || "Table 01";
+    const res = await placeOrder(orderNotes, targetTable);
+    if (!res.success) {
+      setOrderError(res.error || "Failed to place order.");
+    } else {
+      setShowConfirmModal(false);
+      setOrderNotes("");
     }
   };
 
@@ -90,10 +105,10 @@ export default function CartOrdersSheet() {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: "100%", opacity: 0 }}
         transition={{ type: "spring", damping: 28, stiffness: 300 }}
-        className="relative w-full max-w-lg h-[92vh] sm:h-[95vh] mt-auto bg-[#FFF8F3] rounded-t-3xl sm:rounded-t-3xl shadow-2xl flex flex-col overflow-hidden border-t border-[#EBDAD0]"
+        className="relative w-full max-w-lg md:max-w-md h-[92vh] sm:h-[95vh] md:h-full mt-auto md:mt-0 bg-[#FFF8F3] rounded-t-3xl sm:rounded-t-3xl md:rounded-l-3xl md:rounded-r-none shadow-2xl md:shadow-[-10px_0_40px_rgba(74,33,23,0.15)] flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-[#EBDAD0]"
       >
         {/* Top Handle for mobile gestures */}
-        <div className="w-12 h-1.5 bg-[#E2C7BA] rounded-full mx-auto mt-3 shrink-0" />
+        <div className="w-12 h-1.5 bg-[#E2C7BA] rounded-full mx-auto mt-3 shrink-0 md:hidden" />
 
         {/* Sheet Header */}
         <div className="px-5 pt-3 pb-2 flex items-center justify-between border-b border-[#EBDAD0]/80">
@@ -105,10 +120,11 @@ export default function CartOrdersSheet() {
               <span>Dining at</span>
               <button
                 onClick={() => {
-                  setTempTable(tableNumber);
-                  setEditingTable(true);
+                  setSelectedTable(tableNumber || "Table 01");
+                  setShowTableModal(true);
                 }}
-                className="font-bold text-[#B73F1D] underline inline-flex items-center gap-1 cursor-pointer"
+                className="font-bold text-[#B73F1D] underline inline-flex items-center gap-1 cursor-pointer hover:text-[#9D3E22]"
+                title="Tap to change table (1-15)"
               >
                 <span>{tableNumber}</span>
                 <Edit2 size={11} />
@@ -124,31 +140,6 @@ export default function CartOrdersSheet() {
             <X size={18} />
           </button>
         </div>
-
-        {/* Table Edit Modal */}
-        {editingTable && (
-          <div className="p-4 bg-[#EBDAD0]/40 border-b border-[#EBDAD0] flex items-center gap-2">
-            <input
-              type="text"
-              value={tempTable}
-              onChange={(e) => setTempTable(e.target.value)}
-              placeholder="e.g. Table 08"
-              className="px-3 py-1.5 bg-white border border-[#E2C7BA] rounded-xl text-xs font-bold text-[#4A2117] focus:outline-none focus:ring-1 focus:ring-[#B73F1D] flex-1"
-            />
-            <button
-              onClick={handleSaveTable}
-              className="px-3 py-1.5 bg-[#B73F1D] text-cream text-xs font-bold rounded-xl"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditingTable(false)}
-              className="px-2.5 py-1.5 bg-white text-[#8C5E51] text-xs font-semibold rounded-xl"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
 
         {/* Navigation Tabs */}
         <div className="flex p-2 bg-[#F7ECE4] mx-4 my-2.5 rounded-2xl gap-1 shrink-0 border border-[#EBDAD0]">
@@ -318,21 +309,14 @@ export default function CartOrdersSheet() {
                 )}
 
                 <button
-                  disabled={isPlacingOrder}
-                  onClick={handleConfirmOrder}
-                  className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
+                  onClick={() => {
+                    setSelectedTable(tableNumber || "Table 01");
+                    setShowTableModal(true);
+                  }}
+                  className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
                 >
-                  {isPlacingOrder ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>PLACING ORDER...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>CONFIRM &amp; PLACE ORDER • ₹{grandTotal}</span>
-                      <ArrowRight size={16} />
-                    </>
-                  )}
+                  <span>CHOOSE TABLE &amp; PLACE ORDER • ₹{grandTotal}</span>
+                  <ArrowRight size={16} />
                 </button>
               </div>
             )}
@@ -629,6 +613,257 @@ export default function CartOrdersSheet() {
                   className="w-full py-2 bg-gray-100 text-[#4A2117] font-bold text-xs rounded-xl hover:bg-gray-200"
                 >
                   Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 1-15 Table Selection Modal */}
+      <AnimatePresence>
+        {showTableModal && (
+          <div className="fixed inset-0 z-60 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="w-full max-w-sm sm:max-w-md bg-[#FFF8F3] rounded-3xl p-5 border border-[#EBDAD0] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-[#EBDAD0]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-[#B73F1D]/10 text-[#B73F1D] flex items-center justify-center shrink-0">
+                    <Utensils size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-extrabold text-base text-[#4A2117]">
+                      CHOOSE YOUR TABLE
+                    </h3>
+                    <p className="text-[11px] text-[#8C5E51] font-medium">
+                      Select table number (1 - 15) to confirm order
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTableModal(false)}
+                  className="w-8 h-8 rounded-full bg-[#EBDAD0]/60 hover:bg-[#EBDAD0] text-[#4A2117] flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Close table picker"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* 15 Table Grid */}
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 my-4 overflow-y-auto max-h-[50vh] p-1">
+                {TABLES.map((t) => {
+                  const isSelected = (selectedTable || tableNumber) === t;
+                  const num = t.replace("Table ", "");
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => handleSelectTable(t)}
+                      className={`py-3 px-2 rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer border active:scale-95 ${
+                        isSelected
+                          ? "bg-[#B73F1D] text-cream border-[#9D3E22] shadow-md ring-2 ring-[#B73F1D]/30"
+                          : "bg-white text-[#4A2117] border-[#EBDAD0] hover:border-[#B73F1D] hover:bg-[#FFF8F3]"
+                      }`}
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                        Table
+                      </span>
+                      <span className="font-heading font-extrabold text-lg leading-tight mt-0.5">
+                        {num}
+                      </span>
+                      {isSelected ? (
+                        <span className="text-[9px] font-bold bg-white/20 px-1.5 py-0.2 rounded-full mt-1">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-[#8C5E51] font-medium mt-1">
+                          Tap to select
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Footer */}
+              <div className="pt-2.5 border-t border-[#EBDAD0] flex items-center justify-between text-xs text-[#8C5E51]">
+                <span>
+                  Currently selected:{" "}
+                  <strong className="text-[#B73F1D]">{selectedTable || tableNumber}</strong>
+                </span>
+                <button
+                  onClick={() => setShowTableModal(false)}
+                  className="text-xs font-bold text-[#8C5E51] hover:text-[#4A2117] px-2 py-1 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirm Order Modal */}
+      <AnimatePresence>
+        {showConfirmModal && (
+          <div className="fixed inset-0 z-60 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="w-full max-w-sm sm:max-w-md bg-[#FFF8F3] rounded-3xl p-5 border border-[#EBDAD0] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-[#EBDAD0]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-[#B73F1D]/10 text-[#B73F1D] flex items-center justify-center shrink-0">
+                    <ShoppingBag size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-extrabold text-base text-[#4A2117]">
+                      CONFIRM DINE-IN ORDER
+                    </h3>
+                    <p className="text-[11px] text-[#8C5E51] font-medium">
+                      Review your order before sending to kitchen
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="w-8 h-8 rounded-full bg-[#EBDAD0]/60 hover:bg-[#EBDAD0] text-[#4A2117] flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Close confirmation"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Selected Table Card */}
+              <div className="my-3 p-3 bg-white rounded-2xl border border-[#EBDAD0] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#B73F1D] text-cream flex items-center justify-center font-heading font-extrabold text-base shadow-sm">
+                    {(selectedTable || tableNumber).replace("Table ", "")}
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-[#8C5E51] uppercase tracking-wider">
+                      Dine-in Table
+                    </div>
+                    <div className="font-heading font-extrabold text-sm text-[#4A2117]">
+                      {selectedTable || tableNumber}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setShowTableModal(true);
+                  }}
+                  className="text-xs font-bold text-[#B73F1D] hover:underline px-2.5 py-1.5 rounded-xl hover:bg-[#FFF8F3] border border-[#B73F1D]/20 cursor-pointer"
+                >
+                  Change Table
+                </button>
+              </div>
+
+              {/* Items List */}
+              <div className="text-[11px] font-bold text-[#8C5E51] uppercase tracking-wider mb-1 px-1">
+                Order Items ({totalItems})
+              </div>
+              <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-2 max-h-[24vh]">
+                {cart.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-2.5 bg-white/90 rounded-xl border border-[#EBDAD0]/80 flex items-center justify-between text-xs"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-muted">
+                        <Image src={item.image} alt={item.name} fill className="object-cover" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-[#4A2117] truncate">{item.name}</div>
+                        <div className="text-[11px] text-[#8C5E51]">
+                          ₹{item.price} × {item.quantity}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="font-extrabold text-[#B73F1D] shrink-0">
+                      ₹{item.price * item.quantity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Kitchen Request Notes */}
+              <div className="mt-2.5 mb-2">
+                <label className="text-[11px] font-bold text-[#8C5E51] mb-1 block">
+                  Kitchen Instructions (Optional):
+                </label>
+                <textarea
+                  value={orderNotes}
+                  onChange={(e) => setOrderNotes(e.target.value)}
+                  placeholder="e.g. Less spicy, extra sauce, serve hot..."
+                  rows={2}
+                  className="w-full p-2 bg-white border border-[#EBDAD0] rounded-xl text-xs text-[#4A2117] focus:outline-none focus:ring-1 focus:ring-[#B73F1D] resize-none"
+                />
+              </div>
+
+              {/* Bill Summary */}
+              <div className="bg-white p-3 rounded-2xl border border-[#EBDAD0] text-xs flex flex-col gap-1 mb-3">
+                <div className="flex justify-between text-[#8C5E51]">
+                  <span>Item Subtotal</span>
+                  <span className="font-bold text-[#4A2117]">₹{subtotal}</span>
+                </div>
+                <div className="flex justify-between text-[#8C5E51]">
+                  <span>GST ({taxPercentage}%)</span>
+                  <span className="font-bold text-[#4A2117]">₹{tax}</span>
+                </div>
+                {packagingFee > 0 && (
+                  <div className="flex justify-between text-[#8C5E51]">
+                    <span>Packaging Fee</span>
+                    <span className="font-bold text-[#4A2117]">₹{packagingFee}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-extrabold text-[#B73F1D] pt-1 border-t border-[#EBDAD0]">
+                  <span>Grand Total</span>
+                  <span>₹{grandTotal}</span>
+                </div>
+              </div>
+
+              {orderError && (
+                <div className="mb-2 p-2 bg-red-100 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
+                  {orderError}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2">
+                <button
+                  disabled={isPlacingOrder}
+                  onClick={handleFinalConfirmOrder}
+                  className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60 cursor-pointer"
+                >
+                  {isPlacingOrder ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>PLACING ORDER...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>CONFIRM &amp; PLACE ORDER • ₹{grandTotal}</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="w-full py-2 text-center text-xs font-bold text-[#8C5E51] hover:text-[#4A2117] transition-colors cursor-pointer"
+                >
+                  Back to Basket
                 </button>
               </div>
             </motion.div>

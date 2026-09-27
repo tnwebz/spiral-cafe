@@ -35,8 +35,50 @@ const combos = [
 
 export default function OffersPage() {
   return (
-    <main className="min-h-screen bg-background pb-28 pt-6">
-      <div className="max-w-3xl mx-auto px-4">
+    <main className="min-h-screen bg-background pb-28 md:pb-16 pt-4">
+      {/* Top Desktop Navigation Header */}
+      <div className="hidden md:flex items-center justify-between px-6 lg:px-8 py-3 max-w-6xl xl:max-w-7xl mx-auto border-b border-border/60 mb-6">
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="relative w-10 h-10 rounded-full bg-primary/10 p-1 border border-primary/20 flex items-center justify-center overflow-hidden shadow-xs group-hover:scale-105 transition-transform">
+            <Image src="/logo.png" alt="Spiral Cafe" width={34} height={34} className="object-contain" />
+          </div>
+          <div>
+            <h1 className="font-heading font-extrabold text-xl text-foreground leading-none group-hover:text-primary transition-colors">
+              Spiral Cafe
+            </h1>
+            <span className="text-[11px] text-[#8C5E51] font-semibold">Special Combos &amp; Offers</span>
+          </div>
+        </Link>
+
+        <nav className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
+          >
+            Home
+          </Link>
+          <Link
+            href="/menu"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
+          >
+            Menu
+          </Link>
+          <Link
+            href="/offers"
+            className="px-4 py-1.5 rounded-xl text-xs font-heading font-bold bg-primary text-cream shadow-xs"
+          >
+            Combos
+          </Link>
+          <Link
+            href="/contact"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
+          >
+            Visit Us
+          </Link>
+        </nav>
+      </div>
+
+      <div className="max-w-3xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Brand Header */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
@@ -51,7 +93,7 @@ export default function OffersPage() {
             <Tag size={12} /> Exclusive Combos
           </div>
           <h1 className="text-3xl sm:text-4xl font-heading font-extrabold text-foreground mb-2">
-            Spiral Specials & Combos
+            Spiral Specials &amp; Combos
           </h1>
           <p className="text-muted-foreground text-sm max-w-md">
             Save big on our handcrafted cafe combinations and rooftop party platters.

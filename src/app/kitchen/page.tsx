@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Flame,
   CheckCircle2,
@@ -12,11 +13,11 @@ import {
   Lock,
   Unlock,
   AlertCircle,
-  Banknote,
-  CreditCard,
   ChefHat,
-  ArrowRight,
   Sparkles,
+  ArrowRight,
+  Coffee,
+  Check,
 } from "lucide-react";
 import { PlacedOrder } from "@/context/CartContext";
 
@@ -27,9 +28,7 @@ function playKitchenChime() {
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
 
-    // Two-tone friendly chime: C5 (523Hz) -> G5 (784Hz)
     const now = ctx.currentTime;
-
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = "sine";
@@ -101,87 +100,86 @@ export default function KitchenDisplayPage() {
   }, []);
 
   // Fetch kitchen orders
-  const fetchKitchenOrders = useCallback(async (activePin: string) => {
-    try {
-      const res = await fetch(`/api/kitchen/orders?pin=${encodeURIComponent(activePin)}`);
-      const data = await res.json();
-      if (data.success) {
-        setPendingOrders(data.pending || []);
-        setPreparingOrders(data.preparing || []);
-        setReadyOrders(data.ready || []);
-        setRecentCompleted(data.recentCompleted || []);
-        setIsConnected(true);
-      } else {
+  const fetchKitchenOrders = useCallback(
+    async (authPin: string) => {
+      if (!authPin) return;
+      try {
+        const res = await fetch(`/api/kitchen/orders?pin=${authPin}`, {
+          headers: { "x-kitchen-pin": authPin },
+        });
+
         if (res.status === 401) {
           setIsAuthenticated(false);
-          setAuthError("Session expired or invalid PIN.");
+          setAuthError("Unauthorized. Staff PIN session expired.");
+          return;
         }
-      }
-    } catch {
-      setIsConnected(false);
-    }
-  }, []);
 
-  // Real-time SSE Connection
+        const data = await res.json();
+        if (data.success) {
+          const newPending = (data.pending || []) as PlacedOrder[];
+          const newPreparing = (data.preparing || []) as PlacedOrder[];
+          const newReady = (data.ready || []) as PlacedOrder[];
+          const newCompleted = (data.recentCompleted || []) as PlacedOrder[];
+
+          // Audio notification check
+          const currentPendingIds = new Set(newPending.map((o) => o.id));
+          const hasNewIncoming = newPending.some(
+            (o) => !prevPendingIdsRef.current.has(o.id)
+          );
+
+          if (hasNewIncoming && prevPendingIdsRef.current.size > 0 && soundEnabled) {
+            playKitchenChime();
+          }
+          prevPendingIdsRef.current = currentPendingIds;
+
+          setPendingOrders(newPending);
+          setPreparingOrders(newPreparing);
+          setReadyOrders(newReady);
+          setRecentCompleted(newCompleted);
+        }
+      } catch (err) {
+        console.error("Fetch kitchen error:", err);
+      }
+    },
+    [soundEnabled]
+  );
+
+  // SSE Stream
   useEffect(() => {
     if (!isAuthenticated || !pin) return;
 
     fetchKitchenOrders(pin);
 
-    const sseUrl = `/api/kitchen/stream?pin=${encodeURIComponent(pin)}`;
-    const eventSource = new EventSource(sseUrl);
-    eventSourceRef.current = eventSource;
+    const sseUrl = `/api/kitchen/stream?pin=${pin}`;
+    const es = new EventSource(sseUrl);
+    eventSourceRef.current = es;
 
-    eventSource.onopen = () => {
-      setIsConnected(true);
-    };
+    es.onopen = () => setIsConnected(true);
+    es.onerror = () => setIsConnected(false);
 
-    eventSource.onmessage = (event) => {
+    es.addEventListener("order_event", (e) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.pending) setPendingOrders(data.pending);
-        if (data.preparing) setPreparingOrders(data.preparing);
-        if (data.ready) setReadyOrders(data.ready);
-        if (data.recentCompleted) setRecentCompleted(data.recentCompleted);
-
-        // Sound alert for new incoming tickets
-        if (data.pending && Array.isArray(data.pending)) {
-          const currentIds = new Set<string>(data.pending.map((o: PlacedOrder) => o.id));
-          let hasNewTicket = false;
-          for (const id of currentIds) {
-            if (!prevPendingIdsRef.current.has(id)) {
-              hasNewTicket = true;
-              break;
-            }
-          }
-          if (hasNewTicket && soundEnabled) {
-            playKitchenChime();
-          }
-          prevPendingIdsRef.current = currentIds;
+        const payload = JSON.parse(e.data);
+        if (payload.type === "new_order" && soundEnabled) {
+          playKitchenChime();
         }
+        fetchKitchenOrders(pin);
       } catch (err) {
-        console.error("Kitchen SSE parse error:", err);
+        console.error("SSE parse error:", err);
       }
-    };
+    });
 
-    eventSource.onerror = () => {
-      setIsConnected(false);
-    };
-
-    // 4s polling fallback
     const pollInterval = setInterval(() => {
       fetchKitchenOrders(pin);
-    }, 4000);
+    }, 15000);
 
     return () => {
       clearInterval(pollInterval);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+      es.close();
     };
-  }, [isAuthenticated, pin, soundEnabled, fetchKitchenOrders]);
+  }, [isAuthenticated, pin, fetchKitchenOrders, soundEnabled]);
 
-  // Action Handler
+  // Action Dispatcher
   const handleKitchenAction = async (orderId: string, action: string) => {
     setActionLoading(`${orderId}-${action}`);
     try {
@@ -190,6 +188,7 @@ export default function KitchenDisplayPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderId, action, pin }),
       });
+
       const data = await res.json();
       if (data.success) {
         await fetchKitchenOrders(pin);
@@ -225,31 +224,30 @@ export default function KitchenDisplayPage() {
     } catch {}
   };
 
-  // Format relative elapsed time
   const getElapsedTime = (isoString: string) => {
     const elapsedMinutes = Math.floor(
       (Date.now() - new Date(isoString).getTime()) / (1000 * 60)
     );
     if (elapsedMinutes < 1) return "Just now";
-    return `${elapsedMinutes}m ago`;
+    return `${elapsedMinutes}m elapsed`;
   };
 
-  // If Not Authenticated, show Staff PIN gate
+  // Staff PIN gate
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-[#2D140E] text-[#FFF8F3] flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-sm bg-[#3E1C15] p-8 rounded-3xl border border-[#B73F1D]/40 shadow-2xl text-center">
-          <div className="w-16 h-16 rounded-full bg-[#B73F1D] flex items-center justify-center mx-auto mb-4 text-[#FFF8F3] shadow-lg">
-            <Lock size={28} />
+      <main className="min-h-screen bg-[#FFF9F5] text-[#2C1710] flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-white p-8 rounded-3xl border border-[#CA340A]/20 shadow-2xl text-center">
+          <div className="w-16 h-16 rounded-2xl bg-[#3A1710] flex items-center justify-center mx-auto mb-4 text-[#FFF9F5] shadow-md">
+            <Lock size={26} className="text-[#CA340A]" />
           </div>
-          <h1 className="font-heading font-extrabold text-2xl text-cream">
+          <h1 className="font-heading font-black text-2xl text-[#2C1710]">
             Spiral Cafe KDS
           </h1>
-          <p className="text-xs text-[#E2C7BA] mt-1 mb-6">
-            Kitchen Display System • Staff Authorization
+          <p className="text-xs text-[#52525b] mt-1 mb-6">
+            Kitchen Operations &amp; Display System
           </p>
 
-          <form onSubmit={handleLogin} className="flex flex-col gap-3">
+          <form onSubmit={handleLogin} className="space-y-3">
             <input
               type="password"
               inputMode="numeric"
@@ -257,24 +255,24 @@ export default function KitchenDisplayPage() {
               value={pinInput}
               onChange={(e) => setPinInput(e.target.value)}
               placeholder="Enter Staff PIN (1234)"
-              className="w-full text-center py-3 px-4 bg-[#230C07] border border-[#B73F1D]/50 rounded-2xl text-lg font-extrabold tracking-widest text-[#FFF8F3] focus:outline-none focus:ring-2 focus:ring-[#B73F1D]"
+              className="w-full text-center py-3.5 px-4 bg-[#FFF9F5] border-2 border-[#CA340A]/20 focus:border-[#CA340A] rounded-2xl text-2xl font-black tracking-widest text-[#2C1710] focus:outline-none"
               autoFocus
             />
 
             {authError && (
-              <p className="text-xs text-red-400 font-semibold">{authError}</p>
+              <p className="text-xs text-red-600 font-semibold">{authError}</p>
             )}
 
             <button
               type="submit"
-              className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer mt-2"
+              className="w-full py-3.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer mt-2"
             >
-              UNLOCK KITCHEN DISPLAY
+              UNLOCK KITCHEN TERMINAL
             </button>
           </form>
 
-          <p className="text-[11px] text-[#E2C7BA]/70 mt-6">
-            Default Master Kitchen PIN: <strong className="text-cream">1234</strong>
+          <p className="text-[11px] text-[#52525b] mt-6">
+            Default Kitchen Staff PIN: <strong className="text-[#2C1710]">1234</strong>
           </p>
         </div>
       </main>
@@ -284,387 +282,387 @@ export default function KitchenDisplayPage() {
   const totalActive = pendingOrders.length + preparingOrders.length + readyOrders.length;
 
   return (
-    <main className="min-h-screen bg-[#1F0C07] text-[#FFF8F3] flex flex-col">
-      {/* Top Kitchen Header Bar */}
-      <header className="bg-[#2D140E] border-b border-[#B73F1D]/30 px-5 py-3 flex flex-wrap items-center justify-between gap-4 shrink-0 shadow-md">
+    <main className="min-h-screen bg-[#FFF9F5] text-[#2C1710] flex flex-col antialiased">
+      {/* PROFESSIONAL KITCHEN HEADER */}
+      <header className="bg-[#3A1710] text-[#FFF9F5] px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 shrink-0 shadow-md border-b border-[#CA340A]/20">
         <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-full bg-cream p-1 border border-beige/60 flex items-center justify-center shrink-0">
-            <Image src="/logo.png" alt="Spiral Cafe" width={34} height={34} className="object-contain" />
+          <div className="relative w-10 h-10 rounded-xl bg-[#FFF9F5] p-1.5 flex items-center justify-center shrink-0 shadow-xs">
+            <Image src="/logo.png" alt="Spiral Cafe" width={32} height={32} className="object-contain" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-heading font-extrabold text-lg sm:text-xl text-cream tracking-tight">
+              <h1 className="font-heading font-extrabold text-lg sm:text-xl text-[#FFF9F5] tracking-tight">
                 SPIRAL CAFE
               </h1>
-              <span className="text-[10px] font-extrabold bg-[#B73F1D] text-cream px-2 py-0.5 rounded-full uppercase tracking-wider">
+              <span className="text-[10px] font-extrabold bg-[#CA340A] text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
                 KDS
               </span>
             </div>
-            <p className="text-xs text-[#E2C7BA]">Kitchen Display &amp; Ticket Dispatch</p>
+            <p className="text-xs text-[#E2C7BA]">Kitchen Operations &amp; Order Queue</p>
           </div>
         </div>
 
         {/* Live Controls */}
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-          {/* Real-time Connection Indicator */}
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-[#1F0C07] rounded-full border border-white/10 text-xs">
+          {/* Connection Indicator */}
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-[#2C1710] rounded-full border border-white/10 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-emerald-400 animate-pulse" : "bg-red-500"
+                isConnected ? "bg-emerald-400 animate-pulse" : "bg-red-400"
               }`}
             />
             <span className="text-[11px] font-semibold text-[#E2C7BA]">
-              {isConnected ? "LIVE CONNECTED" : "RECONNECTING"}
+              {isConnected ? "LIVE STREAM" : "CONNECTING"}
             </span>
           </div>
 
-          {/* Active Tickets Pill */}
-          <div className="px-3 py-1 bg-[#B73F1D]/30 border border-[#B73F1D]/60 rounded-full text-xs font-bold text-cream">
+          {/* Active Tickets Badge */}
+          <div className="px-3 py-1 bg-[#CA340A]/30 border border-[#CA340A]/60 rounded-full text-xs font-bold text-[#FFF9F5]">
             {totalActive} Active {totalActive === 1 ? "Ticket" : "Tickets"}
           </div>
 
-          {/* Sound Toggle */}
+          {/* Audio Chime Toggle */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="p-2 rounded-xl bg-[#3E1C15] hover:bg-[#4E241B] text-[#E2C7BA] transition-colors cursor-pointer"
+            className="p-2 rounded-xl bg-[#2C1710] hover:bg-[#4A2016] text-[#E2C7BA] transition-colors cursor-pointer"
             title={soundEnabled ? "Mute Kitchen Chime" : "Enable Kitchen Chime"}
           >
-            {soundEnabled ? <Volume2 size={18} className="text-emerald-400" /> : <VolumeX size={18} />}
+            {soundEnabled ? <Volume2 size={17} className="text-emerald-400" /> : <VolumeX size={17} />}
           </button>
 
-          {/* Refresh Button */}
+          {/* Refresh */}
           <button
             onClick={() => fetchKitchenOrders(pin)}
-            className="p-2 rounded-xl bg-[#3E1C15] hover:bg-[#4E241B] text-[#E2C7BA] transition-colors cursor-pointer"
+            className="p-2 rounded-xl bg-[#2C1710] hover:bg-[#4A2016] text-[#E2C7BA] transition-colors cursor-pointer"
             title="Refresh Orders"
           >
-            <RefreshCw size={18} />
+            <RefreshCw size={17} />
           </button>
 
           {/* Clock */}
-          <div className="font-heading font-extrabold text-sm sm:text-base text-cream tracking-wider min-w-[75px] text-right">
+          <div className="font-heading font-extrabold text-sm sm:text-base text-[#FFF9F5] tracking-wider min-w-[75px] text-right font-mono">
             {currentTime}
           </div>
+
+          {/* Admin Link */}
+          <Link
+            href="/admin"
+            className="p-2 rounded-xl bg-[#2C1710] hover:bg-[#4A2016] text-[#E2C7BA] text-xs font-bold transition-colors"
+            title="Admin Console"
+          >
+            Admin
+          </Link>
 
           {/* Logout / Lock */}
           <button
             onClick={handleLogout}
-            className="p-2 rounded-xl bg-[#3E1C15] hover:bg-red-950 text-[#E2C7BA] transition-colors cursor-pointer"
-            title="Lock Kitchen Terminal"
+            className="p-2 rounded-xl bg-[#2C1710] hover:bg-red-950 text-[#E2C7BA] transition-colors cursor-pointer"
+            title="Lock Terminal"
           >
-            <Unlock size={17} />
+            <Unlock size={16} />
           </button>
         </div>
       </header>
 
-      {/* Main 3 Column Kanban Board */}
-      <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-3 gap-4 overflow-y-auto">
-        {/* COLUMN 1: NEW INCOMING ORDERS (Pending) */}
-        <section className="bg-[#2D140E] rounded-3xl p-4 border border-amber-500/30 flex flex-col shadow-lg">
-          <div className="flex items-center justify-between border-b border-amber-500/20 pb-3 mb-3">
+      {/* MAIN 3-COLUMN KANBAN BOARD */}
+      <div className="flex-1 p-4 md:p-6 grid grid-cols-1 md:grid-cols-3 gap-5 max-w-7xl mx-auto w-full overflow-y-auto">
+        {/* =================================================== */}
+        {/* COLUMN 1: NEW ORDERS (Amber) */}
+        {/* =================================================== */}
+        <section className="bg-white rounded-3xl p-4 border-2 border-amber-400 shadow-xs flex flex-col h-full max-h-[85vh]">
+          {/* Column Header */}
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-amber-200">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
-              <h2 className="font-heading font-extrabold text-base text-amber-300 tracking-wide uppercase">
-                1. New Incoming
+              <div className="w-3 h-3 rounded-full bg-amber-500 animate-ping" />
+              <h2 className="font-heading font-extrabold text-sm sm:text-base text-amber-900 uppercase tracking-wide">
+                1. New Orders
               </h2>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold">
-              {pendingOrders.length} {pendingOrders.length === 1 ? "Ticket" : "Tickets"}
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
+              {pendingOrders.length}
             </span>
           </div>
 
-          {/* Pending Tickets List */}
-          <div className="flex-1 overflow-y-auto flex flex-col gap-3.5 pr-1">
+          {/* Tickets Stream */}
+          <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
             {pendingOrders.length === 0 ? (
-              <div className="my-auto py-12 text-center text-[#E2C7BA]/60 flex flex-col items-center">
-                <Clock size={36} className="mb-2 opacity-40 text-amber-400" />
-                <h3 className="font-heading font-bold text-sm text-[#E2C7BA]">No Pending Orders</h3>
-                <p className="text-xs text-[#E2C7BA]/50 mt-1 max-w-[200px]">
-                  New customer orders will appear here automatically with audio alert.
+              <div className="py-16 text-center text-zinc-400 flex flex-col items-center">
+                <Clock size={36} className="mb-2 opacity-30 text-amber-500" />
+                <p className="font-bold text-xs text-zinc-600">No New Orders</p>
+                <p className="text-[11px] text-zinc-400 mt-1 max-w-[180px]">
+                  Incoming table orders will arrive here live with kitchen chime alert.
                 </p>
               </div>
             ) : (
-              pendingOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-[#3A1A12] border-2 border-amber-500/40 rounded-2xl p-4 shadow-md flex flex-col justify-between transition-all"
-                >
-                  <div>
-                    {/* Header */}
-                    <div className="flex items-start justify-between border-b border-amber-500/20 pb-2.5">
-                      <div>
-                        <div className="text-[10px] text-amber-400 font-extrabold tracking-wider uppercase">
-                          TICKET NO.
-                        </div>
-                        <div className="font-heading font-extrabold text-lg text-cream">
-                          #{order.orderNumber}
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="px-3 py-1 bg-amber-400 text-[#2D140E] font-heading font-extrabold text-sm rounded-xl tracking-tight shadow-xs">
-                          {order.tableNumber}
-                        </div>
-                        <div className="text-[11px] text-amber-300/80 font-medium mt-1">
-                          {getElapsedTime(order.createdAt)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Order Items */}
-                    <div className="py-3 flex flex-col gap-2">
-                      {order.items.map((it) => (
-                        <div key={it.id} className="flex justify-between items-center text-xs sm:text-sm">
-                          <span className="font-bold text-cream">
-                            {it.name}{" "}
-                            <span className="text-amber-400 font-extrabold">×{it.quantity}</span>
+              pendingOrders.map((order) => {
+                const totalItems = order.items.reduce((sum, it) => sum + it.quantity, 0);
+                return (
+                  <div
+                    key={order.id}
+                    className="bg-[#FFFDF9] border-2 border-amber-400 rounded-2xl p-4 shadow-sm flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Ticket Header */}
+                      <div className="flex items-start justify-between border-b border-amber-200/80 pb-2.5">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">
+                            TICKET #{order.orderNumber}
                           </span>
-                          <span className="text-[#E2C7BA] font-semibold">₹{it.lineTotal}</span>
+                          <span className="text-[11px] text-zinc-500 font-medium">
+                            {new Date(order.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
                         </div>
-                      ))}
 
-                      {order.notes && (
-                        <div className="mt-2 p-2 bg-[#230C07] rounded-xl text-xs text-amber-200 border border-amber-500/20">
-                          <strong className="text-amber-400">Note:</strong> {order.notes}
+                        <div className="text-right">
+                          <span className="px-3 py-1 bg-amber-500 text-[#2C1710] font-heading font-black text-xs rounded-xl shadow-2xs">
+                            {order.tableNumber}
+                          </span>
+                          <span className="block text-[10px] font-bold text-amber-700 mt-1">
+                            {getElapsedTime(order.createdAt)}
+                          </span>
                         </div>
-                      )}
+                      </div>
+
+                      {/* Items List */}
+                      <div className="py-3 space-y-2 text-xs">
+                        {order.items.map((it) => (
+                          <div key={it.id} className="flex justify-between items-start">
+                            <span className="font-bold text-[#2C1710] pr-2">
+                              {it.name}{" "}
+                              <span className="text-[#CA340A] font-extrabold">×{it.quantity}</span>
+                            </span>
+                          </div>
+                        ))}
+
+                        {order.notes && (
+                          <div className="mt-2 p-2 bg-amber-50 rounded-xl text-[11px] text-amber-900 border border-amber-200">
+                            <strong>Note:</strong> {order.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Footer & Action */}
+                    <div className="pt-3 border-t border-amber-200 flex flex-col gap-2">
+                      <div className="flex justify-between text-[11px] font-bold text-zinc-500">
+                        <span>TOTAL ITEMS: {totalItems}</span>
+                        <span>₹{order.grandTotal}</span>
+                      </div>
+
+                      <button
+                        disabled={actionLoading === `${order.id}-START_PREPARING`}
+                        onClick={() => handleKitchenAction(order.id, "START_PREPARING")}
+                        className="w-full py-2.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <ChefHat size={15} />
+                        <span>START PREPARING</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div className="pt-3 border-t border-amber-500/20 flex flex-col gap-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-[#E2C7BA]">
-                      <span>TOTAL:</span>
-                      <span className="font-heading font-extrabold text-base text-cream">
-                        ₹{order.grandTotal}
-                      </span>
-                    </div>
-
-                    <button
-                      disabled={actionLoading === `${order.id}-START_PREPARING`}
-                      onClick={() => handleKitchenAction(order.id, "START_PREPARING")}
-                      className="w-full py-3 bg-[#B73F1D] hover:bg-[#D95D39] text-[#FFF8F3] font-heading font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <ChefHat size={16} />
-                      <span>START PREPARING</span>
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
 
-        {/* COLUMN 2: COOKING IN KITCHEN (Preparing) */}
-        <section className="bg-[#2D140E] rounded-3xl p-4 border border-blue-500/30 flex flex-col shadow-lg">
-          <div className="flex items-center justify-between border-b border-blue-500/20 pb-3 mb-3">
+        {/* =================================================== */}
+        {/* COLUMN 2: IN PREPARATION (Blue) */}
+        {/* =================================================== */}
+        <section className="bg-white rounded-3xl p-4 border-2 border-blue-400 shadow-xs flex flex-col h-full max-h-[85vh]">
+          {/* Column Header */}
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-blue-200">
             <div className="flex items-center gap-2">
-              <Flame size={18} className="text-blue-400 animate-pulse" />
-              <h2 className="font-heading font-extrabold text-base text-blue-300 tracking-wide uppercase">
-                2. Cooking In Kitchen
+              <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+              <h2 className="font-heading font-extrabold text-sm sm:text-base text-blue-900 uppercase tracking-wide">
+                2. In Preparation
               </h2>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold">
-              {preparingOrders.length} Cooking
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 text-xs font-bold">
+              {preparingOrders.length}
             </span>
           </div>
 
-          {/* Preparing Tickets */}
-          <div className="flex-1 overflow-y-auto flex flex-col gap-3.5 pr-1">
+          {/* Tickets Stream */}
+          <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
             {preparingOrders.length === 0 ? (
-              <div className="my-auto py-12 text-center text-[#E2C7BA]/60 flex flex-col items-center">
-                <ChefHat size={36} className="mb-2 opacity-40 text-blue-400" />
-                <h3 className="font-heading font-bold text-sm text-[#E2C7BA]">Kitchen is Idle</h3>
-                <p className="text-xs text-[#E2C7BA]/50 mt-1 max-w-[200px]">
-                  No orders are currently being prepared.
+              <div className="py-16 text-center text-zinc-400 flex flex-col items-center">
+                <ChefHat size={36} className="mb-2 opacity-30 text-blue-500" />
+                <p className="font-bold text-xs text-zinc-600">No Orders in Cook</p>
+                <p className="text-[11px] text-zinc-400 mt-1 max-w-[180px]">
+                  Click "Start Preparing" on incoming tickets to track cooking timers.
                 </p>
               </div>
             ) : (
-              preparingOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-[#3A1A12] border-2 border-blue-500/40 rounded-2xl p-4 shadow-md flex flex-col justify-between transition-all"
-                >
-                  <div>
-                    {/* Header */}
-                    <div className="flex items-start justify-between border-b border-blue-500/20 pb-2.5">
-                      <div>
-                        <div className="text-[10px] text-blue-400 font-extrabold tracking-wider uppercase">
-                          PREPARING TICKET
-                        </div>
-                        <div className="font-heading font-extrabold text-lg text-cream">
-                          #{order.orderNumber}
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="px-3 py-1 bg-blue-400 text-[#2D140E] font-heading font-extrabold text-sm rounded-xl tracking-tight shadow-xs">
-                          {order.tableNumber}
-                        </div>
-                        <div className="text-[11px] text-blue-300/80 font-medium mt-1">
-                          Cooking {getElapsedTime(order.preparingAt || order.createdAt)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Order Items */}
-                    <div className="py-3 flex flex-col gap-2">
-                      {order.items.map((it) => (
-                        <div key={it.id} className="flex justify-between items-center text-xs sm:text-sm">
-                          <span className="font-bold text-cream">
-                            {it.name}{" "}
-                            <span className="text-blue-400 font-extrabold">×{it.quantity}</span>
+              preparingOrders.map((order) => {
+                const totalItems = order.items.reduce((sum, it) => sum + it.quantity, 0);
+                return (
+                  <div
+                    key={order.id}
+                    className="bg-[#F8FBFF] border-2 border-blue-400 rounded-2xl p-4 shadow-sm flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Ticket Header */}
+                      <div className="flex items-start justify-between border-b border-blue-200 pb-2.5">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-blue-800 uppercase tracking-wider block">
+                            TICKET #{order.orderNumber}
                           </span>
-                          <span className="text-[#E2C7BA] font-semibold">₹{it.lineTotal}</span>
+                          <span className="text-[11px] text-zinc-500 font-medium">
+                            Prep Started:{" "}
+                            {order.preparingAt
+                              ? new Date(order.preparingAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "Now"}
+                          </span>
                         </div>
-                      ))}
 
-                      {order.notes && (
-                        <div className="mt-2 p-2 bg-[#230C07] rounded-xl text-xs text-blue-200 border border-blue-500/20">
-                          <strong className="text-blue-400">Note:</strong> {order.notes}
+                        <div className="text-right">
+                          <span className="px-3 py-1 bg-blue-600 text-white font-heading font-black text-xs rounded-xl shadow-2xs">
+                            {order.tableNumber}
+                          </span>
+                          <span className="block text-[10px] font-bold text-blue-700 mt-1">
+                            {getElapsedTime(order.preparingAt || order.createdAt)}
+                          </span>
                         </div>
-                      )}
+                      </div>
+
+                      {/* Items List */}
+                      <div className="py-3 space-y-2 text-xs">
+                        {order.items.map((it) => (
+                          <div key={it.id} className="flex justify-between items-start">
+                            <span className="font-bold text-[#2C1710] pr-2">
+                              {it.name}{" "}
+                              <span className="text-blue-700 font-extrabold">×{it.quantity}</span>
+                            </span>
+                          </div>
+                        ))}
+
+                        {order.notes && (
+                          <div className="mt-2 p-2 bg-blue-50 rounded-xl text-[11px] text-blue-900 border border-blue-200">
+                            <strong>Note:</strong> {order.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action */}
+                    <div className="pt-3 border-t border-blue-200 flex flex-col gap-2">
+                      <div className="flex justify-between text-[11px] font-bold text-zinc-500">
+                        <span>TOTAL ITEMS: {totalItems}</span>
+                        <span>Cooking...</span>
+                      </div>
+
+                      <button
+                        disabled={actionLoading === `${order.id}-MARK_READY`}
+                        onClick={() => handleKitchenAction(order.id, "MARK_READY")}
+                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-heading font-extrabold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <CheckCircle2 size={15} />
+                        <span>MARK AS READY</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div className="pt-3 border-t border-blue-500/20 flex flex-col gap-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-[#E2C7BA]">
-                      <span>TOTAL:</span>
-                      <span className="font-heading font-extrabold text-base text-cream">
-                        ₹{order.grandTotal}
-                      </span>
-                    </div>
-
-                    <button
-                      disabled={actionLoading === `${order.id}-MARK_READY`}
-                      onClick={() => handleKitchenAction(order.id, "MARK_READY")}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-heading font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkles size={16} />
-                      <span>MARK AS READY</span>
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
 
-        {/* COLUMN 3: READY FOR DINE-IN / PAYMENT */}
-        <section className="bg-[#2D140E] rounded-3xl p-4 border border-emerald-500/30 flex flex-col shadow-lg">
-          <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3 mb-3">
+        {/* =================================================== */}
+        {/* COLUMN 3: READY TO SERVE (Green) */}
+        {/* =================================================== */}
+        <section className="bg-white rounded-3xl p-4 border-2 border-emerald-400 shadow-xs flex flex-col h-full max-h-[85vh]">
+          {/* Column Header */}
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-emerald-200">
             <div className="flex items-center gap-2">
-              <CheckCircle2 size={18} className="text-emerald-400" />
-              <h2 className="font-heading font-extrabold text-base text-emerald-300 tracking-wide uppercase">
-                3. Ready &amp; Serving
+              <div className="w-3 h-3 rounded-full bg-emerald-500" />
+              <h2 className="font-heading font-extrabold text-sm sm:text-base text-emerald-900 uppercase tracking-wide">
+                3. Ready to Serve
               </h2>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold">
-              {readyOrders.length} Ready
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold">
+              {readyOrders.length}
             </span>
           </div>
 
-          {/* Ready Tickets */}
-          <div className="flex-1 overflow-y-auto flex flex-col gap-3.5 pr-1">
+          {/* Tickets Stream */}
+          <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
             {readyOrders.length === 0 ? (
-              <div className="my-auto py-12 text-center text-[#E2C7BA]/60 flex flex-col items-center">
-                <CheckCircle2 size={36} className="mb-2 opacity-40 text-emerald-400" />
-                <h3 className="font-heading font-bold text-sm text-[#E2C7BA]">All Caught Up</h3>
-                <p className="text-xs text-[#E2C7BA]/50 mt-1 max-w-[200px]">
-                  No orders currently waiting for service or settlement.
+              <div className="py-16 text-center text-zinc-400 flex flex-col items-center">
+                <CheckCircle2 size={36} className="mb-2 opacity-30 text-emerald-500" />
+                <p className="font-bold text-xs text-zinc-600">No Food Ready for Pickup</p>
+                <p className="text-[11px] text-zinc-400 mt-1 max-w-[180px]">
+                  Cooked orders will appear here for floor servers to dispatch to tables.
                 </p>
               </div>
             ) : (
               readyOrders.map((order) => {
-                const isCashPending = order.paymentStatus === "PENDING_CASH";
-                const isPaid = order.paymentStatus === "PAID";
-
+                const totalItems = order.items.reduce((sum, it) => sum + it.quantity, 0);
                 return (
                   <div
                     key={order.id}
-                    className="bg-[#3A1A12] border-2 border-emerald-500/40 rounded-2xl p-4 shadow-md flex flex-col justify-between transition-all"
+                    className="bg-[#F8FCF9] border-2 border-emerald-400 rounded-2xl p-4 shadow-sm flex flex-col justify-between animate-in fade-in"
                   >
                     <div>
-                      {/* Header */}
-                      <div className="flex items-start justify-between border-b border-emerald-500/20 pb-2.5">
+                      {/* Ticket Header */}
+                      <div className="flex items-start justify-between border-b border-emerald-200 pb-2.5">
                         <div>
-                          <div className="text-[10px] text-emerald-400 font-extrabold tracking-wider uppercase">
-                            READY FOR SERVICE
-                          </div>
-                          <div className="font-heading font-extrabold text-lg text-cream">
-                            #{order.orderNumber}
-                          </div>
+                          <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">
+                            TICKET #{order.orderNumber}
+                          </span>
+                          <span className="text-[11px] text-zinc-500 font-medium">
+                            Ready:{" "}
+                            {order.readyAt
+                              ? new Date(order.readyAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "Just now"}
+                          </span>
                         </div>
 
                         <div className="text-right">
-                          <div className="px-3 py-1 bg-emerald-500 text-white font-heading font-extrabold text-sm rounded-xl tracking-tight shadow-xs">
+                          <span className="px-3 py-1 bg-emerald-600 text-white font-heading font-black text-xs rounded-xl shadow-2xs">
                             {order.tableNumber}
-                          </div>
-                          <div className="text-[11px] text-emerald-300/80 font-medium mt-1">
-                            Ready {getElapsedTime(order.readyAt || order.updatedAt)}
-                          </div>
+                          </span>
+                          <span className="block text-[10px] font-bold text-emerald-700 mt-1">
+                            Awaiting Dispatch
+                          </span>
                         </div>
                       </div>
 
-                      {/* Payment Status Pill */}
-                      <div className="mt-2.5 p-2 rounded-xl flex items-center justify-between text-xs font-bold border">
-                        {isCashPending && (
-                          <div className="w-full flex items-center justify-between text-amber-300 bg-amber-950/40 border-amber-600/40 p-1.5 rounded-lg">
-                            <span className="flex items-center gap-1.5">
-                              <Banknote size={15} /> Cash Payment Pending
-                            </span>
-                            <span className="text-cream font-extrabold">₹{order.grandTotal}</span>
-                          </div>
-                        )}
-                        {isPaid && (
-                          <div className="w-full flex items-center justify-between text-emerald-300 bg-emerald-950/40 border-emerald-600/40 p-1.5 rounded-lg">
-                            <span className="flex items-center gap-1.5">
-                              <CheckCircle2 size={15} /> Payment Confirmed (Paid)
-                            </span>
-                            <span className="text-cream font-extrabold">₹{order.grandTotal}</span>
-                          </div>
-                        )}
-                        {!isCashPending && !isPaid && (
-                          <div className="w-full flex items-center justify-between text-[#E2C7BA] bg-[#230C07] p-1.5 rounded-lg border-white/10">
-                            <span>Awaiting Customer Payment</span>
-                            <span className="text-cream font-extrabold">₹{order.grandTotal}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Items */}
-                      <div className="py-2.5 flex flex-col gap-1.5">
+                      {/* Items List */}
+                      <div className="py-3 space-y-2 text-xs">
                         {order.items.map((it) => (
-                          <div key={it.id} className="flex justify-between items-center text-xs">
-                            <span className="text-cream font-medium">
+                          <div key={it.id} className="flex justify-between items-start">
+                            <span className="font-bold text-[#2C1710] pr-2">
                               {it.name}{" "}
-                              <span className="text-emerald-400 font-bold">×{it.quantity}</span>
+                              <span className="text-emerald-700 font-extrabold">×{it.quantity}</span>
                             </span>
-                            <span className="text-[#E2C7BA]">₹{it.lineTotal}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="pt-3 border-t border-emerald-500/20 flex flex-col gap-2">
-                      {isCashPending && (
-                        <button
-                          disabled={actionLoading === `${order.id}-MARK_CASH_RECEIVED`}
-                          onClick={() => handleKitchenAction(order.id, "MARK_CASH_RECEIVED")}
-                          className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-heading font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
-                        >
-                          <Banknote size={16} />
-                          <span>MARK CASH RECEIVED</span>
-                        </button>
-                      )}
+                    {/* Action */}
+                    <div className="pt-3 border-t border-emerald-200 flex flex-col gap-2">
+                      <div className="flex justify-between text-[11px] font-bold text-zinc-500">
+                        <span>TOTAL ITEMS: {totalItems}</span>
+                        <span className="text-emerald-700 font-bold">READY</span>
+                      </div>
 
                       <button
                         disabled={actionLoading === `${order.id}-COMPLETE_ORDER`}
                         onClick={() => handleKitchenAction(order.id, "COMPLETE_ORDER")}
-                        className="w-full py-2.5 bg-[#4E241B] hover:bg-[#602F23] text-cream font-heading font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 border border-white/10"
+                        className="w-full py-2.5 bg-[#15803D] hover:bg-[#166534] text-white font-heading font-extrabold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                       >
-                        <CheckCircle2 size={15} />
-                        <span>COMPLETE ORDER &amp; ARCHIVE</span>
+                        <Check size={16} />
+                        <span>SERVED &amp; DISPATCHED</span>
                       </button>
                     </div>
                   </div>
@@ -674,48 +672,6 @@ export default function KitchenDisplayPage() {
           </div>
         </section>
       </div>
-
-      {/* Bottom Shift History Drawer Toggle */}
-      <footer className="bg-[#2D140E] border-t border-[#B73F1D]/30 px-5 py-2.5 flex items-center justify-between text-xs text-[#E2C7BA] shrink-0">
-        <div className="flex items-center gap-3">
-          <span>Spiral Cafe Kitchen Operating System</span>
-          <span>•</span>
-          <span>Chengalpattu Rooftop</span>
-        </div>
-
-        <button
-          onClick={() => setShowHistory(!showHistory)}
-          className="text-xs font-bold text-amber-300 hover:underline cursor-pointer"
-        >
-          {showHistory ? "Hide Shift History" : `View Completed Orders (${recentCompleted.length})`}
-        </button>
-      </footer>
-
-      {/* Completed Orders Drawer */}
-      {showHistory && (
-        <div className="bg-[#230C07] border-t border-[#B73F1D]/40 p-4 max-h-60 overflow-y-auto">
-          <h3 className="font-heading font-extrabold text-sm text-cream mb-2">
-            Recently Completed Shift Tickets
-          </h3>
-          {recentCompleted.length === 0 ? (
-            <p className="text-xs text-[#E2C7BA]/60">No completed orders yet for this shift.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {recentCompleted.map((o) => (
-                <div key={o.id} className="p-2.5 bg-[#3A1A12] rounded-xl text-xs border border-white/10">
-                  <div className="flex justify-between font-bold text-cream">
-                    <span>#{o.orderNumber}</span>
-                    <span className="text-emerald-400">₹{o.grandTotal}</span>
-                  </div>
-                  <div className="text-[11px] text-[#E2C7BA] mt-0.5">
-                    {o.tableNumber} • {new Date(o.updatedAt).toLocaleTimeString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </main>
   );
 }
