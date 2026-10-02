@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const order = getOrderById(id);
+    const order = await getOrderById(id);
 
     if (!order) {
       return NextResponse.json(

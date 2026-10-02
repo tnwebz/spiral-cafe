@@ -149,7 +149,7 @@ export default function CustomerInvoicePage({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {invoice.items.map((it, idx) => (
+              {invoice.items.map((it: any, idx: number) => (
                 <tr key={idx} className="py-2">
                   <td className="py-2.5 font-semibold text-[#2C1710]">{it.name}</td>
                   <td className="py-2.5 text-center font-bold text-[#52525b]">{it.quantity}</td>

@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { username, password, pin } = body;
 
-    const result = verifyAdminCredentials({ username, password, pin });
+    const result = await verifyAdminCredentials({ username, password, pin });
 
     if (!result.success || !result.role) {
       return NextResponse.json(
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    recordAuditLog(result.user || "User", "LOGIN", "CONFIG", "session", `Logged in with role: ${result.role}`);
+    await recordAuditLog(result.user || "User", "LOGIN", "CONFIG", "session", `Logged in with role: ${result.role}`);
 
     const response = NextResponse.json({
       success: true,

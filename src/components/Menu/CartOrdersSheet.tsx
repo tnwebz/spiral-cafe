@@ -19,6 +19,8 @@ import {
   ArrowRight,
   Edit2,
   Check,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { useCart, PlacedOrder } from "@/context/CartContext";
 
@@ -46,6 +48,7 @@ export default function CartOrdersSheet() {
     isPlacingOrder,
     placedOrders,
     selectCashPayment,
+    switchPaymentMethod,
     processOnlinePayment,
   } = useCart();
 
@@ -53,8 +56,10 @@ export default function CartOrdersSheet() {
   const [showTableModal, setShowTableModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState(tableNumber || "Table 01");
-  const [paymentModalOrder, setPaymentModalOrder] = useState<PlacedOrder | null>(null);
-  const [onlineProcessing, setOnlineProcessing] = useState(false);
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<{
+    [orderId: string]: { type: "info" | "error" | "cancelled"; message: string };
+  }>({});
   const [orderError, setOrderError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,15 +92,64 @@ export default function CartOrdersSheet() {
     }
   };
 
-  const handlePayOnlineSubmit = async (orderId: string) => {
-    setOnlineProcessing(true);
-    const res = await processOnlinePayment(orderId);
-    setOnlineProcessing(false);
+  const handlePayOnline = async (order: PlacedOrder) => {
+    setPayingOrderId(order.id);
+    setPaymentNotice((prev) => {
+      const next = { ...prev };
+      delete next[order.id];
+      return next;
+    });
+
+    const res = await processOnlinePayment(order.id);
+    setPayingOrderId(null);
+
     if (res.success) {
-      setPaymentModalOrder(null);
+      setPaymentNotice((prev) => ({
+        ...prev,
+        [order.id]: {
+          type: "info",
+          message: "Payment received! Thank you.",
+        },
+      }));
     } else {
-      alert(res.error || "Payment failed.");
+      const isCancelled =
+        res.error?.toLowerCase().includes("cancel") ||
+        res.error?.toLowerCase().includes("dismiss") ||
+        res.error?.toLowerCase().includes("guest");
+
+      setPaymentNotice((prev) => ({
+        ...prev,
+        [order.id]: {
+          type: isCancelled ? "cancelled" : "error",
+          message: isCancelled
+            ? "Online payment was cancelled. You can retry paying online or choose Cash on Delivery / Counter below."
+            : res.error || "Payment was not completed. Please retry or choose Cash on Delivery.",
+        },
+      }));
     }
+  };
+
+  const handleSelectCash = async (orderId: string) => {
+    setPaymentNotice((prev) => {
+      const next = { ...prev };
+      delete next[orderId];
+      return next;
+    });
+    const ok = await selectCashPayment(orderId);
+    if (!ok) {
+      setPaymentNotice((prev) => ({
+        ...prev,
+        [orderId]: {
+          type: "error",
+          message: "Could not request cash payment. Please check with counter.",
+        },
+      }));
+    }
+  };
+
+  const handleSwitchToOnline = async (order: PlacedOrder) => {
+    await switchPaymentMethod(order.id, "ONLINE");
+    await handlePayOnline(order);
   };
 
   return (
@@ -507,53 +561,190 @@ export default function CartOrdersSheet() {
                       </div>
                     </div>
 
-                    {/* PAYMENT SECTION - Active ONLY when Order is READY */}
+                    {/* PAYMENT SECTION - Persists until Order is fully PAID */}
                     <div className="mt-1 pt-3 border-t border-[#EBDAD0]">
-                      {!isReady && !isCompleted && (
-                        <div className="p-3 bg-[#EBDAD0]/30 rounded-2xl text-center text-xs text-[#8C5E51]">
-                          <Clock size={14} className="inline mr-1 text-[#B73F1D]" />
-                          <span>Payment options will be enabled once your meal is ready.</span>
+                      {/* Notice / Cancellation banner if online payment was closed or failed */}
+                      {paymentNotice[order.id] && order.paymentStatus !== "PAID" && (
+                        <div
+                          className={`mb-3 p-3 rounded-2xl text-xs font-medium flex items-start gap-2 shadow-xs ${
+                            paymentNotice[order.id].type === "cancelled"
+                              ? "bg-amber-50 border border-amber-200 text-amber-900"
+                              : paymentNotice[order.id].type === "info"
+                              ? "bg-emerald-50 border border-emerald-200 text-emerald-900"
+                              : "bg-red-50 border border-red-200 text-red-800"
+                          }`}
+                        >
+                          <AlertCircle size={16} className="shrink-0 mt-0.5 text-amber-700" />
+                          <div className="flex-1">
+                            <span className="font-bold block mb-0.5">
+                              {paymentNotice[order.id].type === "cancelled"
+                                ? "Payment Cancelled / Incomplete"
+                                : paymentNotice[order.id].type === "info"
+                                ? "Payment Notice"
+                                : "Payment Failed"}
+                            </span>
+                            <span>{paymentNotice[order.id].message}</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setPaymentNotice((prev) => {
+                                const next = { ...prev };
+                                delete next[order.id];
+                                return next;
+                              });
+                            }}
+                            className="text-[#8C5E51] hover:text-[#4A2117] p-0.5 cursor-pointer"
+                            aria-label="Dismiss notice"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
                       )}
 
-                      {isReady && order.paymentStatus === "UNPAID" && (
-                        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col gap-2.5">
-                          <div className="flex items-center gap-1.5 text-emerald-800 font-extrabold text-xs">
-                            <Sparkles size={14} />
-                            <span>YOUR FOOD IS READY! Choose payment method:</span>
+                      {/* State 1: Cancelled Order */}
+                      {order.status === "CANCELLED" && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-center text-xs text-red-700 font-bold">
+                          Order Cancelled
+                        </div>
+                      )}
+
+                      {/* State 2: PAID (Confirmed receipt) */}
+                      {order.paymentStatus === "PAID" && (
+                        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-2 shadow-xs">
+                          <div className="flex items-center gap-2.5 text-emerald-800">
+                            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                              <CheckCircle2 size={18} />
+                            </div>
+                            <div>
+                              <div className="font-heading font-extrabold text-xs text-emerald-900">
+                                Payment Received • PAID (₹{order.grandTotal})
+                              </div>
+                              <p className="text-[11px] text-emerald-700 font-medium">
+                                Paid via {order.paymentMethod === "CASH" ? "Cash at Counter" : "Online Gateway"}. Thank you!
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* State 3: PENDING_CASH (Cash on delivery / counter selected, with instant option to pay online) */}
+                      {order.status !== "CANCELLED" && order.paymentStatus === "PENDING_CASH" && (
+                        <div className="p-3.5 bg-[#FFFBF7] border border-amber-300 rounded-2xl flex flex-col gap-2.5 shadow-xs">
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+                              <Banknote size={17} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <div className="font-heading font-extrabold text-xs text-amber-950 uppercase tracking-wide">
+                                  Cash on Delivery / Counter Selected
+                                </div>
+                                <span className="font-heading font-extrabold text-xs text-[#B73F1D]">
+                                  ₹{order.grandTotal}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-[#8C5E51] mt-0.5 leading-relaxed">
+                                Please pay <strong className="text-[#4A2117]">₹{order.grandTotal}</strong> in cash to your server or at the cashier counter.
+                              </p>
+                            </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2 mt-1">
+                          <div className="pt-2 border-t border-[#EBDAD0]/70 flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-[#8C5E51] font-medium">Need to pay online instead?</span>
                             <button
-                              onClick={() => setPaymentModalOrder(order)}
-                              className="py-2.5 px-3 bg-[#B73F1D] text-cream hover:bg-[#9D3E22] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                              disabled={payingOrderId === order.id}
+                              onClick={() => handleSwitchToOnline(order)}
+                              className="py-1.5 px-3 bg-[#B73F1D] text-cream hover:bg-[#9D3E22] font-heading font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-60"
                             >
-                              <CreditCard size={14} />
-                              <span>PAY ONLINE</span>
+                              {payingOrderId === order.id ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin" />
+                                  <span>OPENING...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCard size={13} />
+                                  <span>PAY ONLINE (₹{order.grandTotal})</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* State 4A: UNPAID & Food Still Preparing (Payment locked until food is Ready) */}
+                      {order.status !== "CANCELLED" && order.paymentStatus !== "PAID" && !isReady && !isCompleted && (
+                        <div className="p-3.5 bg-[#FFF9F5] border border-[#EBDAD0] rounded-2xl flex flex-col gap-2 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-[#4A2117] font-heading font-extrabold text-xs">
+                              <Utensils size={14} className="text-[#B73F1D]" />
+                              <span>PAYMENT OPENS WHEN FOOD IS READY</span>
+                            </div>
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300/70 rounded-full text-[10px] font-extrabold uppercase tracking-wider">
+                              DINE-IN
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-[#8C5E51] leading-relaxed">
+                            Your food is being freshly prepared in the kitchen. Payment options (Online UPI / Cards or Cash) will unlock automatically as soon as your order is <strong className="text-[#B73F1D]">Ready for Dine-In</strong>.
+                          </p>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-[#EBDAD0]/60 text-[11px]">
+                            <span className="text-[#8C5E51] font-semibold">Bill Amount:</span>
+                            <span className="font-heading font-black text-sm text-[#B73F1D]">₹{order.grandTotal}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* State 4B: UNPAID & Food IS READY FOR DINE-IN -> Payment options unlocked */}
+                      {order.status !== "CANCELLED" && order.paymentStatus !== "PAID" && order.paymentStatus !== "PENDING_CASH" && (isReady || isCompleted) && (
+                        <div className="p-3.5 bg-gradient-to-br from-[#FFF9F5] to-white border-2 border-emerald-500/40 rounded-2xl flex flex-col gap-2.5 shadow-md animate-in fade-in-50 duration-300">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 text-emerald-950 font-heading font-extrabold text-xs">
+                              <Sparkles size={14} className="text-emerald-600" />
+                              <span>FOOD IS READY • CHOOSE PAYMENT METHOD</span>
+                            </div>
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-[10px] font-extrabold uppercase tracking-wider">
+                              PAY NOW
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-[#8C5E51]">
+                            Your order is ready! Select how you would like to pay for Ticket #{order.orderNumber}:
+                          </p>
+
+                          <div className="grid grid-cols-2 gap-2 mt-0.5">
+                            <button
+                              disabled={payingOrderId === order.id}
+                              onClick={() => handlePayOnline(order)}
+                              className="py-2.5 px-3 bg-[#B73F1D] text-cream hover:bg-[#9D3E22] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+                            >
+                              {payingOrderId === order.id ? (
+                                <>
+                                  <Loader2 size={14} className="animate-spin" />
+                                  <span>OPENING RAZORPAY...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCard size={14} />
+                                  <span>PAY ONLINE (₹{order.grandTotal})</span>
+                                </>
+                              )}
                             </button>
 
                             <button
-                              onClick={() => selectCashPayment(order.id)}
-                              className="py-2.5 px-3 bg-white text-[#4A2117] border border-[#EBDAD0] hover:bg-[#F7ECE4] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer"
+                              disabled={payingOrderId === order.id}
+                              onClick={() => handleSelectCash(order.id)}
+                              className="py-2.5 px-3 bg-white text-[#4A2117] border border-[#EBDAD0] hover:bg-[#F7ECE4] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-60"
                             >
                               <Banknote size={14} />
                               <span>PAY CASH</span>
                             </button>
                           </div>
-                        </div>
-                      )}
 
-                      {order.paymentStatus === "PENDING_CASH" && (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-center text-xs text-amber-800 font-bold flex items-center justify-center gap-1.5">
-                          <Banknote size={15} />
-                          <span>Cash payment requested. Please pay at counter or to your server.</span>
-                        </div>
-                      )}
-
-                      {order.paymentStatus === "PAID" && (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-center text-xs text-emerald-800 font-extrabold flex items-center justify-center gap-1.5">
-                          <CheckCircle2 size={15} />
-                          <span>Payment Received • PAID (Thank you!)</span>
+                          <div className="text-[10px] text-center text-[#8C5E51] font-medium pt-0.5">
+                            Online (UPI, GPay, PhonePe, Cards) or Cash on Delivery / Counter
+                          </div>
                         </div>
                       )}
                     </div>
@@ -564,61 +755,6 @@ export default function CartOrdersSheet() {
           </div>
         )}
       </motion.div>
-
-      {/* Online Payment Modal */}
-      <AnimatePresence>
-        {paymentModalOrder && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-[#EBDAD0] text-center"
-            >
-              <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-3">
-                <CreditCard size={24} />
-              </div>
-              <h3 className="font-heading font-extrabold text-lg text-[#4A2117]">
-                Online Payment Gateway
-              </h3>
-              <p className="text-xs text-[#8C5E51] mt-0.5">
-                Spiral Cafe • Order #{paymentModalOrder.orderNumber}
-              </p>
-
-              <div className="my-5 p-4 bg-[#FFF8F3] rounded-2xl border border-[#EBDAD0] flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#8C5E51]">Amount Payable:</span>
-                <span className="font-heading font-extrabold text-xl text-[#B73F1D]">
-                  ₹{paymentModalOrder.grandTotal}
-                </span>
-              </div>
-
-              {/* Simulated Payment Providers */}
-              <div className="flex justify-center gap-2 mb-4 text-[10px] font-bold text-[#8C5E51]">
-                <span className="px-2 py-1 bg-gray-100 rounded">UPI</span>
-                <span className="px-2 py-1 bg-gray-100 rounded">GPay</span>
-                <span className="px-2 py-1 bg-gray-100 rounded">PhonePe</span>
-                <span className="px-2 py-1 bg-gray-100 rounded">Card</span>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <button
-                  disabled={onlineProcessing}
-                  onClick={() => handlePayOnlineSubmit(paymentModalOrder.id)}
-                  className="w-full py-3 bg-[#B73F1D] hover:bg-[#9D3E22] text-cream font-heading font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50"
-                >
-                  {onlineProcessing ? "VERIFYING TRANSACTION..." : `PAY NOW • ₹${paymentModalOrder.grandTotal}`}
-                </button>
-                <button
-                  onClick={() => setPaymentModalOrder(null)}
-                  className="w-full py-2 bg-gray-100 text-[#4A2117] font-bold text-xs rounded-xl hover:bg-gray-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* 1-15 Table Selection Modal */}
       <AnimatePresence>

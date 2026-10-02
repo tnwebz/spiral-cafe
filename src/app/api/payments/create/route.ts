@@ -1,18 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderById } from "@/lib/db";
+import { getPaymentProvider } from "@/lib/payments";
 
+/**
+ * POST /api/payments/create
+ *
+ * Provider-agnostic payment order initialization endpoint.
+ *
+ * Security & Integrity:
+ * - Server strictly checks database for authoritative grandTotal.
+ * - Never trusts any client-submitted amount.
+ * - Validates order existence and payment readiness.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const { orderId, method } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { orderId, provider: requestedProvider } = body;
 
     if (!orderId) {
       return NextResponse.json(
-        { success: false, error: "Order ID is required." },
+        { success: false, error: "orderId is required." },
         { status: 400 }
       );
     }
 
-    const order = getOrderById(orderId);
+    // 1. Authoritative order lookup from database
+    const order = await getOrderById(orderId);
     if (!order) {
       return NextResponse.json(
         { success: false, error: "Order not found." },
@@ -20,17 +33,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Business rule: Payment options only become available after order is READY
-    if (order.status !== "READY") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Payment is only enabled once your meal has been prepared and marked READY by the kitchen.",
-        },
-        { status: 400 }
-      );
-    }
-
+    // 2. State verification
     if (order.paymentStatus === "PAID") {
       return NextResponse.json(
         { success: false, error: "This order has already been paid for." },
@@ -38,21 +41,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate mock/real payment session token
-    const paymentSessionId = `pay_sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    if (order.status === "CANCELLED") {
+      return NextResponse.json(
+        { success: false, error: "Cannot initiate payment for a cancelled order." },
+        { status: 400 }
+      );
+    }
+
+    // 3. Resolve configured payment provider (Razorpay, Zoho, etc.)
+    const provider = getPaymentProvider(requestedProvider);
+
+    // 4. Delegate to provider adapter using authoritative grandTotal
+    const paymentResult = await provider.createPayment({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      amount: order.grandTotal, // Authoritative server-side value
+      currency: "INR",
+      customerPhone: order.customerPhone || undefined,
+      tableNumber: order.tableNumber,
+      notes: {
+        orderId: order.id,
+        tableNumber: order.tableNumber,
+      },
+    });
 
     return NextResponse.json({
       success: true,
-      paymentSessionId,
-      orderId: order.id,
+      provider: paymentResult.provider,
+      providerOrderId: paymentResult.providerOrderId,
+      amount: paymentResult.amount, // In minor units (paise)
+      currency: paymentResult.currency,
+      clientPayload: paymentResult.clientPayload,
       orderNumber: order.orderNumber,
-      amount: order.grandTotal,
-      currency: "INR",
-      method: method || "ONLINE",
+      tableNumber: order.tableNumber,
+      grandTotal: order.grandTotal,
     });
   } catch (err: any) {
+    console.error("Payment create error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to initiate payment." },
+      { success: false, error: err.message || "Failed to initialize payment." },
       { status: 500 }
     );
   }

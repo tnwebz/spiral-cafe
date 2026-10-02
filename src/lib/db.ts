@@ -1,170 +1,40 @@
-import { EventEmitter } from "events";
-import fs from "fs";
-import path from "path";
 import crypto from "crypto";
-import { menuData } from "@/data/menu";
+import { supabaseAdmin } from "./supabase/admin";
+import type {
+  Database,
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethod,
+  AdminRole,
+  OrderItem,
+  Order,
+  Customer,
+  CustomerSession,
+  Invoice,
+  InvoiceItemSnapshot,
+  Settlement,
+  DynamicMenuItem,
+  AuditLog,
+  CafeConfig,
+} from "./supabase/types";
 
-export type OrderStatus = "PENDING" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED";
-export type PaymentStatus = "UNPAID" | "PENDING_CASH" | "PAID" | "FAILED" | "REFUNDED";
-export type PaymentMethod = "UNSELECTED" | "CASH" | "ONLINE";
-export type AdminRole = "ADMIN" | "KITCHEN" | "CASHIER";
-
-export interface OrderItem {
-  id: string;
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  lineTotal: number;
-  image: string;
-  notes?: string;
-}
-
-export interface Order {
-  id: string;
-  orderNumber: string;
-  tableNumber: string;
-  customerSessionId: string;
-  customerId?: string;
-  customerPhone?: string;
-  items: OrderItem[];
-  subtotal: number;
-  tax: number;
-  packagingFee: number;
-  serviceCharge: number;
-  grandTotal: number;
-  status: OrderStatus;
-  paymentStatus: PaymentStatus;
-  paymentMethod: PaymentMethod;
-  paymentTxnId?: string;
-  paymentProvider?: string;
-  invoiceId?: string;
-  invoiceNumber?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-  preparingAt?: string;
-  readyAt?: string;
-  paidAt?: string;
-  completedAt?: string;
-  cancelledAt?: string;
-}
-
-export interface Customer {
-  id: string;
-  phoneNumber: string;
-  name?: string;
-  serviceSmsConsent: boolean;
-  marketingConsent: boolean;
-  totalOrders: number;
-  totalSpent: number;
-  firstSeenAt: string;
-  lastSeenAt: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CustomerSession {
-  id: string;
-  customerId?: string;
-  customerPhone?: string;
-  tableNumber: string;
-  sessionToken: string;
-  startedAt: string;
-  lastActiveAt: string;
-}
-
-export interface InvoiceItemSnapshot {
-  name: string;
-  quantity: number;
-  unitPrice: number;
-  lineTotal: number;
-}
-
-export interface Invoice {
-  id: string;
-  invoiceNumber: string; // e.g. INV-2026-000001
-  orderId: string;
-  orderNumber: string;
-  tableNumber: string;
-  customerId?: string;
-  customerPhone?: string;
-  items: InvoiceItemSnapshot[];
-  subtotal: number;
-  tax: number;
-  packagingFee: number;
-  serviceCharge: number;
-  grandTotal: number;
-  paymentMethod: PaymentMethod;
-  paymentStatus: PaymentStatus;
-  paidAt?: string;
-  createdAt: string;
-  secureToken: string; // Signed access token for public customer view
-  smsSent: boolean;
-  smsSentAt?: string;
-}
-
-export interface Settlement {
-  id: string;
-  date: string; // YYYY-MM-DD
-  totalOrders: number;
-  totalSales: number;
-  cashSales: number;
-  onlineSales: number;
-  cashCounted: number;
-  cashSettled: number;
-  difference: number;
-  settledBy: string;
-  settledAt: string;
-  notes?: string;
-}
-
-export interface DynamicMenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  originalPrice?: number;
-  categoryId: string;
-  categoryName: string;
-  dietType: "veg" | "non-veg" | "egg" | "other";
-  badge: "none" | "bestseller" | "chef-choice" | "new" | "spicy" | "popular";
-  rating: number;
-  reviewsCount: number;
-  image: string;
-  cloudinaryPublicId?: string;
-  available: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AuditLog {
-  id: string;
-  adminUser: string;
-  action: string;
-  entityType: "ORDER" | "PAYMENT" | "INVOICE" | "MENU_ITEM" | "SETTLEMENT" | "CONFIG";
-  entityId: string;
-  details: string;
-  previousValue?: any;
-  newValue?: any;
-  timestamp: string;
-}
-
-export interface CafeConfig {
-  taxPercentage: number;
-  packagingFee: number;
-  serviceCharge: number;
-  kitchenPin: string;
-  cashierPin: string;
-  adminPin: string;
-  adminUsername: string;
-  adminPasswordHash: string; // SHA-256
-  cafeName: string;
-  cafeAddress: string;
-  cafePhone: string;
-  gstNumber: string;
-  currencySymbol: string;
-}
+// Re-export domain types for full backward compatibility
+export type {
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethod,
+  AdminRole,
+  OrderItem,
+  Order,
+  Customer,
+  CustomerSession,
+  Invoice,
+  InvoiceItemSnapshot,
+  Settlement,
+  DynamicMenuItem,
+  AuditLog,
+  CafeConfig,
+};
 
 export interface DatabaseSchema {
   orders: Order[];
@@ -177,24 +47,9 @@ export interface DatabaseSchema {
   auditLogs: AuditLog[];
 }
 
-// Global Event Emitter for Real-Time SSE
-declare global {
-  // eslint-disable-next-line no-var
-  var __spiralOrderEvents: EventEmitter | undefined;
-  // eslint-disable-next-line no-var
-  var __spiralDbCache: DatabaseSchema | undefined;
-}
 
-export const orderEvents: EventEmitter = global.__spiralOrderEvents || new EventEmitter();
-if (!global.__spiralOrderEvents) {
-  orderEvents.setMaxListeners(200);
-  global.__spiralOrderEvents = orderEvents;
-}
 
-const DB_DIR = path.join(process.cwd(), "src", "data");
-const DB_FILE = path.join(DB_DIR, "db.json");
-
-const DEFAULT_CONFIG: CafeConfig = {
+export const DEFAULT_CONFIG: CafeConfig = {
   taxPercentage: 5,
   packagingFee: 0,
   serviceCharge: 0,
@@ -210,192 +65,301 @@ const DEFAULT_CONFIG: CafeConfig = {
   currencySymbol: "₹",
 };
 
-/**
- * Extract initial seed dynamic items from menuData
- */
-function getInitialMenuItems(): DynamicMenuItem[] {
-  const items: DynamicMenuItem[] = [];
-  const now = new Date().toISOString();
+// ----------------------------------------------------
+// HELPER CONVERTERS (DB Snake_Case <-> App CamelCase)
+// ----------------------------------------------------
 
-  menuData.forEach((cat) => {
-    cat.items.forEach((it) => {
-      let dietType: "veg" | "non-veg" | "egg" | "other" = "non-veg";
-      if (it.badges?.includes("veg")) dietType = "veg";
-
-      let badge: "none" | "bestseller" | "chef-choice" | "new" | "spicy" | "popular" = "none";
-      if (it.badges?.includes("bestseller")) badge = "bestseller";
-      else if (it.badges?.includes("chef-choice")) badge = "chef-choice";
-      else if (it.badges?.includes("new")) badge = "new";
-      else if (it.badges?.includes("spicy")) badge = "spicy";
-
-      items.push({
-        id: it.id,
-        name: it.name,
-        description: it.description || "",
-        price: it.price,
-        originalPrice: it.originalPrice,
-        categoryId: cat.id,
-        categoryName: cat.name,
-        dietType,
-        badge,
-        rating: it.rating || 4.8,
-        reviewsCount: it.reviewsCount || 250,
-        image: it.image,
-        available: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-    });
-  });
-
-  return items;
-}
-
-// Initialize in-memory cache and load from file
-function loadDatabase(): DatabaseSchema {
-  if (global.__spiralDbCache) {
-    if (!Array.isArray(global.__spiralDbCache.auditLogs)) global.__spiralDbCache.auditLogs = [];
-    if (!Array.isArray(global.__spiralDbCache.customers)) global.__spiralDbCache.customers = [];
-    if (!Array.isArray(global.__spiralDbCache.customerSessions)) global.__spiralDbCache.customerSessions = [];
-    if (!Array.isArray(global.__spiralDbCache.invoices)) global.__spiralDbCache.invoices = [];
-    if (!Array.isArray(global.__spiralDbCache.settlements)) global.__spiralDbCache.settlements = [];
-    if (!Array.isArray(global.__spiralDbCache.orders)) global.__spiralDbCache.orders = [];
-    if (!Array.isArray(global.__spiralDbCache.menuItems) || global.__spiralDbCache.menuItems.length === 0) {
-      global.__spiralDbCache.menuItems = getInitialMenuItems();
-    }
-    return global.__spiralDbCache;
-  }
-
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, "utf-8");
-      const parsed = JSON.parse(data);
-
-      const db: DatabaseSchema = {
-        orders: Array.isArray(parsed.orders) ? parsed.orders : [],
-        config: { ...DEFAULT_CONFIG, ...(parsed.config || {}) },
-        customers: Array.isArray(parsed.customers) ? parsed.customers : [],
-        customerSessions: Array.isArray(parsed.customerSessions) ? parsed.customerSessions : [],
-        invoices: Array.isArray(parsed.invoices) ? parsed.invoices : [],
-        settlements: Array.isArray(parsed.settlements) ? parsed.settlements : [],
-        menuItems: Array.isArray(parsed.menuItems) && parsed.menuItems.length > 0 ? parsed.menuItems : getInitialMenuItems(),
-        auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
-      };
-
-      global.__spiralDbCache = db;
-      return db;
-    }
-  } catch (err) {
-    console.error("Error reading database file, using fallback:", err);
-  }
-
-  const initial: DatabaseSchema = {
-    orders: [],
-    config: DEFAULT_CONFIG,
-    customers: [],
-    customerSessions: [],
-    invoices: [],
-    settlements: [],
-    menuItems: getInitialMenuItems(),
-    auditLogs: [],
+function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
+  return {
+    id: row.id,
+    orderNumber: row.order_number,
+    tableNumber: row.table_number,
+    customerSessionId: row.customer_session_id || "",
+    customerId: row.customer_id || undefined,
+    customerPhone: row.customer_phone || undefined,
+    items: items.length > 0 ? items : (row.order_items ? row.order_items.map(mapDbOrderItemToOrderItem) : []),
+    subtotal: Number(row.subtotal || 0),
+    tax: Number(row.tax || 0),
+    packagingFee: Number(row.packaging_fee || 0),
+    serviceCharge: Number(row.service_charge || 0),
+    grandTotal: Number(row.grand_total || 0),
+    status: row.status as OrderStatus,
+    paymentStatus: row.payment_status as PaymentStatus,
+    paymentMethod: row.payment_method as PaymentMethod,
+    paymentTxnId: row.payment_txn_id || undefined,
+    paymentProvider: row.payment_provider || undefined,
+    invoiceId: row.invoice_id || undefined,
+    invoiceNumber: row.invoice_number || undefined,
+    notes: row.notes || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    preparingAt: row.preparing_at || undefined,
+    readyAt: row.ready_at || undefined,
+    paidAt: row.paid_at || undefined,
+    completedAt: row.completed_at || undefined,
+    cancelledAt: row.cancelled_at || undefined,
   };
-
-  saveDatabase(initial);
-  global.__spiralDbCache = initial;
-  return initial;
 }
 
-function saveDatabase(data: DatabaseSchema) {
-  try {
-    if (!fs.existsSync(DB_DIR)) {
-      fs.mkdirSync(DB_DIR, { recursive: true });
-    }
-    const tempFile = `${DB_FILE}.tmp`;
-    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tempFile, DB_FILE);
-    global.__spiralDbCache = data;
-  } catch (err) {
-    console.error("Error writing database file:", err);
-    global.__spiralDbCache = data;
+function mapDbOrderItemToOrderItem(row: any): OrderItem {
+  return {
+    id: row.id,
+    productId: row.product_id || "",
+    name: row.name,
+    price: Number(row.price || 0),
+    quantity: Number(row.quantity || 1),
+    lineTotal: Number(row.line_total || 0),
+    image: row.image || "",
+    notes: row.notes || undefined,
+  };
+}
+
+function mapDbMenuItemToMenuItem(row: any): DynamicMenuItem {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    price: Number(row.price || 0),
+    originalPrice: row.original_price != null ? Number(row.original_price) : undefined,
+    categoryId: row.category_id,
+    categoryName: row.category_name,
+    dietType: row.diet_type,
+    badge: row.badge,
+    rating: Number(row.rating || 4.8),
+    reviewsCount: Number(row.reviews_count || 250),
+    image: row.image,
+    storagePath: row.cloudinary_public_id || undefined,
+    cloudinaryPublicId: row.cloudinary_public_id || undefined,
+    available: Boolean(row.available),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapDbInvoiceToInvoice(row: any): Invoice {
+  let itemsSnapshot: InvoiceItemSnapshot[] = [];
+  if (Array.isArray(row.items)) {
+    itemsSnapshot = row.items.map((it: any) => ({
+      name: it.name,
+      quantity: Number(it.quantity || 1),
+      unitPrice: Number(it.unitPrice || it.price || 0),
+      lineTotal: Number(it.lineTotal || 0),
+    }));
   }
+
+  return {
+    id: row.id,
+    invoiceNumber: row.invoice_number,
+    orderId: row.order_id || "",
+    orderNumber: row.order_number,
+    tableNumber: row.table_number,
+    customerId: row.customer_id || undefined,
+    customerPhone: row.customer_phone || undefined,
+    items: itemsSnapshot,
+    subtotal: Number(row.subtotal || 0),
+    tax: Number(row.tax || 0),
+    packagingFee: Number(row.packaging_fee || 0),
+    serviceCharge: Number(row.service_charge || 0),
+    grandTotal: Number(row.grand_total || 0),
+    paymentMethod: row.payment_method as PaymentMethod,
+    paymentStatus: row.payment_status as PaymentStatus,
+    paidAt: row.paid_at || undefined,
+    secureToken: row.secure_token || undefined,
+    smsSent: Boolean(row.sms_sent),
+    smsSentAt: row.sms_sent_at || undefined,
+    notes: row.notes || undefined,
+    createdAt: row.created_at,
+  };
 }
 
-// Generate unique human-readable order number (e.g. ORD-553797)
+function mapDbCustomerToCustomer(row: any): Customer {
+  return {
+    id: row.id,
+    phoneNumber: row.phone_number,
+    name: row.name || undefined,
+    serviceSmsConsent: Boolean(row.service_sms_consent),
+    marketingConsent: Boolean(row.marketing_consent),
+    totalOrders: Number(row.total_orders || 0),
+    totalSpent: Number(row.total_spent || 0),
+    firstSeenAt: row.first_seen_at,
+    lastSeenAt: row.last_seen_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapDbConfigToConfig(row: any): CafeConfig {
+  if (!row) return DEFAULT_CONFIG;
+  return {
+    taxPercentage: Number(row.tax_percentage ?? DEFAULT_CONFIG.taxPercentage),
+    packagingFee: Number(row.packaging_fee ?? DEFAULT_CONFIG.packagingFee),
+    serviceCharge: Number(row.service_charge ?? DEFAULT_CONFIG.serviceCharge),
+    kitchenPin: row.kitchen_pin || DEFAULT_CONFIG.kitchenPin,
+    cashierPin: row.cashier_pin || DEFAULT_CONFIG.cashierPin,
+    adminPin: row.admin_pin || DEFAULT_CONFIG.adminPin,
+    adminUsername: row.admin_username || DEFAULT_CONFIG.adminUsername,
+    adminPasswordHash: row.admin_password_hash || DEFAULT_CONFIG.adminPasswordHash,
+    cafeName: row.cafe_name || DEFAULT_CONFIG.cafeName,
+    cafeAddress: row.cafe_address || DEFAULT_CONFIG.cafeAddress,
+    cafePhone: row.cafe_phone || DEFAULT_CONFIG.cafePhone,
+    gstNumber: row.gst_number || DEFAULT_CONFIG.gstNumber,
+    currencySymbol: row.currency_symbol || DEFAULT_CONFIG.currencySymbol,
+  };
+}
+
 export function generateOrderNumber(): string {
   const randomDigits = Math.floor(100000 + Math.random() * 900000);
   return `ORD-${randomDigits}`;
 }
 
-// Generate unique sequential collision-safe invoice number (e.g. INV-2026-000042)
-export function generateInvoiceNumber(db: DatabaseSchema): string {
+export function generateInvoiceNumber(seq: number): string {
   const year = new Date().getFullYear();
-  const count = (db.invoices?.length || 0) + 1;
-  const seq = String(count).padStart(6, "0");
-  return `INV-${year}-${seq}`;
+  const formattedSeq = String(seq).padStart(6, "0");
+  return `INV-${year}-${formattedSeq}`;
 }
 
-export function getConfig(): CafeConfig {
-  const db = loadDatabase();
-  return db.config;
+// ----------------------------------------------------
+// CONFIGURATION OPERATIONS
+// ----------------------------------------------------
+
+export async function getConfig(): Promise<CafeConfig> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("cafe_config")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return DEFAULT_CONFIG;
+    }
+
+    return mapDbConfigToConfig(data);
+  } catch (err) {
+    console.error("Error reading config from Supabase:", err);
+    return DEFAULT_CONFIG;
+  }
 }
 
-export function updateConfig(updates: Partial<CafeConfig>, adminUser = "admin"): CafeConfig {
-  const db = loadDatabase();
-  db.config = { ...db.config, ...updates };
-  saveDatabase(db);
-  recordAuditLog(adminUser, "UPDATE_CONFIG", "CONFIG", "global", JSON.stringify(updates));
-  orderEvents.emit("config_updated", db.config);
-  return db.config;
+export async function updateConfig(
+  updates: Partial<CafeConfig>,
+  adminUser = "admin"
+): Promise<CafeConfig> {
+  const current = await getConfig();
+  const merged: CafeConfig = { ...current, ...updates };
+
+  const { error } = await supabaseAdmin.from("cafe_config").upsert(
+    {
+      id: 1,
+      tax_percentage: merged.taxPercentage,
+      packaging_fee: merged.packagingFee,
+      service_charge: merged.serviceCharge,
+      kitchen_pin: merged.kitchenPin,
+      cashier_pin: merged.cashierPin,
+      admin_pin: merged.adminPin,
+      admin_username: merged.adminUsername,
+      admin_password_hash: merged.adminPasswordHash,
+      cafe_name: merged.cafeName,
+      cafe_address: merged.cafeAddress,
+      cafe_phone: merged.cafePhone,
+      gst_number: merged.gstNumber,
+      currency_symbol: merged.currencySymbol,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" }
+  );
+
+  if (error) {
+    throw new Error(`Failed to update config in Supabase: ${error.message}`);
+  }
+
+  await recordAuditLog(adminUser, "UPDATE_CONFIG", "CONFIG", "global", JSON.stringify(updates));
+  return merged;
 }
 
 // ----------------------------------------------------
 // ORDER OPERATIONS
 // ----------------------------------------------------
 
-export function getAllOrders(): Order[] {
-  const db = loadDatabase();
-  return [...db.orders].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+export async function getAllOrders(): Promise<Order[]> {
+  const { data, error } = await supabaseAdmin
+    .from("orders")
+    .select("*, order_items(*)")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching orders from Supabase:", error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => mapDbOrderToOrder(row));
 }
 
-export function getOrderById(idOrNumber: string): Order | undefined {
-  const db = loadDatabase();
-  return db.orders.find(
-    (o) => o.id === idOrNumber || o.orderNumber.toUpperCase() === idOrNumber.toUpperCase()
-  );
+export async function getOrderById(idOrNumber: string): Promise<Order | undefined> {
+  const isOrdNumber = idOrNumber.toUpperCase().startsWith("ORD-");
+
+  let query = supabaseAdmin.from("orders").select("*, order_items(*)");
+  if (isOrdNumber) {
+    query = query.ilike("order_number", idOrNumber);
+  } else {
+    query = query.eq("id", idOrNumber);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) {
+    return undefined;
+  }
+
+  return mapDbOrderToOrder(data);
 }
 
-export function getSessionOrders(customerSessionId: string): Order[] {
-  const db = loadDatabase();
-  return db.orders
-    .filter((o) => o.customerSessionId === customerSessionId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+export async function getSessionOrders(customerSessionId: string): Promise<Order[]> {
+  const { data, error } = await supabaseAdmin
+    .from("orders")
+    .select("*, order_items(*)")
+    .eq("customer_session_id", customerSessionId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching session orders from Supabase:", error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => mapDbOrderToOrder(row));
 }
 
-export function getActiveKitchenOrders(): {
+export async function getActiveKitchenOrders(): Promise<{
   pending: Order[];
   preparing: Order[];
   ready: Order[];
   recentCompleted: Order[];
-} {
-  const db = loadDatabase();
-  const sorted = [...db.orders].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
+}> {
+  const [activeRes, completedRes] = await Promise.all([
+    supabaseAdmin
+      .from("orders")
+      .select("*, order_items(*)")
+      .in("status", ["PENDING", "PREPARING", "READY"])
+      .order("created_at", { ascending: true }),
+    supabaseAdmin
+      .from("orders")
+      .select("*, order_items(*)")
+      .eq("status", "COMPLETED")
+      .order("updated_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  const activeOrders = (activeRes.data || []).map((r: any) => mapDbOrderToOrder(r));
+  const recentCompleted = (completedRes.data || []).map((r: any) => mapDbOrderToOrder(r));
 
   return {
-    pending: sorted.filter((o) => o.status === "PENDING"),
-    preparing: sorted.filter((o) => o.status === "PREPARING"),
-    ready: sorted.filter((o) => o.status === "READY"),
-    recentCompleted: [...db.orders]
-      .filter((o) => o.status === "COMPLETED")
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, 20),
+    pending: activeOrders.filter((o) => o.status === "PENDING"),
+    preparing: activeOrders.filter((o) => o.status === "PREPARING"),
+    ready: activeOrders.filter((o) => o.status === "READY"),
+    recentCompleted,
   };
 }
 
-export function createOrder(params: {
+export async function createOrder(params: {
   tableNumber: string;
   customerSessionId: string;
   customerId?: string;
@@ -409,15 +373,18 @@ export function createOrder(params: {
     notes?: string;
   }>;
   notes?: string;
-}): Order {
-  const db = loadDatabase();
+}): Promise<Order> {
+  const config = await getConfig();
   const now = new Date().toISOString();
 
   if (!params.items || params.items.length === 0) {
     throw new Error("Order must contain at least one item.");
   }
 
-  // Calculate order pricing
+  const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const orderNumber = generateOrderNumber();
+
+  // Price calculations
   const orderItems: OrderItem[] = params.items.map((item, index) => {
     const qty = Math.max(1, Math.floor(item.quantity));
     const lineTotal = item.price * qty;
@@ -434,12 +401,11 @@ export function createOrder(params: {
   });
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const tax = Math.round((subtotal * db.config.taxPercentage) / 100);
-  const packagingFee = db.config.packagingFee;
-  const serviceCharge = db.config.serviceCharge;
+  const tax = Math.round((subtotal * config.taxPercentage) / 100);
+  const packagingFee = config.packagingFee;
+  const serviceCharge = config.serviceCharge;
   const grandTotal = subtotal + tax + packagingFee + serviceCharge;
 
-  // Format table identifier (e.g. "Table 08" or clean text)
   let cleanTable = params.tableNumber.trim();
   if (/^\d+$/.test(cleanTable)) {
     cleanTable = `Table ${cleanTable.padStart(2, "0")}`;
@@ -447,9 +413,86 @@ export function createOrder(params: {
     cleanTable = `Table ${cleanTable}`;
   }
 
-  const newOrder: Order = {
-    id: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    orderNumber: generateOrderNumber(),
+  const orderPayload = {
+    id: orderId,
+    order_number: orderNumber,
+    table_number: cleanTable,
+    customer_session_id: params.customerSessionId,
+    customer_id: params.customerId || null,
+    customer_phone: params.customerPhone || null,
+    subtotal,
+    tax,
+    packaging_fee: packagingFee,
+    service_charge: serviceCharge,
+    grand_total: grandTotal,
+    status: "PENDING" as OrderStatus,
+    payment_status: "UNPAID" as PaymentStatus,
+    payment_method: "UNSELECTED" as PaymentMethod,
+    payment_txn_id: null,
+    payment_provider: null,
+    invoice_id: null,
+    invoice_number: null,
+    notes: params.notes || "",
+    created_at: now,
+    updated_at: now,
+  };
+
+  const itemsPayload: Database["public"]["Tables"]["order_items"]["Insert"][] = orderItems.map((it) => ({
+    id: it.id || `oi_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    order_id: orderId,
+    product_id: it.productId || null,
+    name: it.name,
+    price: it.price,
+    quantity: it.quantity,
+    line_total: it.lineTotal,
+    image: it.image || "",
+    notes: it.notes || null,
+  }));
+
+  // Ensure customer session exists if provided to satisfy foreign key constraint
+  if (params.customerSessionId) {
+    try {
+      await supabaseAdmin.from("customer_sessions").upsert(
+        {
+          id: params.customerSessionId,
+          table_number: cleanTable,
+          session_token: params.customerSessionId,
+          customer_phone: params.customerPhone || null,
+          last_active_at: now,
+        },
+        { onConflict: "id" }
+      );
+    } catch (sessionErr) {
+      console.warn("Notice: customer session upsert:", sessionErr);
+    }
+  }
+
+  // Transaction-safe insert (Try RPC first; fallback to atomic two-step)
+  let createdOrder: Order;
+
+  const { error: rpcError } = await supabaseAdmin.rpc("create_order_with_items", {
+    order_payload: orderPayload as any,
+    items_payload: itemsPayload as any,
+  });
+
+  if (rpcError) {
+    // Direct transaction fallback
+    const { error: insertOrderError } = await supabaseAdmin.from("orders").insert(orderPayload);
+    if (insertOrderError) {
+      throw new Error(`Failed to insert order: ${insertOrderError.message}`);
+    }
+
+    const { error: insertItemsError } = await supabaseAdmin.from("order_items").insert(itemsPayload);
+    if (insertItemsError) {
+      // Rollback order to avoid corrupted partial state
+      await supabaseAdmin.from("orders").delete().eq("id", orderId);
+      throw new Error(`Failed to insert order items: ${insertItemsError.message}`);
+    }
+  }
+
+  createdOrder = {
+    id: orderId,
+    orderNumber,
     tableNumber: cleanTable,
     customerSessionId: params.customerSessionId,
     customerId: params.customerId,
@@ -468,46 +511,29 @@ export function createOrder(params: {
     updatedAt: now,
   };
 
-  db.orders.push(newOrder);
-
-  // Update customer totals if customerId is present
+  // Upsert customer profile if phone is supplied
   if (params.customerPhone) {
     saveCustomer({
       phoneNumber: params.customerPhone,
       serviceSmsConsent: true,
       marketingConsent: false,
-    });
+    }).catch((e) => console.error("Customer background save error:", e));
   }
 
-  saveDatabase(db);
-
-  // Broadcast real-time events to SSE listeners
-  orderEvents.emit("order_created", newOrder);
-  orderEvents.emit("orders_changed", { type: "create", order: newOrder });
-
-  return newOrder;
+  return createdOrder;
 }
 
-export function updateOrderStatus(
+export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
   actor: "kitchen" | "admin" | "system",
   actorName = "staff"
-): Order {
-  const db = loadDatabase();
-  const orderIndex = db.orders.findIndex(
-    (o) => o.id === orderId || o.orderNumber.toUpperCase() === orderId.toUpperCase()
-  );
-
-  if (orderIndex === -1) {
+): Promise<Order> {
+  const current = await getOrderById(orderId);
+  if (!current) {
     throw new Error(`Order not found: ${orderId}`);
   }
 
-  const order = db.orders[orderIndex];
-  const currentStatus = order.status;
-  const now = new Date().toISOString();
-
-  // Validate state transitions
   const validTransitions: Record<OrderStatus, OrderStatus[]> = {
     PENDING: ["PREPARING", "CANCELLED"],
     PREPARING: ["READY", "CANCELLED"],
@@ -516,37 +542,41 @@ export function updateOrderStatus(
     CANCELLED: [],
   };
 
-  if (!validTransitions[currentStatus].includes(newStatus)) {
-    throw new Error(
-      `Invalid transition: cannot transition order from ${currentStatus} to ${newStatus}.`
-    );
+  const currentStatus = current.status as OrderStatus;
+  if (!validTransitions[currentStatus]?.includes(newStatus)) {
+    throw new Error(`Invalid transition: cannot transition order from ${current.status} to ${newStatus}.`);
   }
 
-  order.status = newStatus;
-  order.updatedAt = now;
+  const now = new Date().toISOString();
+  const updates: Database["public"]["Tables"]["orders"]["Update"] = {
+    status: newStatus,
+    updated_at: now,
+  };
 
-  if (newStatus === "PREPARING") {
-    order.preparingAt = now;
-  } else if (newStatus === "READY") {
-    order.readyAt = now;
-  } else if (newStatus === "COMPLETED") {
-    order.completedAt = now;
-  } else if (newStatus === "CANCELLED") {
-    order.cancelledAt = now;
+  if (newStatus === "PREPARING") updates.preparing_at = now;
+  else if (newStatus === "READY") updates.ready_at = now;
+  else if (newStatus === "COMPLETED") updates.completed_at = now;
+  else if (newStatus === "CANCELLED") updates.cancelled_at = now;
+
+  const { error } = await supabaseAdmin.from("orders").update(updates).eq("id", current.id);
+  if (error) {
+    throw new Error(`Failed to update order status in Supabase: ${error.message}`);
   }
 
-  db.orders[orderIndex] = order;
-  saveDatabase(db);
+  const updatedOrder = { ...current, ...updates };
 
-  recordAuditLog(actorName, "STATUS_CHANGE", "ORDER", order.id, `Status changed from ${currentStatus} to ${newStatus}`);
+  await recordAuditLog(
+    actorName,
+    "STATUS_CHANGE",
+    "ORDER",
+    current.id,
+    `Status changed from ${current.status} to ${newStatus}`
+  );
 
-  orderEvents.emit("order_updated", order);
-  orderEvents.emit("orders_changed", { type: "update", order });
-
-  return order;
+  return updatedOrder;
 }
 
-export function updateOrderPayment(
+export async function updateOrderPayment(
   orderId: string,
   paymentMethod: PaymentMethod,
   paymentStatus: PaymentStatus,
@@ -554,58 +584,68 @@ export function updateOrderPayment(
   adminUser?: string,
   paymentTxnId?: string,
   paymentProvider?: string
-): Order {
-  const db = loadDatabase();
-  const orderIndex = db.orders.findIndex(
-    (o) => o.id === orderId || o.orderNumber.toUpperCase() === orderId.toUpperCase()
-  );
-
-  if (orderIndex === -1) {
+): Promise<Order> {
+  const current = await getOrderById(orderId);
+  if (!current) {
     throw new Error(`Order not found: ${orderId}`);
   }
 
-  const order = db.orders[orderIndex];
   const now = new Date().toISOString();
+  const updates: Database["public"]["Tables"]["orders"]["Update"] = {
+    payment_method: paymentMethod,
+    payment_status: paymentStatus,
+    updated_at: now,
+  };
 
-  order.paymentMethod = paymentMethod;
-  order.paymentStatus = paymentStatus;
-  order.updatedAt = now;
+  if (paymentTxnId) updates.payment_txn_id = paymentTxnId;
+  if (paymentProvider) updates.payment_provider = paymentProvider;
 
-  if (paymentTxnId) order.paymentTxnId = paymentTxnId;
-  if (paymentProvider) order.paymentProvider = paymentProvider;
-
+  let newStatus = current.status;
   if (paymentStatus === "PAID") {
-    order.paidAt = now;
-    if (autoCompleteIfPaid || order.status === "READY") {
-      order.status = "COMPLETED";
-      order.completedAt = now;
+    updates.paid_at = now;
+    if (autoCompleteIfPaid || current.status === "READY") {
+      newStatus = "COMPLETED";
+      updates.status = "COMPLETED";
+      updates.completed_at = now;
     }
   }
 
-  db.orders[orderIndex] = order;
-  saveDatabase(db);
-
-  if (adminUser) {
-    recordAuditLog(adminUser, "PAYMENT_UPDATE", "PAYMENT", order.id, `Payment status set to ${paymentStatus} via ${paymentMethod}`);
+  const { error } = await supabaseAdmin.from("orders").update(updates).eq("id", current.id);
+  if (error) {
+    throw new Error(`Failed to update order payment in Supabase: ${error.message}`);
   }
 
-  orderEvents.emit("order_updated", order);
-  orderEvents.emit("payment_updated", order);
-  orderEvents.emit("orders_changed", { type: "payment", order });
+  const updatedOrder = {
+    ...current,
+    paymentMethod,
+    paymentStatus,
+    paymentTxnId: paymentTxnId || current.paymentTxnId,
+    paymentProvider: paymentProvider || current.paymentProvider,
+    status: newStatus,
+    paidAt: updates.paid_at || current.paidAt,
+    completedAt: updates.completed_at || current.completedAt,
+    updatedAt: now,
+  };
 
-  return order;
+  if (adminUser) {
+    await recordAuditLog(
+      adminUser,
+      "PAYMENT_UPDATE",
+      "PAYMENT",
+      current.id,
+      `Payment status set to ${paymentStatus} via ${paymentMethod}`
+    );
+  }
+
+  return updatedOrder;
 }
 
 // ----------------------------------------------------
 // INVOICE OPERATIONS
 // ----------------------------------------------------
 
-export function createInvoice(orderId: string, adminUser = "admin"): Invoice {
-  const db = loadDatabase();
-  const order = db.orders.find(
-    (o) => o.id === orderId || o.orderNumber.toUpperCase() === orderId.toUpperCase()
-  );
-
+export async function createInvoice(orderId: string, adminUser = "admin"): Promise<Invoice> {
+  const order = await getOrderById(orderId);
   if (!order) {
     throw new Error(`Order ${orderId} not found.`);
   }
@@ -614,90 +654,188 @@ export function createInvoice(orderId: string, adminUser = "admin"): Invoice {
     throw new Error("Invoice can only be generated after payment is confirmed as PAID.");
   }
 
-  // If invoice already exists for this order, return existing
-  const existing = db.invoices.find((inv) => inv.orderId === order.id);
+  // Check if invoice already exists
+  const { data: existing } = await supabaseAdmin
+    .from("invoices")
+    .select("*")
+    .eq("order_id", order.id)
+    .maybeSingle();
+
   if (existing) {
-    return existing;
+    return mapDbInvoiceToInvoice(existing);
   }
 
-  const now = new Date().toISOString();
-  const invoiceNumber = generateInvoiceNumber(db);
-  const secureToken = crypto.randomBytes(16).toString("hex");
+  // Count existing invoices for sequential numbering
+  const { count } = await supabaseAdmin
+    .from("invoices")
+    .select("*", { count: "exact", head: true });
 
-  const newInvoice: Invoice = {
-    id: `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    invoiceNumber,
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    tableNumber: order.tableNumber,
-    customerId: order.customerId,
-    customerPhone: order.customerPhone,
-    items: order.items.map((it) => ({
-      name: it.name,
-      quantity: it.quantity,
-      unitPrice: it.price,
-      lineTotal: it.lineTotal,
-    })),
+  const seq = (count || 0) + 1;
+  const invoiceNumber = generateInvoiceNumber(seq);
+  const now = new Date().toISOString();
+  const secureToken = crypto.randomBytes(16).toString("hex");
+  const invoiceId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const itemsSnapshot: InvoiceItemSnapshot[] = (order.items || []).map((it: OrderItem) => ({
+    name: it.name,
+    quantity: it.quantity,
+    unitPrice: it.price,
+    lineTotal: it.lineTotal,
+  }));
+
+  const invoiceRow: Database["public"]["Tables"]["invoices"]["Insert"] = {
+    id: invoiceId,
+    invoice_number: invoiceNumber,
+    order_id: order.id,
+    order_number: order.orderNumber,
+    table_number: order.tableNumber,
+    customer_id: order.customerId || null,
+    customer_phone: order.customerPhone || null,
+    items: itemsSnapshot as any,
     subtotal: order.subtotal,
     tax: order.tax,
-    packagingFee: order.packagingFee,
-    serviceCharge: order.serviceCharge,
-    grandTotal: order.grandTotal,
-    paymentMethod: order.paymentMethod,
-    paymentStatus: order.paymentStatus,
-    paidAt: order.paidAt || now,
-    createdAt: now,
-    secureToken,
-    smsSent: false,
+    packaging_fee: order.packagingFee,
+    service_charge: order.serviceCharge,
+    grand_total: order.grandTotal,
+    payment_method: order.paymentMethod,
+    payment_status: order.paymentStatus,
+    paid_at: order.paidAt || now,
+    secure_token: secureToken,
+    sms_sent: false,
+    sms_sent_at: null,
+    notes: order.notes || null,
+    created_at: now,
   };
 
-  db.invoices.push(newInvoice);
+  const { error: invError } = await supabaseAdmin.from("invoices").insert(invoiceRow);
+  if (invError) {
+    throw new Error(`Failed to create invoice in Supabase: ${invError.message}`);
+  }
 
-  // Link invoice back to order
-  order.invoiceId = newInvoice.id;
-  order.invoiceNumber = newInvoice.invoiceNumber;
-  order.updatedAt = now;
+  // Insert normalized line items into invoice_items table
+  const invoiceItems: Database["public"]["Tables"]["invoice_items"]["Insert"][] = itemsSnapshot.map((it, idx) => ({
+    id: `${invoiceId}_item_${idx}`,
+    invoice_id: invoiceId,
+    product_id: null,
+    name: it.name,
+    quantity: it.quantity,
+    unit_price: it.unitPrice,
+    line_total: it.lineTotal,
+  }));
+  try {
+    await supabaseAdmin.from("invoice_items").insert(invoiceItems);
+  } catch {
+    // Non-critical normalized copy
+  }
 
-  saveDatabase(db);
+  // Update order with invoice link
+  await supabaseAdmin
+    .from("orders")
+    .update({
+      invoice_id: invoiceId,
+      invoice_number: invoiceNumber,
+      updated_at: now,
+    })
+    .eq("id", order.id);
 
-  recordAuditLog(adminUser, "GENERATE_INVOICE", "INVOICE", newInvoice.id, `Generated invoice ${invoiceNumber} for order ${order.orderNumber}`);
+  const newInvoice = mapDbInvoiceToInvoice(invoiceRow);
 
-  orderEvents.emit("invoice_created", newInvoice);
+  await recordAuditLog(
+    adminUser,
+    "GENERATE_INVOICE",
+    "INVOICE",
+    newInvoice.id,
+    `Generated invoice ${invoiceNumber} for order ${order.orderNumber}`
+  );
+
   return newInvoice;
 }
 
-export function getAllInvoices(): Invoice[] {
-  const db = loadDatabase();
-  return [...db.invoices].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+export async function getAllInvoices(): Promise<Invoice[]> {
+  const { data, error } = await supabaseAdmin
+    .from("invoices")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching invoices from Supabase:", error);
+    return [];
+  }
+
+  return (data || []).map(mapDbInvoiceToInvoice);
+}
+
+export async function getInvoiceById(idOrNumber: string): Promise<Invoice | undefined> {
+  const clean = idOrNumber.trim();
+  const isInvNumber = clean.toUpperCase().startsWith("INV-");
+  const isOrdNumber = clean.toUpperCase().startsWith("ORD-");
+
+  let query = supabaseAdmin.from("invoices").select("*");
+  if (isInvNumber) {
+    query = query.ilike("invoice_number", clean);
+  } else if (isOrdNumber) {
+    query = query.ilike("order_number", clean);
+  } else {
+    query = query.or(`id.eq.${clean},order_id.eq.${clean}`);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) {
+    return undefined;
+  }
+
+  return mapDbInvoiceToInvoice(data);
+}
+
+export async function getInvoiceBySecureToken(token: string): Promise<Invoice | undefined> {
+  const { data, error } = await supabaseAdmin
+    .from("invoices")
+    .select("*")
+    .eq("secure_token", token)
+    .maybeSingle();
+
+  if (error || !data) {
+    return undefined;
+  }
+
+  return mapDbInvoiceToInvoice(data);
+}
+
+export async function markInvoiceSmsSent(
+  invoiceId: string,
+  adminUser = "admin",
+  customerPhone?: string
+): Promise<Invoice> {
+  const now = new Date().toISOString();
+  const updates: any = {
+    sms_sent: true,
+    sms_sent_at: now,
+  };
+  if (customerPhone) {
+    updates.customer_phone = customerPhone;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("invoices")
+    .update(updates)
+    .eq("id", invoiceId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to update invoice SMS status: ${error?.message}`);
+  }
+
+  const invoice = mapDbInvoiceToInvoice(data);
+
+  await recordAuditLog(
+    adminUser,
+    "SEND_SMS",
+    "INVOICE",
+    invoice.id,
+    `Dispatched invoice SMS to ${customerPhone || invoice.customerPhone || "customer"}`
   );
-}
 
-export function getInvoiceById(idOrNumber: string): Invoice | undefined {
-  const db = loadDatabase();
-  return db.invoices.find(
-    (inv) =>
-      inv.id === idOrNumber ||
-      inv.invoiceNumber.toUpperCase() === idOrNumber.toUpperCase() ||
-      inv.orderId === idOrNumber
-  );
-}
-
-export function getInvoiceBySecureToken(token: string): Invoice | undefined {
-  const db = loadDatabase();
-  return db.invoices.find((inv) => inv.secureToken === token);
-}
-
-export function markInvoiceSmsSent(invoiceId: string, adminUser = "admin"): Invoice {
-  const db = loadDatabase();
-  const invoice = db.invoices.find((inv) => inv.id === invoiceId);
-  if (!invoice) throw new Error("Invoice not found.");
-
-  invoice.smsSent = true;
-  invoice.smsSentAt = new Date().toISOString();
-  saveDatabase(db);
-
-  recordAuditLog(adminUser, "SEND_SMS", "INVOICE", invoice.id, `Dispatched invoice SMS to ${invoice.customerPhone || "customer"}`);
   return invoice;
 }
 
@@ -705,177 +843,293 @@ export function markInvoiceSmsSent(invoiceId: string, adminUser = "admin"): Invo
 // CUSTOMER & SESSION OPERATIONS
 // ----------------------------------------------------
 
-export function saveCustomer(params: {
+export async function saveCustomer(params: {
   phoneNumber: string;
   name?: string;
   serviceSmsConsent?: boolean;
   marketingConsent?: boolean;
-}): Customer {
-  const db = loadDatabase();
+}): Promise<Customer> {
   const cleanPhone = params.phoneNumber.replace(/\D/g, "");
   const now = new Date().toISOString();
 
-  let customer = db.customers.find((c) => c.phoneNumber === cleanPhone);
+  // Find existing customer
+  const { data: existing } = await supabaseAdmin
+    .from("customers")
+    .select("*")
+    .eq("phone_number", cleanPhone)
+    .maybeSingle();
 
-  if (customer) {
-    if (params.name) customer.name = params.name;
-    if (params.serviceSmsConsent !== undefined) customer.serviceSmsConsent = params.serviceSmsConsent;
-    if (params.marketingConsent !== undefined) customer.marketingConsent = params.marketingConsent;
-    customer.lastSeenAt = now;
-    customer.updatedAt = now;
-  } else {
-    customer = {
-      id: `cust_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      phoneNumber: cleanPhone,
-      name: params.name,
-      serviceSmsConsent: params.serviceSmsConsent ?? true,
-      marketingConsent: params.marketingConsent ?? false,
-      totalOrders: 0,
-      totalSpent: 0,
-      firstSeenAt: now,
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
+  // Query order stats for this phone number
+  const { data: customerOrders } = await supabaseAdmin
+    .from("orders")
+    .select("grand_total, payment_status")
+    .eq("customer_phone", cleanPhone);
+
+  const totalOrders = customerOrders ? customerOrders.length : 0;
+  const totalSpent = customerOrders
+    ? customerOrders
+        .filter((o: any) => o.payment_status === "PAID")
+        .reduce((sum: number, o: any) => sum + Number(o.grand_total || 0), 0)
+    : 0;
+
+  if (existing) {
+    const updates: Database["public"]["Tables"]["customers"]["Update"] = {
+      total_orders: totalOrders,
+      total_spent: totalSpent,
+      last_seen_at: now,
+      updated_at: now,
     };
-    db.customers.push(customer);
+    if (params.name) updates.name = params.name;
+    if (params.serviceSmsConsent !== undefined) updates.service_sms_consent = params.serviceSmsConsent;
+    if (params.marketingConsent !== undefined) updates.marketing_consent = params.marketingConsent;
+
+    const { data: updated, error } = await supabaseAdmin
+      .from("customers")
+      .update(updates)
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Failed to update customer: ${error.message}`);
+    return mapDbCustomerToCustomer(updated);
+  } else {
+    const newId = `cust_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newRow: Database["public"]["Tables"]["customers"]["Insert"] = {
+      id: newId,
+      phone_number: cleanPhone,
+      name: params.name || null,
+      service_sms_consent: params.serviceSmsConsent ?? true,
+      marketing_consent: params.marketingConsent ?? false,
+      total_orders: totalOrders,
+      total_spent: totalSpent,
+      first_seen_at: now,
+      last_seen_at: now,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: created, error } = await supabaseAdmin
+      .from("customers")
+      .insert(newRow)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Failed to create customer: ${error.message}`);
+    return mapDbCustomerToCustomer(created);
+  }
+}
+
+export async function getAllCustomers(): Promise<Customer[]> {
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("*")
+    .order("last_seen_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching customers from Supabase:", error);
+    return [];
   }
 
-  // Recalculate customer metrics from existing orders
-  const customerOrders = db.orders.filter(
-    (o) => o.customerPhone === cleanPhone || o.customerId === customer?.id
-  );
-  customer.totalOrders = customerOrders.length;
-  customer.totalSpent = customerOrders
-    .filter((o) => o.paymentStatus === "PAID")
-    .reduce((sum, o) => sum + o.grandTotal, 0);
-
-  saveDatabase(db);
-  return customer;
+  return (data || []).map(mapDbCustomerToCustomer);
 }
 
-export function getAllCustomers(): Customer[] {
-  const db = loadDatabase();
-  return [...db.customers].sort(
-    (a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime()
-  );
-}
-
-export function saveCustomerSession(params: {
+export async function saveCustomerSession(params: {
   sessionId: string;
   phoneNumber?: string;
   tableNumber: string;
-}): CustomerSession {
-  const db = loadDatabase();
+}): Promise<CustomerSession> {
   const now = new Date().toISOString();
 
-  let session = db.customerSessions.find((s) => s.id === params.sessionId);
-  if (session) {
-    session.tableNumber = params.tableNumber;
-    session.customerPhone = params.phoneNumber || session.customerPhone;
-    session.lastActiveAt = now;
-  } else {
-    session = {
-      id: params.sessionId,
-      customerPhone: params.phoneNumber,
-      tableNumber: params.tableNumber,
-      sessionToken: crypto.randomBytes(16).toString("hex"),
-      startedAt: now,
-      lastActiveAt: now,
-    };
-    db.customerSessions.push(session);
-  }
+  const { data: existing } = await supabaseAdmin
+    .from("customer_sessions")
+    .select("*")
+    .eq("id", params.sessionId)
+    .maybeSingle();
 
-  saveDatabase(db);
-  return session;
+  if (existing) {
+    const { data: updated, error } = await supabaseAdmin
+      .from("customer_sessions")
+      .update({
+        table_number: params.tableNumber,
+        customer_phone: params.phoneNumber || existing.customer_phone,
+        last_active_at: now,
+      })
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Failed to update customer session: ${error.message}`);
+    return {
+      id: updated.id,
+      customerId: updated.customer_id || undefined,
+      customerPhone: updated.customer_phone || undefined,
+      tableNumber: updated.table_number,
+      sessionToken: updated.session_token,
+      startedAt: updated.started_at,
+      lastActiveAt: updated.last_active_at,
+    };
+  } else {
+    const sessionToken = crypto.randomBytes(16).toString("hex");
+    const newSession: Database["public"]["Tables"]["customer_sessions"]["Insert"] = {
+      id: params.sessionId,
+      customer_id: null,
+      customer_phone: params.phoneNumber || null,
+      table_number: params.tableNumber,
+      session_token: sessionToken,
+      started_at: now,
+      last_active_at: now,
+    };
+
+    const { data: created, error } = await supabaseAdmin
+      .from("customer_sessions")
+      .insert(newSession)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Failed to create customer session: ${error.message}`);
+    return {
+      id: created.id,
+      customerId: created.customer_id || undefined,
+      customerPhone: created.customer_phone || undefined,
+      tableNumber: created.table_number,
+      sessionToken: created.session_token,
+      startedAt: created.started_at,
+      lastActiveAt: created.last_active_at,
+    };
+  }
 }
 
 // ----------------------------------------------------
 // DYNAMIC MENU MANAGEMENT
 // ----------------------------------------------------
 
-export function getAllMenuItems(): DynamicMenuItem[] {
-  const db = loadDatabase();
-  return [...db.menuItems].sort((a, b) => a.name.localeCompare(b.name));
+export async function getAllMenuItems(): Promise<DynamicMenuItem[]> {
+  const { data, error } = await supabaseAdmin
+    .from("menu_items")
+    .select("*")
+    .order("name", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching menu items from Supabase:", error);
+    return [];
+  }
+
+  return (data || []).map(mapDbMenuItemToMenuItem);
 }
 
-export function getMenuItemById(id: string): DynamicMenuItem | undefined {
-  const db = loadDatabase();
-  return db.menuItems.find((item) => item.id === id);
+export async function getMenuItemById(id: string): Promise<DynamicMenuItem | undefined> {
+  const { data, error } = await supabaseAdmin
+    .from("menu_items")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !data) return undefined;
+  return mapDbMenuItemToMenuItem(data);
 }
 
-export function createMenuItem(item: Omit<DynamicMenuItem, "id" | "createdAt" | "updatedAt">, adminUser = "admin"): DynamicMenuItem {
-  const db = loadDatabase();
+export async function createMenuItem(
+  item: Omit<DynamicMenuItem, "id" | "createdAt" | "updatedAt">,
+  adminUser = "admin"
+): Promise<DynamicMenuItem> {
   const now = new Date().toISOString();
   const id = `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-  const newItem: DynamicMenuItem = {
-    ...item,
+  const row: Database["public"]["Tables"]["menu_items"]["Insert"] = {
     id,
-    createdAt: now,
-    updatedAt: now,
+    name: item.name,
+    description: item.description || "",
+    price: item.price,
+    original_price: item.originalPrice ?? null,
+    category_id: item.categoryId,
+    category_name: item.categoryName,
+    diet_type: item.dietType || "veg",
+    badge: item.badge || "none",
+    rating: item.rating ?? 4.8,
+    reviews_count: item.reviewsCount ?? 250,
+    image: item.image,
+    cloudinary_public_id: item.storagePath || item.cloudinaryPublicId || null,
+    available: item.available ?? true,
+    created_at: now,
+    updated_at: now,
   };
 
-  db.menuItems.push(newItem);
-  saveDatabase(db);
+  const { data, error } = await supabaseAdmin
+    .from("menu_items")
+    .insert(row)
+    .select()
+    .single();
 
-  recordAuditLog(adminUser, "CREATE_MENU_ITEM", "MENU_ITEM", newItem.id, `Created product: ${newItem.name} (₹${newItem.price})`);
-  orderEvents.emit("menu_updated", db.menuItems);
-  return newItem;
+  if (error) throw new Error(`Failed to create menu item: ${error.message}`);
+
+  const created = mapDbMenuItemToMenuItem(data);
+  await recordAuditLog(adminUser, "CREATE_MENU_ITEM", "MENU_ITEM", created.id, `Created product: ${created.name} (₹${created.price})`);
+  return created;
 }
 
-export function updateMenuItem(id: string, updates: Partial<DynamicMenuItem>, adminUser = "admin"): DynamicMenuItem {
-  const db = loadDatabase();
-  const index = db.menuItems.findIndex((it) => it.id === id);
-  if (index === -1) throw new Error(`Menu item not found: ${id}`);
-
-  const existing = db.menuItems[index];
-  const updated: DynamicMenuItem = {
-    ...existing,
-    ...updates,
-    updatedAt: new Date().toISOString(),
+export async function updateMenuItem(
+  id: string,
+  updates: Partial<DynamicMenuItem>,
+  adminUser = "admin"
+): Promise<DynamicMenuItem> {
+  const now = new Date().toISOString();
+  const dbUpdates: Database["public"]["Tables"]["menu_items"]["Update"] = {
+    updated_at: now,
   };
 
-  db.menuItems[index] = updated;
-  saveDatabase(db);
+  if (updates.name !== undefined) dbUpdates.name = updates.name;
+  if (updates.description !== undefined) dbUpdates.description = updates.description;
+  if (updates.price !== undefined) dbUpdates.price = updates.price;
+  if (updates.originalPrice !== undefined) dbUpdates.original_price = updates.originalPrice;
+  if (updates.categoryId !== undefined) dbUpdates.category_id = updates.categoryId;
+  if (updates.categoryName !== undefined) dbUpdates.category_name = updates.categoryName;
+  if (updates.dietType !== undefined) dbUpdates.diet_type = updates.dietType;
+  if (updates.badge !== undefined) dbUpdates.badge = updates.badge;
+  if (updates.rating !== undefined) dbUpdates.rating = updates.rating;
+  if (updates.reviewsCount !== undefined) dbUpdates.reviews_count = updates.reviewsCount;
+  if (updates.image !== undefined) dbUpdates.image = updates.image;
+  if (updates.storagePath !== undefined) dbUpdates.cloudinary_public_id = updates.storagePath;
+  else if (updates.cloudinaryPublicId !== undefined) dbUpdates.cloudinary_public_id = updates.cloudinaryPublicId;
+  if (updates.available !== undefined) dbUpdates.available = updates.available;
 
-  recordAuditLog(adminUser, "UPDATE_MENU_ITEM", "MENU_ITEM", id, `Updated product: ${updated.name}`);
-  orderEvents.emit("menu_updated", db.menuItems);
+  const { data, error } = await supabaseAdmin
+    .from("menu_items")
+    .update(dbUpdates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to update menu item: ${error.message}`);
+
+  const updated = mapDbMenuItemToMenuItem(data);
+  await recordAuditLog(adminUser, "UPDATE_MENU_ITEM", "MENU_ITEM", id, `Updated product: ${updated.name}`);
   return updated;
 }
 
-export function deleteMenuItem(id: string, adminUser = "admin"): boolean {
-  const db = loadDatabase();
-  const index = db.menuItems.findIndex((it) => it.id === id);
-  if (index === -1) return false;
+export async function deleteMenuItem(id: string, adminUser = "admin"): Promise<boolean> {
+  const existing = await getMenuItemById(id);
+  if (!existing) return false;
 
-  const item = db.menuItems[index];
-  db.menuItems.splice(index, 1);
-  saveDatabase(db);
+  const { error } = await supabaseAdmin.from("menu_items").delete().eq("id", id);
+  if (error) throw new Error(`Failed to delete menu item: ${error.message}`);
 
-  recordAuditLog(adminUser, "DELETE_MENU_ITEM", "MENU_ITEM", id, `Deleted product: ${item.name}`);
-  orderEvents.emit("menu_updated", db.menuItems);
+  await recordAuditLog(adminUser, "DELETE_MENU_ITEM", "MENU_ITEM", id, `Deleted product: ${existing.name}`);
   return true;
 }
 
-export function toggleMenuItemAvailability(id: string, adminUser = "admin"): DynamicMenuItem {
-  const db = loadDatabase();
-  const item = db.menuItems.find((it) => it.id === id);
-  if (!item) throw new Error("Menu item not found.");
+export async function toggleMenuItemAvailability(id: string, adminUser = "admin"): Promise<DynamicMenuItem> {
+  const existing = await getMenuItemById(id);
+  if (!existing) throw new Error("Menu item not found.");
 
-  item.available = !item.available;
-  item.updatedAt = new Date().toISOString();
-  saveDatabase(db);
-
-  recordAuditLog(adminUser, "TOGGLE_AVAILABILITY", "MENU_ITEM", id, `Marked ${item.name} as ${item.available ? "AVAILABLE" : "SOLD OUT"}`);
-  orderEvents.emit("menu_updated", db.menuItems);
-  return item;
+  const newStatus = !existing.available;
+  return updateMenuItem(id, { available: newStatus }, adminUser);
 }
 
 // ----------------------------------------------------
 // SETTLEMENT & REVENUE OPERATIONS
 // ----------------------------------------------------
 
-export function getSettlementSummary(dateStr?: string): {
+export async function getSettlementSummary(dateStr?: string): Promise<{
   date: string;
   totalOrders: number;
   totalSales: number;
@@ -885,11 +1139,11 @@ export function getSettlementSummary(dateStr?: string): {
   paidOrdersCount: number;
   unpaidOrdersCount: number;
   orders: Order[];
-} {
-  const db = loadDatabase();
+}> {
   const targetDate = dateStr || new Date().toISOString().split("T")[0];
 
-  const dayOrders = db.orders.filter((o) => o.createdAt.startsWith(targetDate));
+  const allOrders = await getAllOrders();
+  const dayOrders = allOrders.filter((o) => o.createdAt.startsWith(targetDate));
 
   const paidOrders = dayOrders.filter((o) => o.paymentStatus === "PAID");
   const unpaidOrders = dayOrders.filter((o) => o.paymentStatus !== "PAID" && o.status !== "CANCELLED");
@@ -918,20 +1172,40 @@ export function getSettlementSummary(dateStr?: string): {
   };
 }
 
-export function recordSettlement(params: {
+export async function recordSettlement(params: {
   date: string;
   cashCounted: number;
   cashSettled: number;
   notes?: string;
   settledBy: string;
-}): Settlement {
-  const db = loadDatabase();
-  const summary = getSettlementSummary(params.date);
+}): Promise<Settlement> {
+  const summary = await getSettlementSummary(params.date);
   const difference = params.cashCounted - summary.cashSales;
   const now = new Date().toISOString();
+  const id = `stl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-  const newSettlement: Settlement = {
-    id: `stl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+  const row: Database["public"]["Tables"]["settlements"]["Insert"] = {
+    id,
+    date: params.date,
+    total_orders: summary.totalOrders,
+    total_sales: summary.totalSales,
+    cash_sales: summary.cashSales,
+    online_sales: summary.onlineSales,
+    cash_counted: params.cashCounted,
+    cash_settled: params.cashSettled,
+    difference,
+    notes: params.notes || null,
+    settled_by: params.settledBy,
+    settled_at: now,
+  };
+
+  const { error } = await supabaseAdmin.from("settlements").insert(row);
+  if (error) {
+    throw new Error(`Failed to record settlement in Supabase: ${error.message}`);
+  }
+
+  const settlement: Settlement = {
+    id,
     date: params.date,
     totalOrders: summary.totalOrders,
     totalSales: summary.totalSales,
@@ -945,26 +1219,49 @@ export function recordSettlement(params: {
     notes: params.notes,
   };
 
-  db.settlements.push(newSettlement);
-  saveDatabase(db);
+  await recordAuditLog(
+    params.settledBy,
+    "RECORD_SETTLEMENT",
+    "SETTLEMENT",
+    id,
+    `Recorded settlement for ${params.date}. Cash Counted: ₹${params.cashCounted}, Diff: ₹${difference}`
+  );
 
-  recordAuditLog(params.settledBy, "RECORD_SETTLEMENT", "SETTLEMENT", newSettlement.id, `Recorded settlement for ${params.date}. Cash Counted: ₹${params.cashCounted}, Diff: ₹${difference}`);
-
-  return newSettlement;
+  return settlement;
 }
 
-export function getAllSettlements(): Settlement[] {
-  const db = loadDatabase();
-  return [...db.settlements].sort(
-    (a, b) => new Date(b.settledAt).getTime() - new Date(a.settledAt).getTime()
-  );
+export async function getAllSettlements(): Promise<Settlement[]> {
+  const { data, error } = await supabaseAdmin
+    .from("settlements")
+    .select("*")
+    .order("settled_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching settlements from Supabase:", error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    date: row.date,
+    totalOrders: Number(row.total_orders || 0),
+    totalSales: Number(row.total_sales || 0),
+    cashSales: Number(row.cash_sales || 0),
+    onlineSales: Number(row.online_sales || 0),
+    cashCounted: Number(row.cash_counted || 0),
+    cashSettled: Number(row.cash_settled || 0),
+    difference: Number(row.difference || 0),
+    notes: row.notes || undefined,
+    settledBy: row.settled_by,
+    settledAt: row.settled_at,
+  }));
 }
 
 // ----------------------------------------------------
 // AUDIT LOGS
 // ----------------------------------------------------
 
-export function recordAuditLog(
+export async function recordAuditLog(
   adminUser: string,
   action: string,
   entityType: "ORDER" | "PAYMENT" | "INVOICE" | "MENU_ITEM" | "SETTLEMENT" | "CONFIG",
@@ -972,10 +1269,30 @@ export function recordAuditLog(
   details: string,
   previousValue?: any,
   newValue?: any
-): AuditLog {
-  const db = loadDatabase();
-  const newLog: AuditLog = {
-    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+): Promise<AuditLog> {
+  const now = new Date().toISOString();
+  const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const row: Database["public"]["Tables"]["audit_logs"]["Insert"] = {
+    id,
+    admin_user: adminUser,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    details,
+    previous_value: previousValue ?? null,
+    new_value: newValue ?? null,
+    timestamp: now,
+  };
+
+  try {
+    await supabaseAdmin.from("audit_logs").insert(row);
+  } catch (e) {
+    console.error("Audit log background insert error:", e);
+  }
+
+  return {
+    id,
     adminUser,
     action,
     entityType,
@@ -983,38 +1300,45 @@ export function recordAuditLog(
     details,
     previousValue,
     newValue,
-    timestamp: new Date().toISOString(),
+    timestamp: now,
   };
-
-  if (!Array.isArray(db.auditLogs)) {
-    db.auditLogs = [];
-  }
-
-  db.auditLogs.unshift(newLog);
-  if (db.auditLogs.length > 500) {
-    db.auditLogs = db.auditLogs.slice(0, 500);
-  }
-
-  saveDatabase(db);
-  return newLog;
 }
 
-export function getAuditLogs(limit = 100): AuditLog[] {
-  const db = loadDatabase();
-  return db.auditLogs.slice(0, limit);
+export async function getAuditLogs(limit = 100): Promise<AuditLog[]> {
+  const { data, error } = await supabaseAdmin
+    .from("audit_logs")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("Error fetching audit logs from Supabase:", error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    adminUser: row.admin_user,
+    action: row.action,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    details: row.details,
+    previousValue: row.previous_value,
+    newValue: row.new_value,
+    timestamp: row.timestamp,
+  }));
 }
 
 // ----------------------------------------------------
 // AUTHENTICATION & ROLE VERIFICATION
 // ----------------------------------------------------
 
-export function verifyAdminCredentials(params: {
+export async function verifyAdminCredentials(params: {
   username?: string;
   password?: string;
   pin?: string;
-}): { success: boolean; role?: AdminRole; user?: string } {
-  const db = loadDatabase();
-  const config = { ...DEFAULT_CONFIG, ...(db.config || {}) };
+}): Promise<{ success: boolean; role?: AdminRole; user?: string }> {
+  const config = await getConfig();
 
   // 1. PIN-based login
   if (params.pin) {

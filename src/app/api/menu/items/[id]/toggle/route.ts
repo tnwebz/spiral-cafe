@@ -10,7 +10,7 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const { adminUser = "admin" } = body;
 
-    const updated = toggleMenuItemAvailability(id, adminUser);
+    const updated = await toggleMenuItemAvailability(id, adminUser);
     return NextResponse.json({
       success: true,
       available: updated.available,

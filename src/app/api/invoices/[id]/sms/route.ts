@@ -9,9 +9,9 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const { adminUser = "admin" } = body;
+    const { adminUser = "admin", phoneNumber } = body;
 
-    const invoice = getInvoiceById(id);
+    const invoice = await getInvoiceById(id);
     if (!invoice) {
       return NextResponse.json(
         { success: false, error: "Invoice not found." },
@@ -19,7 +19,7 @@ export async function POST(
       );
     }
 
-    const phone = invoice.customerPhone;
+    const phone = (phoneNumber || invoice.customerPhone || "").trim();
     if (!phone) {
       return NextResponse.json(
         { success: false, error: "No customer phone number attached to this invoice." },
@@ -41,7 +41,7 @@ export async function POST(
     });
 
     if (smsResult.success) {
-      markInvoiceSmsSent(invoice.id, adminUser);
+      await markInvoiceSmsSent(invoice.id, adminUser, phone);
     }
 
     return NextResponse.json({

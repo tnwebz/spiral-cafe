@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderById } from "@/lib/db";
-import { createRazorpayOrder, RAZORPAY_CONFIG } from "@/lib/razorpay";
+import { getPaymentProvider } from "@/lib/payments";
 
+/**
+ * POST /api/payments/razorpay/create
+ *
+ * Backward-compatible endpoint for Razorpay order creation.
+ * Internally delegates to the generic payment provider abstraction.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { orderId } = body;
 
     if (!orderId) {
@@ -14,7 +20,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const order = getOrderById(orderId);
+    const order = await getOrderById(orderId);
     if (!order) {
       return NextResponse.json(
         { success: false, error: "Order not found." },
@@ -29,26 +35,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Amount in Rupees -> paise (e.g. ₹680 -> 68000 paise)
-    const amountInPaise = Math.round(order.grandTotal * 100);
-
-    const rzpOrder = await createRazorpayOrder({
-      amountInPaise,
+    const provider = getPaymentProvider("razorpay");
+    const result = await provider.createPayment({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      amount: order.grandTotal,
       currency: "INR",
-      receipt: order.orderNumber,
+      customerPhone: order.customerPhone || undefined,
+      tableNumber: order.tableNumber,
       notes: {
         orderId: order.id,
         tableNumber: order.tableNumber,
-        customerPhone: order.customerPhone || "N/A",
       },
     });
 
     return NextResponse.json({
       success: true,
-      razorpayOrderId: rzpOrder.id,
-      amount: rzpOrder.amount,
-      currency: rzpOrder.currency,
-      key: RAZORPAY_CONFIG.keyId,
+      razorpayOrderId: result.providerOrderId,
+      amount: result.amount,
+      currency: result.currency,
+      key: result.clientPayload.keyId,
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,
       grandTotal: order.grandTotal,

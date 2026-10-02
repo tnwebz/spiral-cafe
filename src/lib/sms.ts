@@ -17,9 +17,15 @@ export interface SmsSendResult {
 }
 
 export class SmsService {
-  private static provider = process.env.SMS_PROVIDER || "mock";
-  private static apiKey = process.env.SMS_API_KEY || "";
-  private static senderId = process.env.SMS_SENDER_ID || "SPIRAL";
+  private static get provider(): string {
+    return process.env.SMS_PROVIDER || "mock";
+  }
+  private static get apiKey(): string {
+    return process.env.SMS_API_KEY || "";
+  }
+  private static get senderId(): string {
+    return process.env.SMS_SENDER_ID || "SPIRAL";
+  }
 
   /**
    * Send Invoice SMS Link

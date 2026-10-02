@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import AdminLayout from "@/components/Admin/AdminLayout";
-import { uploadImageToCloudinary } from "@/lib/cloudinary";
+import { uploadImageToStorage } from "@/lib/storage";
 import {
   ArrowLeft,
   Upload,
@@ -49,10 +49,10 @@ export default function EditMenuItemPage({
   const [reviewsCount, setReviewsCount] = useState("120");
   const [available, setAvailable] = useState(true);
 
-  // Cloudinary state
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadedUrl, setUploadedUrl] = useState<string>("");
-  const [cloudinaryPublicId, setCloudinaryPublicId] = useState<string>("");
+  const [storagePath, setStoragePath] = useState<string>("");
+  const [fileSizeInfo, setFileSizeInfo] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -78,7 +78,7 @@ export default function EditMenuItemPage({
           setAvailable(it.available ?? true);
           setImagePreview(it.image);
           setUploadedUrl(it.image);
-          setCloudinaryPublicId(it.cloudinaryPublicId || "");
+          setStoragePath(it.storagePath || it.cloudinaryPublicId || "");
         } else {
           setFormError("Menu item not found.");
         }
@@ -99,16 +99,19 @@ export default function EditMenuItemPage({
     setUploadProgress(20);
 
     try {
-      const uploadRes = await uploadImageToCloudinary(file, (pct) => {
+      const uploadRes = await uploadImageToStorage(file, (pct) => {
         setUploadProgress(pct);
       });
 
       if (uploadRes.success && uploadRes.url) {
         setUploadedUrl(uploadRes.url);
-        setCloudinaryPublicId(uploadRes.publicId || "");
+        setStoragePath(uploadRes.publicId || "");
+        if (uploadRes.compressedSize) {
+          setFileSizeInfo(`${Math.round(uploadRes.compressedSize / 1024)} KB WebP`);
+        }
         setUploadProgress(100);
       } else {
-        setUploadError(uploadRes.error || "Failed to upload to Cloudinary.");
+        setUploadError(uploadRes.error || "Failed to upload to Supabase Storage.");
       }
     } catch (err: any) {
       setUploadError(err.message || "Upload error.");
@@ -153,7 +156,7 @@ export default function EditMenuItemPage({
           rating: parseFloat(rating) || 4.8,
           reviewsCount: parseInt(reviewsCount, 10) || 100,
           image: uploadedUrl || imagePreview,
-          cloudinaryPublicId: cloudinaryPublicId || undefined,
+          storagePath: storagePath || undefined,
           available,
           adminUser: "Admin",
         }),
@@ -355,7 +358,7 @@ export default function EditMenuItemPage({
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-3xl border border-[#CA340A]/15 shadow-xs space-y-4">
                 <label className="block text-xs font-bold text-[#2C1710] uppercase tracking-wider">
-                  Product Image (Cloudinary)
+                  Product Image (Supabase Storage)
                 </label>
 
                 {imagePreview ? (
@@ -365,6 +368,11 @@ export default function EditMenuItemPage({
                       alt="Preview"
                       className="w-full h-full object-cover"
                     />
+                    {fileSizeInfo && (
+                      <div className="absolute top-2 left-2 px-2 py-0.5 bg-emerald-600/90 text-white rounded-md text-[10px] font-bold flex items-center gap-1 shadow-xs">
+                        <CheckCircle2 size={10} /> {fileSizeInfo}
+                      </div>
+                    )}
                     <label className="absolute bottom-2 right-2 px-3 py-1 bg-black/70 hover:bg-black text-white rounded-lg text-xs font-bold cursor-pointer transition-colors">
                       <span>Change Image</span>
                       <input
@@ -378,7 +386,10 @@ export default function EditMenuItemPage({
                 ) : (
                   <label className="flex flex-col items-center justify-center h-44 border-2 border-dashed border-[#CA340A]/30 rounded-2xl bg-[#FFF9F5] cursor-pointer p-4">
                     <Upload size={24} className="text-[#CA340A] mb-2" />
-                    <span className="text-xs font-bold">Upload to Cloudinary</span>
+                    <span className="text-xs font-bold">Upload to Supabase Storage</span>
+                    <span className="text-[11px] text-[#52525b] text-center mt-1">
+                      Auto-compressed to 250-300KB WebP
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
@@ -391,7 +402,7 @@ export default function EditMenuItemPage({
                 {isUploading && (
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] font-bold text-[#CA340A]">
-                      <span>Uploading to Cloudinary CDN...</span>
+                      <span>Uploading to Supabase Storage...</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-zinc-100 overflow-hidden">

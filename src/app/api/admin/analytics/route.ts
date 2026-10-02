@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
 
-    const orders = getAllOrders();
+    const orders = await getAllOrders();
     const now = new Date();
 
     let startDate: Date;
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
         itemMap[it.name].total += (it.lineTotal || 0);
 
         const catName =
-          itemToCategory[it.productId] ||
+          (it.productId && itemToCategory[it.productId]) ||
           itemToCategory[it.name?.toLowerCase().trim()] ||
           "Specialty Menu";
 

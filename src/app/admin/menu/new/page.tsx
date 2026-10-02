@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import AdminLayout from "@/components/Admin/AdminLayout";
-import { uploadImageToCloudinary } from "@/lib/cloudinary";
+import { uploadImageToStorage } from "@/lib/storage";
 import {
   ArrowLeft,
   Upload,
@@ -44,11 +44,12 @@ export default function AddMenuItemPage() {
   const [reviewsCount, setReviewsCount] = useState("120");
   const [available, setAvailable] = useState(true);
 
-  // Cloudinary image state
+  // Supabase Storage image state
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadedUrl, setUploadedUrl] = useState<string>("");
-  const [cloudinaryPublicId, setCloudinaryPublicId] = useState<string>("");
+  const [storagePath, setStoragePath] = useState<string>("");
+  const [fileSizeInfo, setFileSizeInfo] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -65,21 +66,24 @@ export default function AddMenuItemPage() {
     setImagePreview(localPreview);
     setUploadError("");
 
-    // Automatically trigger upload to Cloudinary
+    // Automatically trigger upload to Supabase Storage
     setIsUploading(true);
     setUploadProgress(20);
 
     try {
-      const uploadRes = await uploadImageToCloudinary(file, (pct) => {
+      const uploadRes = await uploadImageToStorage(file, (pct) => {
         setUploadProgress(pct);
       });
 
       if (uploadRes.success && uploadRes.url) {
         setUploadedUrl(uploadRes.url);
-        setCloudinaryPublicId(uploadRes.publicId || "");
+        setStoragePath(uploadRes.publicId || "");
+        if (uploadRes.compressedSize) {
+          setFileSizeInfo(`${Math.round(uploadRes.compressedSize / 1024)} KB WebP`);
+        }
         setUploadProgress(100);
       } else {
-        setUploadError(uploadRes.error || "Failed to upload to Cloudinary.");
+        setUploadError(uploadRes.error || "Failed to upload to Supabase Storage.");
       }
     } catch (err: any) {
       setUploadError(err.message || "Upload error.");
@@ -129,7 +133,7 @@ export default function AddMenuItemPage() {
           rating: parseFloat(rating) || 4.8,
           reviewsCount: parseInt(reviewsCount, 10) || 100,
           image: finalImage,
-          cloudinaryPublicId: cloudinaryPublicId || undefined,
+          storagePath: storagePath || undefined,
           available,
           adminUser: "Admin",
         }),
@@ -164,7 +168,7 @@ export default function AddMenuItemPage() {
               Add New Menu Item
             </h1>
             <p className="text-xs text-[#52525b]">
-              Create a new product with Cloudinary photography and category classification
+              Create a new product with Supabase Storage photography and category classification
             </p>
           </div>
         </div>
@@ -325,10 +329,10 @@ export default function AddMenuItemPage() {
 
             {/* Right Column: Image Upload & Live Availability */}
             <div className="space-y-6">
-              {/* Cloudinary Image Picker */}
+              {/* Supabase Storage Image Picker */}
               <div className="bg-white p-6 rounded-3xl border border-[#CA340A]/15 shadow-xs space-y-4">
                 <label className="block text-xs font-bold text-[#2C1710] uppercase tracking-wider">
-                  Product Photography (Cloudinary)
+                  Product Photography (Supabase Storage)
                 </label>
 
                 {imagePreview ? (
@@ -344,7 +348,8 @@ export default function AddMenuItemPage() {
                         setImagePreview(null);
                         setImageFile(null);
                         setUploadedUrl("");
-                        setCloudinaryPublicId("");
+                        setStoragePath("");
+                        setFileSizeInfo("");
                       }}
                       className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black text-white rounded-full transition-colors cursor-pointer"
                     >
@@ -352,7 +357,7 @@ export default function AddMenuItemPage() {
                     </button>
                     {uploadedUrl && (
                       <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-emerald-600/90 text-white rounded-md text-[10px] font-bold flex items-center gap-1">
-                        <CheckCircle2 size={10} /> Cloudinary Synced
+                        <CheckCircle2 size={10} /> {fileSizeInfo ? `${fileSizeInfo} • ` : ""}Supabase Synced
                       </div>
                     )}
                   </div>
@@ -363,7 +368,7 @@ export default function AddMenuItemPage() {
                       Click to Upload Image
                     </span>
                     <span className="text-[11px] text-[#52525b] text-center mt-1">
-                      Direct secure upload to Cloudinary CDN
+                      Any photo size supported • Auto-compressed to 250-300KB WebP
                     </span>
                     <input
                       type="file"
@@ -377,7 +382,7 @@ export default function AddMenuItemPage() {
                 {isUploading && (
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] font-bold text-[#CA340A]">
-                      <span>Uploading to Cloudinary...</span>
+                      <span>Uploading to Supabase Storage...</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-zinc-100 overflow-hidden">

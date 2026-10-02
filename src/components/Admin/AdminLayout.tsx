@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -57,28 +58,30 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       });
   }, [pathname, router]);
 
-  // Connect to SSE for real-time order alerts & live status
+  // Connect to Supabase Realtime for live order alerts & connection status
   useEffect(() => {
     if (pathname === "/admin/login") return;
 
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource("/api/admin/stream");
-      eventSource.onopen = () => setIsConnected(true);
-      eventSource.onerror = () => setIsConnected(false);
-
-      eventSource.addEventListener("order", (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === "order_created") {
-            setLiveOrdersCount((prev) => prev + 1);
-          }
-        } catch {}
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel("admin_layout_live_channel")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          setLiveOrdersCount((prev) => prev + 1);
+        }
+      )
+      .subscribe((status) => {
+        setIsConnected(status === "SUBSCRIBED");
       });
-    } catch {}
 
     return () => {
-      if (eventSource) eventSource.close();
+      supabase.removeChannel(channel);
     };
   }, [pathname]);
 

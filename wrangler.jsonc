@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "spiral-cafe",
+  "account_id": "a306a8676872a371974e008648f5bfa6",
+  "compatibility_date": "2026-09-28",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "main": "vinext/server/app-router-entry",
+
+  "assets": {
+    "not_found_handling": "none",
+  },
+
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://funsnqahpzsucbtxbvpo.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_ojyo-L4vtQdb_tw4jD1TeQ_g8k5Uxp4",
+
+    "PAYMENT_PROVIDER": "razorpay",
+    "RAZORPAY_KEY_ID": "rzp_test_TglDyNQunmzfuz",
+    "NEXT_PUBLIC_RAZORPAY_KEY_ID": "rzp_test_TglDyNQunmzfuz",
+
+    "SMS_PROVIDER": "mock",
+    "SMS_SENDER_ID": "SPIRAL"
+  }
+}

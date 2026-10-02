@@ -8,6 +8,8 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { launchClientCheckout } from "@/lib/payments/client";
 
 export interface CartItem {
   id: string;
@@ -88,6 +90,7 @@ interface CartContextType {
   clearCart: () => void;
   placeOrder: (notes?: string, overrideTable?: string) => Promise<{ success: boolean; order?: PlacedOrder; error?: string }>;
   selectCashPayment: (orderId: string) => Promise<boolean>;
+  switchPaymentMethod: (orderId: string, method: "CASH" | "ONLINE") => Promise<boolean>;
   processOnlinePayment: (orderId: string) => Promise<{ success: boolean; error?: string }>;
   fetchSessionOrders: () => Promise<void>;
   openCart: () => void;
@@ -107,7 +110,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [activeSheetTab, setActiveSheetTab] = useState<"cart" | "orders">("cart");
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
 
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const realtimeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize Session ID & Table from URL / localStorage
   useEffect(() => {
@@ -187,42 +190,46 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [customerSessionId]);
 
-  // Real-time synchronization via Server-Sent Events (SSE) with fallback polling
+  // Real-time synchronization via Supabase Realtime with fallback safety polling
   useEffect(() => {
     if (!customerSessionId) return;
 
     fetchSessionOrders();
 
-    // Connect to Server-Sent Events stream
-    const sseUrl = `/api/orders/stream?sessionId=${encodeURIComponent(customerSessionId)}`;
-    const eventSource = new EventSource(sseUrl);
-    eventSourceRef.current = eventSource;
+    const supabase = getSupabaseBrowserClient();
+    const channelName = `customer_orders_${customerSessionId}`;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.orders && Array.isArray(payload.orders)) {
-          setPlacedOrders(payload.orders);
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+          filter: `customer_session_id=eq.${customerSessionId}`,
+        },
+        () => {
+          // Debounce rapid event changes before authoritative fetch
+          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+          realtimeTimerRef.current = setTimeout(() => {
+            fetchSessionOrders();
+          }, 200);
         }
-      } catch (e) {
-        console.error("Error parsing order stream event:", e);
-      }
-    };
+      )
+      .subscribe((status, err) => {
+        if (err) console.warn("Supabase Realtime customer subscription notice:", err);
+      });
 
-    eventSource.onerror = () => {
-      // EventSource reconnects automatically
-    };
-
-    // 3.5s Smart short-polling backup guarantee
+    // 15s fallback poll for offline/reconnect edge cases
     const pollInterval = setInterval(() => {
       fetchSessionOrders();
-    }, 3500);
+    }, 15000);
 
     return () => {
       clearInterval(pollInterval);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
     };
   }, [customerSessionId, fetchSessionOrders]);
 
@@ -380,111 +387,73 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Process Online Payment via Razorpay SDK & Gateway
+  // Switch or reset payment method (e.g. switch back to ONLINE from CASH)
+  const switchPaymentMethod = useCallback(async (orderId: string, method: "CASH" | "ONLINE") => {
+    try {
+      const res = await fetch("/api/orders/payment-method", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, method }),
+      });
+      const data = await res.json();
+      if (data.success && data.order) {
+        setPlacedOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? data.order : o))
+        );
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Process Online Payment via provider-abstracted payment layer
   const processOnlinePayment = useCallback(async (orderId: string) => {
     try {
-      // 1. Create Razorpay order on server
-      const createRes = await fetch("/api/payments/razorpay/create", {
+      // 1. Create payment session on server using authoritative grandTotal
+      const createRes = await fetch("/api/payments/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderId }),
       });
-      const rzpData = await createRes.json();
-      if (!rzpData.success) {
-        return { success: false, error: rzpData.error || "Failed to initialize payment gateway." };
+      const paymentData = await createRes.json();
+      if (!paymentData.success) {
+        return { success: false, error: paymentData.error || "Failed to initialize payment gateway." };
       }
 
-      // 2. Dynamically load Razorpay checkout script if not present
-      if (typeof window !== "undefined" && !(window as any).Razorpay) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://checkout.razorpay.com/v1/checkout.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Failed to load Razorpay SDK"));
-          document.body.appendChild(script);
-        });
-      }
-
-      // 3. Launch Razorpay Checkout Modal
-      return await new Promise<{ success: boolean; error?: string }>((resolve) => {
-        const customerPhone = localStorage.getItem("spiral_customer_phone") || "";
-
-        const options = {
-          key: rzpData.key || "rzp_test_TglDyNQunmzfuz",
-          amount: rzpData.amount, // In paise
-          currency: rzpData.currency || "INR",
-          name: "Spiral Cafe",
-          description: `Dining Order #${rzpData.orderNumber} (${rzpData.tableNumber})`,
-          image: "/logo.png",
-          order_id: rzpData.razorpayOrderId,
-          prefill: {
-            contact: customerPhone,
-          },
-          theme: {
-            color: "#CA340A",
-          },
-          handler: async function (response: any) {
-            try {
-              // 4. Verify payment on server
-              const verifyRes = await fetch("/api/payments/razorpay/verify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  orderId,
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_signature: response.razorpay_signature,
-                }),
-              });
-              const verifyData = await verifyRes.json();
-              if (verifyData.success && verifyData.order) {
-                setPlacedOrders((prev) =>
-                  prev.map((o) => (o.id === orderId ? verifyData.order : o))
-                );
-                resolve({ success: true });
-              } else {
-                resolve({ success: false, error: verifyData.error || "Payment verification failed." });
-              }
-            } catch (err: any) {
-              resolve({ success: false, error: err.message || "Network error verifying payment." });
-            }
-          },
-          modal: {
-            ondismiss: function () {
-              resolve({ success: false, error: "Payment cancelled by guest." });
-            },
-          },
+      // 2. Launch provider checkout modal (Razorpay / Zoho / etc.)
+      const checkoutResult = await launchClientCheckout(paymentData.clientPayload);
+      if (!checkoutResult.success || !checkoutResult.verificationPayload) {
+        return {
+          success: false,
+          error: checkoutResult.error || "Payment was cancelled or declined.",
         };
+      }
 
-        const rzp = new (window as any).Razorpay(options);
-        rzp.on("payment.failed", function (response: any) {
-          resolve({
-            success: false,
-            error: response.error?.description || "Payment failed via gateway.",
-          });
-        });
-        rzp.open();
+      // 3. Cryptographically verify payment on server via provider-neutral verification route
+      const verifyRes = await fetch("/api/payments/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          ...checkoutResult.verificationPayload,
+        }),
       });
+
+      const verifyData = await verifyRes.json();
+      if (verifyData.success && verifyData.order) {
+        setPlacedOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? verifyData.order : o))
+        );
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        error: verifyData.error || "Payment verification failed.",
+      };
     } catch (err: any) {
-      // Fallback: Test simulation pass if popup blocked in test mode
-      try {
-        const verifyRes = await fetch("/api/payments/razorpay/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId,
-            isTestSimulation: true,
-            razorpay_payment_id: `rzp_test_pay_${Date.now()}`,
-          }),
-        });
-        const verifyData = await verifyRes.json();
-        if (verifyData.success && verifyData.order) {
-          setPlacedOrders((prev) =>
-            prev.map((o) => (o.id === orderId ? verifyData.order : o))
-          );
-          return { success: true };
-        }
-      } catch {}
       return { success: false, error: err.message || "Payment network error." };
     }
   }, []);
@@ -526,6 +495,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         placeOrder,
         selectCashPayment,
+        switchPaymentMethod,
         processOnlinePayment,
         fetchSessionOrders,
         openCart,

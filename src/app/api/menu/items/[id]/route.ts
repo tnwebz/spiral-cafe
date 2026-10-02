@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const item = getMenuItemById(id);
+    const item = await getMenuItemById(id);
 
     if (!item) {
       return NextResponse.json(
@@ -34,7 +34,7 @@ export async function PUT(
     const body = await req.json();
     const { adminUser = "admin", ...updates } = body;
 
-    const updated = updateMenuItem(id, updates, adminUser);
+    const updated = await updateMenuItem(id, updates, adminUser);
     return NextResponse.json({ success: true, item: updated });
   } catch (err: any) {
     console.error("Menu item update error:", err);
@@ -54,7 +54,7 @@ export async function DELETE(
     const { searchParams } = new URL(req.url);
     const adminUser = searchParams.get("adminUser") || "admin";
 
-    const deleted = deleteMenuItem(id, adminUser);
+    const deleted = await deleteMenuItem(id, adminUser);
     if (!deleted) {
       return NextResponse.json(
         { success: false, error: "Item not found or could not be deleted." },

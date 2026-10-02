@@ -3,10 +3,12 @@ import { getAllOrders, getAllInvoices, getAllCustomers, getConfig } from "@/lib/
 
 export async function GET() {
   try {
-    const orders = getAllOrders();
-    const invoices = getAllInvoices();
-    const customers = getAllCustomers();
-    const config = getConfig();
+    const [orders, invoices, customers, config] = await Promise.all([
+      getAllOrders(),
+      getAllInvoices(),
+      getAllCustomers(),
+      getConfig(),
+    ]);
 
     const todayStr = new Date().toISOString().split("T")[0];
     const todayOrders = orders.filter((o) => o.createdAt.startsWith(todayStr));

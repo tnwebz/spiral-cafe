@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const order = getOrderById(orderId);
+    const order = await getOrderById(orderId);
     if (!order) {
       return NextResponse.json(
         { success: false, error: "Order not found." },
@@ -20,11 +20,21 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (order.status !== "READY" && order.status !== "COMPLETED") {
+    if (order.status === "CANCELLED") {
       return NextResponse.json(
         {
           success: false,
-          error: "Payment method can only be selected once the order is READY.",
+          error: "Cannot set payment method for a cancelled order.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (order.paymentStatus === "PAID") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This order has already been paid for.",
         },
         { status: 400 }
       );
@@ -32,8 +42,14 @@ export async function PATCH(req: NextRequest) {
 
     if (method === "CASH") {
       // Cash payment selected: Mark as PENDING_CASH.
-      // Staff must mark CASH RECEIVED to complete the order.
-      const updated = updateOrderPayment(orderId, "CASH", "PENDING_CASH", false);
+      // Staff must mark CASH RECEIVED to complete the order payment.
+      const updated = await updateOrderPayment(orderId, "CASH", "PENDING_CASH", false);
+      return NextResponse.json({ success: true, order: updated });
+    }
+
+    if (method === "ONLINE" || method === "RESET" || method === "UNSELECTED") {
+      // Reset or switched to online payment
+      const updated = await updateOrderPayment(orderId, "ONLINE", "UNPAID", false);
       return NextResponse.json({ success: true, order: updated });
     }
 

@@ -3,7 +3,7 @@ import { saveCustomer, getAllCustomers, saveCustomerSession } from "@/lib/db";
 
 export async function GET() {
   try {
-    const customers = getAllCustomers();
+    const customers = await getAllCustomers();
     return NextResponse.json({ success: true, customers });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const customer = saveCustomer({
+    const customer = await saveCustomer({
       phoneNumber,
       name,
       serviceSmsConsent: serviceSmsConsent ?? true,
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (sessionId && tableNumber) {
-      saveCustomerSession({
+      await saveCustomerSession({
         sessionId,
         phoneNumber: customer.phoneNumber,
         tableNumber,

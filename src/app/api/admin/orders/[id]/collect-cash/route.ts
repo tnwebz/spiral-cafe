@@ -10,7 +10,7 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const { adminUser = "Admin Staff" } = body;
 
-    const order = getOrderById(id);
+    const order = await getOrderById(id);
     if (!order) {
       return NextResponse.json(
         { success: false, error: "Order not found." },
@@ -26,7 +26,7 @@ export async function POST(
     }
 
     // Mark as PAID via CASH, with autoComplete if ready
-    const updated = updateOrderPayment(
+    const updated = await updateOrderPayment(
       order.id,
       "CASH",
       "PAID",

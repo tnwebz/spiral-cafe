@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import CollectCashModal from "@/components/Admin/CollectCashModal";
 import ThermalReceiptModal from "@/components/Admin/ThermalReceipt";
 import { Order, Invoice } from "@/lib/db";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   TrendingUp,
   ShoppingBag,
@@ -24,6 +25,7 @@ import {
   AlertCircle,
   Sparkles,
   Phone,
+  MessageSquare,
 } from "lucide-react";
 
 export default function AdminOverviewPage() {
@@ -74,20 +76,49 @@ export default function AdminOverviewPage() {
     }
   }, []);
 
+  const realtimeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     fetchOverview();
 
-    // Listen to real-time events
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource("/api/admin/stream");
-      eventSource.addEventListener("order", () => fetchOverview());
-      eventSource.addEventListener("payment", () => fetchOverview());
-      eventSource.addEventListener("invoice", () => fetchOverview());
-    } catch {}
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel("admin_overview_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+          realtimeTimerRef.current = setTimeout(() => {
+            fetchOverview();
+          }, 200);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "invoices",
+        },
+        () => {
+          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+          realtimeTimerRef.current = setTimeout(() => {
+            fetchOverview();
+          }, 200);
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) console.warn("Supabase Realtime admin overview error:", err);
+      });
 
     return () => {
-      if (eventSource) eventSource.close();
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
     };
   }, [fetchOverview]);
 
@@ -117,7 +148,7 @@ export default function AdminOverviewPage() {
     try {
       const res = await fetch(`/api/invoices/${invoiceIdOrOrderId}`);
       const resData = await res.json();
-      if (resData.success) {
+      if (resData.success && resData.invoice && resData.invoice.id) {
         setSelectedInvoiceForPrint(resData.invoice);
       } else {
         alert(resData.error || "Invoice not found.");
@@ -721,14 +752,24 @@ export default function AdminOverviewPage() {
                                 </span>
                               </button>
                             ) : (
-                              <button
-                                onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                                className="px-2.5 py-1 rounded-lg bg-[#FFF9F5] border border-[#CA340A]/30 text-[#CA340A] hover:bg-[#CA340A] hover:text-white transition-colors text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
-                                title="View / Print 58mm Thermal Receipt"
-                              >
-                                <Printer size={12} />
-                                <span>View Bill</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleViewInvoice(order.invoiceId || order.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-[#FFF9F5] border border-[#CA340A]/30 text-[#CA340A] hover:bg-[#CA340A] hover:text-white transition-colors text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
+                                  title="View / Print 58mm Thermal Receipt"
+                                >
+                                  <Printer size={12} />
+                                  <span>View Bill</span>
+                                </button>
+                                <button
+                                  onClick={() => handleViewInvoice(order.invoiceId || order.id)}
+                                  className="px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-colors text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
+                                  title="Send Bill via SMS to Customer"
+                                >
+                                  <MessageSquare size={11} />
+                                  <span>SMS</span>
+                                </button>
+                              </>
                             )}
 
                             {/* View Order Detail */}
@@ -765,6 +806,7 @@ export default function AdminOverviewPage() {
       <ThermalReceiptModal
         invoice={selectedInvoiceForPrint}
         onClose={() => setSelectedInvoiceForPrint(null)}
+        onSmsSent={fetchOverview}
       />
     </AdminLayout>
   );

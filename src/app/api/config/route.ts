@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/db";
 
 export async function GET() {
-  const config = getConfig();
+  const config = await getConfig();
   // Do not expose secret kitchenPin in public config endpoint
   const publicConfig = {
     taxPercentage: config.taxPercentage,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useCallback } from "react";
+import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import Image from "next/image";
 import { Search, Sparkles, ShoppingBag } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -11,6 +11,7 @@ import { menuData } from "@/data/menu";
 import { useCart } from "@/context/CartContext";
 import Link from "next/link";
 import { DynamicMenuItem } from "@/lib/db";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function MenuContent() {
   const searchParams = useSearchParams();
@@ -49,8 +50,36 @@ function MenuContent() {
     }
   }, []);
 
+  const menuTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     fetchDynamicMenu();
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel("customer_menu_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "menu_items",
+        },
+        () => {
+          if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
+          menuTimerRef.current = setTimeout(() => {
+            fetchDynamicMenu();
+          }, 200);
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) console.warn("Supabase Realtime menu notice:", err);
+      });
+
+    return () => {
+      if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [fetchDynamicMenu]);
 
   // Construct category structure combining static hero info with dynamic live items
@@ -295,7 +324,12 @@ function MenuContent() {
               {/* Product Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
                 {filteredItems.map((item, idx) => (
-                  <MenuItemCard key={item.id} index={idx} {...item} />
+                  <MenuItemCard
+                    key={item.id}
+                    index={idx}
+                    {...item}
+                    originalPrice={item.originalPrice ?? undefined}
+                  />
                 ))}
               </div>
             </section>

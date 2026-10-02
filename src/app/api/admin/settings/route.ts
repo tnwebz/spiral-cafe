@@ -3,7 +3,7 @@ import { getConfig, updateConfig } from "@/lib/db";
 
 export async function GET() {
   try {
-    const config = getConfig();
+    const config = await getConfig();
     // Return sanitized config (exclude hashed passwords)
     const sanitized = {
       taxPercentage: config.taxPercentage,
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const updated = updateConfig(updates, adminUser);
+    const updated = await updateConfig(updates, adminUser);
     return NextResponse.json({ success: true, config: updated });
   } catch (err: any) {
     console.error("Settings update error:", err);

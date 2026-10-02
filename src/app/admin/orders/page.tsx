@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import CollectCashModal from "@/components/Admin/CollectCashModal";
 import ThermalReceiptModal from "@/components/Admin/ThermalReceipt";
 import { Order, Invoice } from "@/lib/db";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   ShoppingBag,
   Search,
@@ -17,6 +18,7 @@ import {
   Printer,
   Calendar,
   Phone,
+  MessageSquare,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -55,18 +57,49 @@ export default function AdminOrdersPage() {
     }
   }, []);
 
+  const realtimeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     fetchOrders();
 
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource("/api/admin/stream");
-      eventSource.addEventListener("order", () => fetchOrders());
-      eventSource.addEventListener("payment", () => fetchOrders());
-    } catch {}
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel("admin_orders_list_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+          realtimeTimerRef.current = setTimeout(() => {
+            fetchOrders();
+          }, 200);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "invoices",
+        },
+        () => {
+          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+          realtimeTimerRef.current = setTimeout(() => {
+            fetchOrders();
+          }, 200);
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) console.warn("Supabase Realtime admin orders error:", err);
+      });
 
     return () => {
-      if (eventSource) eventSource.close();
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
     };
   }, [fetchOrders]);
 
@@ -96,7 +129,7 @@ export default function AdminOrdersPage() {
     try {
       const res = await fetch(`/api/invoices/${invoiceIdOrOrderId}`);
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.invoice && data.invoice.id) {
         setSelectedInvoiceForPrint(data.invoice);
       } else {
         alert(data.error || "Invoice not found.");
@@ -112,7 +145,7 @@ export default function AdminOrdersPage() {
       o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (o.customerPhone && o.customerPhone.includes(searchQuery)) ||
       o.tableNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.items.some((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      (o.items || []).some((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesStatus = statusFilter === "ALL" || o.status === statusFilter;
     const matchesPayment = paymentFilter === "ALL" || o.paymentStatus === paymentFilter;
@@ -366,14 +399,24 @@ export default function AdminOrdersPage() {
                                 Invoice
                               </button>
                             ) : (
-                              <button
-                                onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                                className="px-2 py-1 bg-[#FFF9F5] border border-[#CA340A]/30 text-[#CA340A] hover:bg-[#CA340A] hover:text-white rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                title="View 58mm Thermal Bill"
-                              >
-                                <Printer size={11} />
-                                <span>View Bill</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleViewInvoice(order.invoiceId || order.id)}
+                                  className="px-2 py-1 bg-[#FFF9F5] border border-[#CA340A]/30 text-[#CA340A] hover:bg-[#CA340A] hover:text-white rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                  title="View 58mm Thermal Bill"
+                                >
+                                  <Printer size={11} />
+                                  <span>View Bill</span>
+                                </button>
+                                <button
+                                  onClick={() => handleViewInvoice(order.invoiceId || order.id)}
+                                  className="px-1.5 py-1 bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-md text-[10px] font-bold flex items-center gap-0.5 cursor-pointer transition-colors shadow-2xs"
+                                  title="Send Bill via SMS to Customer"
+                                >
+                                  <MessageSquare size={10} />
+                                  <span>SMS</span>
+                                </button>
+                              </>
                             )}
 
                             <Link
@@ -430,6 +473,7 @@ export default function AdminOrdersPage() {
       <ThermalReceiptModal
         invoice={selectedInvoiceForPrint}
         onClose={() => setSelectedInvoiceForPrint(null)}
+        onSmsSent={fetchOrders}
       />
     </AdminLayout>
   );

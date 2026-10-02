@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const order = createOrder({
+    const order = await createOrder({
       tableNumber: tableNumber || "Table 01",
       customerSessionId,
       customerId,
@@ -55,12 +55,12 @@ export async function GET(req: NextRequest) {
     const sessionId = searchParams.get("sessionId");
 
     if (sessionId) {
-      const orders = getSessionOrders(sessionId);
+      const orders = await getSessionOrders(sessionId);
       return NextResponse.json({ success: true, orders });
     }
 
     // If no session filter provided, return all orders (e.g. for general queries)
-    const all = getAllOrders();
+    const all = await getAllOrders();
     return NextResponse.json({ success: true, orders: all });
   } catch (err: any) {
     return NextResponse.json(

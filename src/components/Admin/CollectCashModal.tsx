@@ -102,7 +102,7 @@ export default function CollectCashModal({
           {/* Items Preview */}
           <div className="text-xs text-[#52525b] space-y-1 max-h-32 overflow-y-auto px-1">
             <p className="font-bold text-[#2C1710]">Ordered Items ({order.items.length}):</p>
-            {order.items.map((it) => (
+            {order.items.map((it: any) => (
               <div key={it.id} className="flex justify-between items-center py-0.5 border-b border-zinc-100">
                 <span className="truncate pr-2">
                   {it.name} × {it.quantity}

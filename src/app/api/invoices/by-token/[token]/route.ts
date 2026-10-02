@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { token } = await params;
-    const invoice = getInvoiceBySecureToken(token);
+    const invoice = await getInvoiceBySecureToken(token);
 
     if (!invoice) {
       return NextResponse.json(
@@ -16,7 +16,7 @@ export async function GET(
       );
     }
 
-    const config = getConfig();
+    const config = await getConfig();
 
     return NextResponse.json({
       success: true,

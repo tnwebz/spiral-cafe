@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       rating = 4.8,
       reviewsCount = 100,
       image,
+      storagePath,
       cloudinaryPublicId,
       available = true,
       adminUser = "admin",
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const newItem = createMenuItem(
+    const newItem = await createMenuItem(
       {
         name: name.trim(),
         description: description.trim(),
@@ -53,7 +54,8 @@ export async function POST(req: NextRequest) {
         rating: Number(rating) || 4.8,
         reviewsCount: Number(reviewsCount) || 100,
         image: image || "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80",
-        cloudinaryPublicId,
+        storagePath: storagePath || cloudinaryPublicId,
+        cloudinaryPublicId: storagePath || cloudinaryPublicId,
         available: Boolean(available),
       },
       adminUser

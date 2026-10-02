@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import { DynamicMenuItem } from "@/lib/db";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   UtensilsCrossed,
   Plus,
@@ -44,8 +45,36 @@ export default function AdminMenuPage() {
     }
   }, []);
 
+  const realtimeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     fetchMenu();
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel("admin_menu_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "menu_items",
+        },
+        () => {
+          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+          realtimeTimerRef.current = setTimeout(() => {
+            fetchMenu();
+          }, 200);
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) console.warn("Supabase Realtime admin menu notice:", err);
+      });
+
+    return () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [fetchMenu]);
 
   const handleToggleAvailability = async (item: DynamicMenuItem) => {
@@ -118,7 +147,7 @@ export default function AdminMenuPage() {
               Menu Management
             </h1>
             <p className="text-xs sm:text-sm text-[#52525b]">
-              Manage products, live pricing, stock availability, and Cloudinary food photography
+              Manage products, live pricing, stock availability, and food photography
             </p>
           </div>
 

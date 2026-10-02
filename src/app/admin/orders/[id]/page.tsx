@@ -42,19 +42,19 @@ export default function OrderDetailPage({
     try {
       const res = await fetch(`/api/orders/${id}`);
       const data = await res.json();
-      if (data.success && data.order) {
+      if (data.success && data.order && data.order.id) {
         setOrder(data.order);
 
         // Fetch invoice if attached
         if (data.order.invoiceId) {
           const invRes = await fetch(`/api/invoices/${data.order.invoiceId}`);
           const invData = await invRes.json();
-          if (invData.success) {
+          if (invData.success && invData.invoice && invData.invoice.id) {
             setInvoice(invData.invoice);
           }
         }
       } else {
-        setError("Order not found.");
+        setError(data.error || "Order not found.");
       }
     } catch {
       setError("Failed to load order.");
@@ -198,11 +198,11 @@ export default function OrderDetailPage({
             <div className="bg-white rounded-2xl border border-[#CA340A]/15 shadow-xs p-5">
               <h3 className="font-heading font-extrabold text-base text-[#2C1710] mb-4 flex items-center gap-2">
                 <Utensils size={16} className="text-[#CA340A]" />
-                <span>Ordered Items Snapshot ({order.items.length})</span>
+                <span>Ordered Items Snapshot ({(order.items || []).length})</span>
               </h3>
 
               <div className="divide-y divide-zinc-100">
-                {order.items.map((it) => (
+                {(order.items || []).map((it) => (
                   <div key={it.id} className="py-3 flex items-center justify-between">
                     <div>
                       <h4 className="font-bold text-sm text-[#2C1710]">{it.name}</h4>

@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const orderId = searchParams.get("orderId");
 
-    const all = getAllInvoices();
+    const all = await getAllInvoices();
     if (orderId) {
       const filtered = all.filter(
         (inv) => inv.orderId === orderId || inv.orderNumber.toUpperCase() === orderId.toUpperCase()
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const order = getOrderById(orderId);
+    const order = await getOrderById(orderId);
     if (!order) {
       return NextResponse.json(
         { success: false, error: `Order ${orderId} not found.` },
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const invoice = createInvoice(orderId, adminUser);
+    const invoice = await createInvoice(orderId, adminUser);
     return NextResponse.json({ success: true, invoice }, { status: 201 });
   } catch (err: any) {
     console.error("Invoice creation error:", err);
