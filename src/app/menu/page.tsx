@@ -6,7 +6,6 @@ import { Search, Sparkles, ShoppingBag } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import MenuItemCard from "@/components/Menu/MenuItemCard";
-import CustomerPhoneModal from "@/components/Menu/CustomerPhoneModal";
 import { menuData } from "@/data/menu";
 import { useCart } from "@/context/CartContext";
 import Link from "next/link";
@@ -123,11 +122,6 @@ function MenuContent() {
 
   return (
     <main className="min-h-screen bg-background pb-28 md:pb-16">
-      {/* Customer Phone Capture Modal */}
-      <CustomerPhoneModal
-        currentTable={tableNumber}
-        onPhoneSaved={(phone) => setCustomerPhone(phone)}
-      />
 
       {/* Sticky Header Section */}
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border/60 pt-4 pb-2.5 shadow-xs">
