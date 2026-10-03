@@ -63,86 +63,86 @@ export default function HeroBanner({
       </div>
 
       {/* Brand Header: Logo & Cafe Identity */}
-      <div className="relative z-20 px-4 sm:px-6 lg:px-8 pt-2 max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full flex items-center justify-between pb-3">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-cream/95 p-1 shadow-md border border-beige/40 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+      <div className="relative z-20 px-4 sm:px-6 lg:px-12 pt-3 pb-4 md:py-6 max-w-7xl mx-auto w-full flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-3.5 sm:gap-4 group">
+          <div className="relative w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 rounded-full bg-cream/95 p-1.5 shadow-md border border-beige/40 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <Image
               src="/logo.png"
               alt="Spiral Cafe Logo"
-              width={48}
-              height={48}
-              className="object-contain"
+              width={60}
+              height={60}
+              className="object-contain w-full h-full"
               priority
             />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-cream tracking-tight drop-shadow-sm">
+              <h1 className="font-heading font-extrabold text-2xl sm:text-3xl md:text-3xl lg:text-4xl text-cream tracking-tight drop-shadow-sm">
                 Spiral Cafe
               </h1>
             </div>
-            <p className="text-[11px] sm:text-xs font-medium text-beige flex items-center gap-1">
-              <MapPin size={11} className="text-cream" />
+            <p className="text-[11px] sm:text-xs md:text-sm font-medium text-beige flex items-center gap-1.5 mt-0.5">
+              <MapPin size={13} className="text-cream shrink-0" />
               <span>Chengalpattu Rooftop Experience</span>
             </p>
           </div>
         </Link>
 
         {/* Desktop Header Nav Links */}
-        <nav className="hidden md:flex items-center gap-2">
+        <nav className="hidden md:flex items-center gap-2 lg:gap-3 bg-black/15 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-inner">
           <Link
             href="/"
-            className="px-3.5 py-1.5 rounded-full text-xs font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/10 transition-colors"
+            className="px-4 py-2 rounded-full text-xs md:text-sm font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/15 transition-all"
           >
             Home
           </Link>
           <Link
             href="/menu"
-            className="px-4 py-1.5 rounded-full text-xs font-heading font-bold bg-cream text-primary shadow-sm hover:bg-white transition-all"
+            className="px-5 py-2 rounded-full text-xs md:text-sm font-heading font-extrabold bg-cream text-primary shadow-sm hover:bg-white hover:scale-105 transition-all"
           >
             Explore Menu
           </Link>
           <Link
             href="/offers"
-            className="px-3.5 py-1.5 rounded-full text-xs font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/10 transition-colors"
+            className="px-4 py-2 rounded-full text-xs md:text-sm font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/15 transition-all"
           >
             Combos
           </Link>
           <Link
             href="/contact"
-            className="px-3.5 py-1.5 rounded-full text-xs font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/10 transition-colors"
+            className="px-4 py-2 rounded-full text-xs md:text-sm font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/15 transition-all"
           >
             Visit Us
           </Link>
         </nav>
 
         {/* Soft Opening / Status Pill */}
-        <div className="bg-cream/15 backdrop-blur-md border border-cream/25 px-3.5 py-1.5 rounded-full text-right shrink-0">
-          <span className="text-[10px] sm:text-xs font-bold text-cream tracking-wider uppercase flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Open Now
+        <div className="bg-cream/15 backdrop-blur-md border border-cream/25 px-4 py-2 md:px-5 md:py-2.5 rounded-full text-right shrink-0 shadow-xs">
+          <span className="text-[11px] sm:text-xs md:text-sm font-bold text-cream tracking-wider uppercase flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" /> Open Now
           </span>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="relative z-20 px-4 sm:px-6 lg:px-8 pt-1 max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto w-full">
+      <div className="relative z-20 px-4 sm:px-6 lg:px-8 pt-2 md:pt-4 max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto w-full">
         <div className="relative flex items-center">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-primary">
-            <Search className="h-5 w-5 text-[#B73F1D]" />
+          <div className="absolute inset-y-0 left-0 pl-4 md:pl-5 flex items-center pointer-events-none text-primary">
+            <Search className="h-5 w-5 md:h-6 md:w-6 text-[#B73F1D]" />
           </div>
           <input
             type="text"
             placeholder="Search wings, smash burgers, sandos, pasta, shakes..."
             value={searchQuery}
             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-            className="block w-full pl-11 pr-12 py-3.5 bg-cream text-[#4A2117] placeholder:text-[#8C5E51]/70 rounded-full border border-beige focus:outline-none focus:ring-2 focus:ring-cream shadow-xl text-sm font-medium transition-all"
+            className="block w-full pl-11 md:pl-14 pr-12 md:pr-16 py-3.5 md:py-4 bg-cream text-[#4A2117] placeholder:text-[#8C5E51]/70 rounded-full border border-beige focus:outline-none focus:ring-2 focus:ring-cream shadow-xl text-sm md:text-base font-medium transition-all"
           />
           <Link
             href="/menu"
-            className="absolute inset-y-1.5 right-1.5 p-2.5 bg-primary hover:bg-primary-dark text-cream rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-md"
+            className="absolute inset-y-1.5 right-1.5 p-2.5 md:p-3 bg-primary hover:bg-primary-dark text-cream rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-md"
             aria-label="Filter menu"
           >
-            <SlidersHorizontal className="h-4 w-4" />
+            <SlidersHorizontal className="h-4 w-4 md:h-5 md:w-5" />
           </Link>
         </div>
       </div>
