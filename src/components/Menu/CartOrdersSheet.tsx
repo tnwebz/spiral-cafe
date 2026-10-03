@@ -35,6 +35,7 @@ export default function CartOrdersSheet() {
     cart,
     tableNumber,
     setTableNumber,
+    customerSessionId,
     totalItems,
     subtotal,
     taxPercentage,
@@ -47,6 +48,8 @@ export default function CartOrdersSheet() {
     placeOrder,
     isPlacingOrder,
     placedOrders,
+    activeTableOrder,
+    notifyAddingFood,
     selectCashPayment,
     switchPaymentMethod,
     processOnlinePayment,
@@ -61,6 +64,15 @@ export default function CartOrdersSheet() {
     [orderId: string]: { type: "info" | "error" | "cancelled"; message: string };
   }>({});
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [tablesStatus, setTablesStatus] = useState<
+    Array<{
+      tableNumber: string;
+      isLocked: boolean;
+      activeOrderId?: string;
+      orderNumber?: string;
+      customerSessionId?: string;
+    }>
+  >([]);
 
   useEffect(() => {
     if (tableNumber) {
@@ -68,13 +80,38 @@ export default function CartOrdersSheet() {
     }
   }, [tableNumber]);
 
+  useEffect(() => {
+    if (showTableModal) {
+      fetch("/api/tables/status")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && Array.isArray(d.tables)) {
+            setTablesStatus(d.tables);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [showTableModal]);
+
   if (!isCartOpen) return null;
 
   const handleSelectTable = (table: string) => {
+    const info = tablesStatus.find((ts) => ts.tableNumber === table);
+    const isOccupiedByOther =
+      info?.isLocked && info?.customerSessionId !== customerSessionId;
+
+    if (isOccupiedByOther) {
+      setOrderError(
+        `${table} is currently occupied with an active dining session. Please choose an available table.`
+      );
+      return;
+    }
+
+    setOrderError(null);
     setTableNumber(table);
     setSelectedTable(table);
     setShowTableModal(false);
-    // As requested: "by clicking that the table number have to show from 1-15 by clicking that the confirm order have to open"
+
     if (cart.length > 0) {
       setShowConfirmModal(true);
     }
@@ -224,7 +261,7 @@ export default function CartOrdersSheet() {
 
         {/* Tab 1: New Order Basket */}
         {activeSheetTab === "cart" && (
-          <div className="flex-1 overflow-y-auto px-5 pb-6 flex flex-col justify-between">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-6 flex flex-col justify-between">
             <div>
               {/* Basket Status Pill */}
               <div className="flex items-center justify-between mb-3 px-1">
@@ -362,16 +399,41 @@ export default function CartOrdersSheet() {
                   </div>
                 )}
 
-                <button
-                  onClick={() => {
-                    setSelectedTable(tableNumber || "Table 01");
-                    setShowTableModal(true);
-                  }}
-                  className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
-                >
-                  <span>CHOOSE TABLE &amp; PLACE ORDER • ₹{grandTotal}</span>
-                  <ArrowRight size={16} />
-                </button>
+                {activeTableOrder ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-[11px] text-amber-900 font-medium">
+                      <span className="w-2 h-2 rounded-full bg-amber-600 animate-ping shrink-0" />
+                      <span>
+                        Adding items to active dining order for <strong>{tableNumber}</strong> (<strong>#{activeTableOrder.orderNumber}</strong>). Items will be consolidated into your single table bill.
+                      </span>
+                    </div>
+                    <button
+                      disabled={isPlacingOrder}
+                      onClick={() => handleFinalConfirmOrder()}
+                      className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isPlacingOrder ? (
+                        <span>ADDING TO ORDER...</span>
+                      ) : (
+                        <>
+                          <span>ADD TO TABLE {tableNumber.replace("Table ", "")} ORDER • ₹{grandTotal}</span>
+                          <ArrowRight size={16} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setSelectedTable(tableNumber || "Table 01");
+                      setShowTableModal(true);
+                    }}
+                    className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <span>CHOOSE TABLE &amp; PLACE ORDER • ₹{grandTotal}</span>
+                    <ArrowRight size={16} />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -379,13 +441,16 @@ export default function CartOrdersSheet() {
 
         {/* Tab 2: My Placed Orders */}
         {activeSheetTab === "orders" && (
-          <div className="flex-1 overflow-y-auto px-5 pb-6 flex flex-col gap-4">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-6 flex flex-col gap-4">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] font-bold text-[#8C5E51] uppercase tracking-wider">
                 My Placed Orders ({placedOrders.length})
               </span>
               <button
-                onClick={() => setIsCartOpen(false)}
+                onClick={async () => {
+                  await notifyAddingFood(true);
+                  setIsCartOpen(false);
+                }}
                 className="text-xs font-bold text-[#B73F1D] hover:underline inline-flex items-center gap-1 cursor-pointer"
               >
                 <span>+ ADD MORE FOOD</span>
@@ -447,7 +512,7 @@ export default function CartOrdersSheet() {
                       <div>
                         {isPending && (
                           <span className="px-3 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-xs font-extrabold flex items-center gap-1">
-                            <Clock size={12} /> PENDING
+                            <Clock size={12} /> {order.items.some(i => (i.round || 1) > 1) ? "ADD-ON PENDING" : "PENDING"}
                           </span>
                         )}
                         {isPreparing && (
@@ -468,17 +533,73 @@ export default function CartOrdersSheet() {
                       </div>
                     </div>
 
-                    {/* Items List */}
-                    <div className="flex flex-col gap-1.5 py-1">
-                      {order.items.map((it) => (
-                        <div key={it.id} className="flex justify-between items-center text-xs">
-                          <span className="text-[#4A2117] font-semibold">
-                            {it.name} <strong className="text-[#B73F1D]">×{it.quantity}</strong>
-                          </span>
-                          <span className="text-[#8C5E51] font-bold">₹{it.lineTotal}</span>
+                    {/* Items List Grouped by Round */}
+                    {(() => {
+                      const roundsMap: { [round: number]: typeof order.items } = {};
+                      order.items.forEach((it) => {
+                        const r = it.round || 1;
+                        if (!roundsMap[r]) roundsMap[r] = [];
+                        roundsMap[r].push(it);
+                      });
+                      const roundKeys = Object.keys(roundsMap).map(Number).sort((a, b) => a - b);
+                      const latestRound = roundKeys.length > 0 ? Math.max(...roundKeys) : 1;
+
+                      return (
+                        <div className="flex flex-col gap-2.5 py-1">
+                          {roundKeys.map((rnd) => {
+                            const isPastRound = rnd < latestRound;
+                            let roundStatusLabel = "Sent to Kitchen";
+                            if (isPastRound || order.status === "COMPLETED") {
+                              roundStatusLabel = "Served";
+                            } else if (order.status === "READY") {
+                              roundStatusLabel = "Ready to Serve";
+                            } else if (order.status === "PREPARING") {
+                              roundStatusLabel = "Cooking";
+                            }
+
+                            return (
+                              <div key={rnd} className="flex flex-col gap-1.5">
+                                {roundKeys.length > 1 && (
+                                  <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-[#8C5E51] bg-[#F7EFE9] px-2.5 py-1 rounded-lg">
+                                    <span>{rnd === 1 ? "Round 1 (Initial Order)" : `Round ${rnd} (Add-on)`}</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span
+                                        className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                          isPastRound || order.status === "COMPLETED"
+                                            ? "bg-emerald-100 text-emerald-800"
+                                            : order.status === "PREPARING"
+                                            ? "bg-blue-100 text-blue-800 animate-pulse"
+                                            : "bg-amber-100 text-amber-800"
+                                        }`}
+                                      >
+                                        {roundStatusLabel}
+                                      </span>
+                                      <span>{roundsMap[rnd].length} items</span>
+                                    </div>
+                                  </div>
+                                )}
+                                {roundsMap[rnd].map((it) => {
+                                  const cleanNote = (it.notes || "").replace(/\[ROUND:\d+\]/g, "").trim();
+                                  return (
+                                    <div key={it.id} className="flex justify-between items-center text-xs">
+                                      <div className="flex flex-col">
+                                        <span className="text-[#4A2117] font-semibold">
+                                          {it.name} <strong className="text-[#B73F1D]">×{it.quantity}</strong>
+                                        </span>
+                                        {cleanNote && (
+                                          <span className="text-[10px] text-[#8C5E51] italic">{cleanNote}</span>
+                                        )}
+                                      </div>
+                                      <span className="text-[#8C5E51] font-bold">₹{it.lineTotal}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
 
                     <div className="flex justify-between items-center pt-2 border-t border-[#EBDAD0]/60 text-xs">
                       <span className="text-[#8C5E51] font-semibold">TOTAL BILL</span>
@@ -489,23 +610,24 @@ export default function CartOrdersSheet() {
 
                     {/* Vertical Progress Tracker */}
                     <div className="p-3.5 bg-[#FFF8F3] rounded-2xl border border-[#EBDAD0] mt-1">
-                      <div className="text-[11px] font-bold text-[#8C5E51] uppercase tracking-wider mb-2.5">
+                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                         Live Order Progress
                       </div>
 
-                      <div className="flex flex-col gap-3 relative pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#E2C7BA]">
+                      <div className="flex flex-col gap-3 relative pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-emerald-500">
                         {/* State 1 */}
                         <div className="relative">
                           <div
-                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs ${
                               isPending || isPreparing || isReady || isCompleted
-                                ? "bg-[#B73F1D] text-cream"
+                                ? "bg-emerald-600 text-white"
                                 : "bg-[#E2C7BA] text-[#4A2117]"
                             }`}
                           >
                             ✓
                           </div>
-                          <div className="font-heading font-bold text-xs text-[#4A2117]">
+                          <div className="font-heading font-bold text-xs text-emerald-950">
                             ORDER RECEIVED
                           </div>
                           <p className="text-[11px] text-[#8C5E51]">
@@ -516,17 +638,17 @@ export default function CartOrdersSheet() {
                         {/* State 2 */}
                         <div className="relative">
                           <div
-                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs ${
                               isPreparing || isReady || isCompleted
-                                ? "bg-[#B73F1D] text-cream"
-                                : "bg-[#E2C7BA] text-[#8C5E51]"
+                                ? "bg-emerald-600 text-white"
+                                : "bg-[#EBDAD0] text-[#8C5E51]"
                             }`}
                           >
                             {isPreparing ? "…" : isReady || isCompleted ? "✓" : "2"}
                           </div>
                           <div
                             className={`font-heading font-bold text-xs ${
-                              isPreparing ? "text-[#B73F1D]" : "text-[#4A2117]"
+                              isPreparing ? "text-emerald-700" : isReady || isCompleted ? "text-emerald-950" : "text-[#4A2117]"
                             }`}
                           >
                             IN THE KITCHEN
@@ -539,17 +661,17 @@ export default function CartOrdersSheet() {
                         {/* State 3 */}
                         <div className="relative">
                           <div
-                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs ${
                               isReady || isCompleted
                                 ? "bg-emerald-600 text-white"
-                                : "bg-[#E2C7BA] text-[#8C5E51]"
+                                : "bg-[#EBDAD0] text-[#8C5E51]"
                             }`}
                           >
                             {isReady || isCompleted ? "★" : "3"}
                           </div>
                           <div
                             className={`font-heading font-bold text-xs ${
-                              isReady ? "text-emerald-700" : "text-[#4A2117]"
+                              isReady || isCompleted ? "text-emerald-700 font-extrabold" : "text-[#4A2117]"
                             }`}
                           >
                             READY FOR DINE-IN
@@ -791,17 +913,26 @@ export default function CartOrdersSheet() {
                 </button>
               </div>
 
-              {/* 15 Table Grid */}
+              {/* 15 Table Grid with Occupied/Lock Indicators */}
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 my-4 overflow-y-auto max-h-[50vh] p-1">
                 {TABLES.map((t) => {
                   const isSelected = (selectedTable || tableNumber) === t;
                   const num = t.replace("Table ", "");
+                  const info = tablesStatus.find((ts) => ts.tableNumber === t);
+                  const isOccupiedByOther =
+                    info?.isLocked && info?.customerSessionId !== customerSessionId;
+                  const isMyActiveTable =
+                    info?.isLocked && info?.customerSessionId === customerSessionId;
+
                   return (
                     <button
                       key={t}
+                      disabled={isOccupiedByOther}
                       onClick={() => handleSelectTable(t)}
                       className={`py-3 px-2 rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer border active:scale-95 ${
-                        isSelected
+                        isOccupiedByOther
+                          ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60"
+                          : isSelected
                           ? "bg-[#B73F1D] text-cream border-[#9D3E22] shadow-md ring-2 ring-[#B73F1D]/30"
                           : "bg-white text-[#4A2117] border-[#EBDAD0] hover:border-[#B73F1D] hover:bg-[#FFF8F3]"
                       }`}
@@ -812,13 +943,21 @@ export default function CartOrdersSheet() {
                       <span className="font-heading font-extrabold text-lg leading-tight mt-0.5">
                         {num}
                       </span>
-                      {isSelected ? (
+                      {isOccupiedByOther ? (
+                        <span className="text-[9px] font-bold bg-zinc-200 text-zinc-600 px-1.5 py-0.2 rounded-full mt-1 flex items-center gap-0.5">
+                          🔒 Occupied
+                        </span>
+                      ) : isMyActiveTable ? (
+                        <span className="text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded-full mt-1">
+                          ✓ Your Table
+                        </span>
+                      ) : isSelected ? (
                         <span className="text-[9px] font-bold bg-white/20 px-1.5 py-0.2 rounded-full mt-1">
                           Active
                         </span>
                       ) : (
-                        <span className="text-[9px] text-[#8C5E51] font-medium mt-1">
-                          Tap to select
+                        <span className="text-[9px] text-emerald-700 font-bold mt-1">
+                          Available
                         </span>
                       )}
                     </button>

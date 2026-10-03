@@ -98,13 +98,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   const navItems = [
-    { label: "Overview", href: "/admin", icon: LayoutDashboard },
+    { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { label: "Sales & Analytics", href: "/admin/analytics", icon: TrendingUp },
     { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
-    { label: "Revenue & Settlement", href: "/admin/settlements", icon: FileSpreadsheet },
-    { label: "Invoices", href: "/admin/invoices", icon: Receipt },
     { label: "Menu Management", href: "/admin/menu", icon: UtensilsCrossed },
-    { label: "Payments", href: "/admin/payments", icon: CreditCard },
     { label: "Customers", href: "/admin/customers", icon: Users },
     { label: "Kitchen KDS", href: "/kitchen", icon: ChefHat, targetBlank: true },
     { label: "Settings & Audit", href: "/admin/settings", icon: Settings },
@@ -298,7 +295,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </header>
 
         {/* PAGE CONTENT CONTAINER */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-16">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full pb-16">
           {children}
         </main>
       </div>

@@ -11,20 +11,14 @@ import {
   VolumeX,
   RefreshCw,
   Lock,
-  Unlock,
-  AlertCircle,
   ChefHat,
-  Sparkles,
-  ArrowRight,
-  Coffee,
   Check,
   Menu,
   RotateCcw,
-  Layers,
-  Filter,
   Utensils,
-  ChevronLeft,
-  ChevronRight,
+  Columns3,
+  ListFilter,
+  CheckCheck,
 } from "lucide-react";
 import { PlacedOrder } from "@/context/CartContext";
 import { menuData } from "@/data/menu";
@@ -89,7 +83,8 @@ export default function KitchenDisplayPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<string>("");
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
-  const [activeFilter, setActiveFilter] = useState<"ALL" | "PENDING" | "PREPARING" | "READY">("ALL");
+  const [activeFilter, setActiveFilter] = useState<"ALL" | "PENDING" | "COOKING" | "COMPLETED">("ALL");
+  const [showRecentlyServed, setShowRecentlyServed] = useState<boolean>(false);
 
   // Track checked-off item IDs for assembly line cooks
   const [toggledItemKeys, setToggledItemKeys] = useState<Record<string, boolean>>({});
@@ -186,7 +181,6 @@ export default function KitchenDisplayPage() {
           if (payload.eventType === "INSERT" && soundEnabled) {
             playKitchenChime();
           }
-          // Debounce rapid order updates
           if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
           realtimeTimerRef.current = setTimeout(() => {
             fetchKitchenOrders(pin);
@@ -211,6 +205,34 @@ export default function KitchenDisplayPage() {
   // Action Dispatcher
   const handleKitchenAction = async (orderId: string, action: string) => {
     setActionLoading(`${orderId}-${action}`);
+
+    // Optimistic UI updates for instant response
+    if (action === "START_PREPARING") {
+      const moved =
+        pendingOrders.find((o) => o.id === orderId) ||
+        readyOrders.find((o) => o.id === orderId) ||
+        recentCompleted.find((o) => o.id === orderId);
+
+      setPendingOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setReadyOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setRecentCompleted((prev) => prev.filter((o) => o.id !== orderId));
+      if (moved) {
+        setPreparingOrders((prev) => [{ ...moved, status: "PREPARING" }, ...prev.filter((o) => o.id !== orderId)]);
+      }
+    } else if (action === "MARK_READY") {
+      const moved = preparingOrders.find((o) => o.id === orderId);
+      if (moved) {
+        setPreparingOrders((prev) => prev.filter((o) => o.id !== orderId));
+        setReadyOrders((prev) => [{ ...moved, status: "READY" }, ...prev.filter((o) => o.id !== orderId)]);
+      }
+    } else if (action === "COMPLETE_ORDER") {
+      const moved = readyOrders.find((o) => o.id === orderId);
+      setReadyOrders((prev) => prev.filter((o) => o.id !== orderId));
+      if (moved) {
+        setRecentCompleted((prev) => [{ ...moved, status: "COMPLETED" }, ...prev.filter((o) => o.id !== orderId).slice(0, 19)]);
+      }
+    }
+
     try {
       const res = await fetch("/api/kitchen/orders", {
         method: "PATCH",
@@ -223,9 +245,11 @@ export default function KitchenDisplayPage() {
         await fetchKitchenOrders(pin);
       } else {
         alert(data.error || "Action failed.");
+        await fetchKitchenOrders(pin);
       }
     } catch {
       alert("Network error.");
+      await fetchKitchenOrders(pin);
     } finally {
       setActionLoading(null);
     }
@@ -273,7 +297,7 @@ export default function KitchenDisplayPage() {
     return elapsedMinutes >= 15;
   };
 
-  // Compute Product Quantity Summary across all active tickets (Pending + Preparing)
+  // Compute Product Quantity Summary across active tickets (Pending + Preparing)
   const activeOrdersForSummary = [...pendingOrders, ...preparingOrders];
   const summaryMap: Record<string, { category: string; name: string; qty: number }> = {};
 
@@ -300,7 +324,7 @@ export default function KitchenDisplayPage() {
   // Staff PIN gate
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-[#F7F2EB] text-[#2C1710] flex flex-col items-center justify-center p-4">
+      <main className="min-h-screen bg-[#F7F2EB] text-[#2C1710] flex flex-col items-center justify-center p-4 font-sans">
         <div className="w-full max-w-sm bg-white p-8 rounded-3xl border border-[#E3D5C6] shadow-2xl text-center">
           <div className="w-16 h-16 rounded-2xl bg-[#CA340A] flex items-center justify-center mx-auto mb-4 text-[#FFF9F5] shadow-lg">
             <Lock size={28} />
@@ -344,28 +368,257 @@ export default function KitchenDisplayPage() {
     );
   }
 
-  // Filter orders based on active tab
-  let displayTickets: Array<{ order: PlacedOrder; type: "PENDING" | "PREPARING" | "READY" }> = [];
-
-  if (activeFilter === "ALL" || activeFilter === "PENDING") {
-    displayTickets.push(...pendingOrders.map((o) => ({ order: o, type: "PENDING" as const })));
-  }
-  if (activeFilter === "ALL" || activeFilter === "PREPARING") {
-    displayTickets.push(...preparingOrders.map((o) => ({ order: o, type: "PREPARING" as const })));
-  }
-  if (activeFilter === "ALL" || activeFilter === "READY") {
-    displayTickets.push(...readyOrders.map((o) => ({ order: o, type: "READY" as const })));
-  }
-
+  const completedTotal = readyOrders.length;
   const totalActive = pendingOrders.length + preparingOrders.length + readyOrders.length;
+
+  // Render a Single Order Ticket Card
+  const renderOrderCard = (order: PlacedOrder, type: "PENDING" | "PREPARING" | "READY" | "COMPLETED") => {
+    const urgent = isUrgent(order.createdAt);
+    const totalQty = (order.items || []).reduce((sum, i) => sum + i.quantity, 0);
+
+    let headerBg = "bg-[#CA340A]";
+    let borderStyle = "border-[#CA340A]";
+    let statusLabel = "PENDING";
+    let itemAccent = "text-[#CA340A]";
+    let itemHover = "group-hover:text-[#CA340A]";
+    let checkboxHover = "group-hover:border-[#CA340A]";
+
+    if (order.isAddon) {
+      headerBg = "bg-gradient-to-r from-purple-800 to-indigo-900";
+      borderStyle = "border-purple-600 ring-2 ring-purple-400/40";
+      statusLabel = `ROUND ${order.addonRound || 2} ADD-ON`;
+      itemAccent = "text-purple-700";
+      itemHover = "group-hover:text-purple-700";
+      checkboxHover = "group-hover:border-purple-600";
+    } else if (type === "PREPARING") {
+      headerBg = "bg-amber-600";
+      borderStyle = "border-amber-500";
+      statusLabel = "COOKING";
+      itemAccent = "text-amber-600";
+      itemHover = "group-hover:text-amber-600";
+      checkboxHover = "group-hover:border-amber-600";
+    } else if (type === "READY") {
+      headerBg = "bg-emerald-600";
+      borderStyle = "border-emerald-600";
+      statusLabel = "READY TO SERVE";
+      itemAccent = "text-emerald-600";
+      itemHover = "group-hover:text-emerald-600";
+      checkboxHover = "group-hover:border-emerald-600";
+    } else if (type === "COMPLETED") {
+      headerBg = "bg-[#3A1710]";
+      borderStyle = "border-zinc-300";
+      statusLabel = "SERVED";
+      itemAccent = "text-zinc-600";
+      itemHover = "group-hover:text-zinc-700";
+      checkboxHover = "group-hover:border-zinc-400";
+    }
+
+    // Only non-addon pending tickets change to red if delayed
+    if (urgent && type === "PENDING" && !order.isAddon) {
+      headerBg = "bg-red-600";
+      borderStyle = "border-red-600 animate-pulse";
+      statusLabel = "DELAYED";
+    }
+
+    const cleanOrderNotes = (order.notes || "")
+      .replace(/\[ADDING_FOOD_UNTIL:\d+\]/g, "")
+      .replace(/\[COOKING_ROUNDS:[0-9,]+\]/g, "")
+      .trim();
+
+    return (
+      <div
+        key={order.id}
+        className={`bg-white text-[#2C1710] rounded-2xl border-2 ${borderStyle} shadow-md flex flex-col overflow-hidden transition-all shrink-0`}
+      >
+        {/* TICKET HEADER BAR */}
+        <div className={`${headerBg} text-white px-3.5 py-2.5 flex items-center justify-between shadow-xs`}>
+          <div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-mono text-sm font-black tracking-tight">
+                {new Date(order.createdAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 bg-black/25 rounded">
+                {statusLabel}
+              </span>
+              {order.cookingRounds && order.cookingRounds.length > 1 && type === "PREPARING" && (
+                <span className="text-[9px] font-extrabold bg-amber-950/70 text-amber-200 px-1.5 py-0.5 rounded">
+                  Rounds {order.cookingRounds.join(", ")} Active
+                </span>
+              )}
+            </div>
+            <div className="text-xs font-bold mt-0.5 opacity-95 truncate">
+              Table: <strong className="font-black text-amber-200 text-sm">{order.tableNumber}</strong>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <span className="text-xs font-black font-mono block">
+              #{order.orderNumber.replace("ORD-", "")}
+            </span>
+            <span className="text-[10px] font-extrabold bg-black/30 px-2 py-0.5 rounded-full inline-block mt-0.5">
+              {getElapsedTime(order.createdAt)}
+            </span>
+          </div>
+        </div>
+
+        {/* CUSTOMER ADDING FOOD WARNING BANNER */}
+        {order.customerAddingFood && (
+          <div className="bg-amber-100 border-b-2 border-amber-300 px-3.5 py-2 flex items-center gap-2 text-amber-950 animate-pulse">
+            <Clock size={16} className="text-amber-700 animate-spin shrink-0" />
+            <div className="min-w-0">
+              <div className="text-xs font-black tracking-tight flex items-center gap-1.5">
+                <span>CUSTOMER IS ADDING FOOD</span>
+                <span className="text-[10px] bg-amber-600 text-white font-extrabold px-1.5 py-0.2 rounded">WAIT 2 MIN</span>
+              </div>
+              <div className="text-[10px] font-semibold text-amber-800 truncate">Customer selecting more items • Please hold preparation</div>
+            </div>
+          </div>
+        )}
+
+        {/* ADD-ON HEADER EXPLANATION */}
+        {order.isAddon && (
+          <div className="bg-purple-50 border-b border-purple-200 px-3.5 py-1.5 flex items-center justify-between text-[11px] font-extrabold text-purple-900">
+            <span>Add-on from same customer</span>
+            <span className="bg-purple-200 text-purple-900 px-1.5 py-0.2 rounded font-black">Round {order.addonRound}</span>
+          </div>
+        )}
+
+        {/* TICKET ITEMS LIST */}
+        <div className="p-3.5 flex-1 space-y-2 max-h-[320px] overflow-y-auto divide-y divide-[#F0DDD3]">
+          {(order.items || []).map((it, idx) => {
+            const itemKey = `${order.id}_${it.id || idx}`;
+            const isToggled = toggledItemKeys[itemKey];
+            const cleanItemNote = (it.notes || "").replace(/\[ROUND:\d+\]/g, "").trim();
+
+            return (
+              <div
+                key={itemKey}
+                onClick={() => toggleItemCheck(itemKey)}
+                className={`pt-2 first:pt-0 flex items-start justify-between cursor-pointer group transition-opacity ${
+                  isToggled ? "opacity-35 line-through" : "opacity-100"
+                }`}
+              >
+                <div className="pr-2">
+                  <div className={`font-heading font-black text-sm text-[#2C1710] leading-snug ${itemHover}`}>
+                    <span className={`font-extrabold ${itemAccent} mr-1.5`}>
+                      {it.quantity}x
+                    </span>
+                    {it.name}
+                    {it.round && it.round > 1 && !order.isAddon && (
+                      <span className="text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-300 px-1.5 py-0.5 rounded ml-1.5 inline-block">
+                        R{it.round} Add-on
+                      </span>
+                    )}
+                  </div>
+
+                  {cleanItemNote && (
+                    <div className="text-[11px] font-bold text-red-600 uppercase tracking-wide mt-0.5">
+                      ⚡ {cleanItemNote}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                    isToggled
+                      ? "bg-emerald-600 border-emerald-600 text-white"
+                      : `border-[#DAC8B8] ${checkboxHover}`
+                  }`}
+                >
+                  {isToggled && <Check size={13} />}
+                </button>
+              </div>
+            );
+          })}
+
+          {cleanOrderNotes && (
+            <div className="pt-2 text-xs font-semibold text-[#8C3A1E] bg-[#FAF3EB] p-2 rounded-xl border border-[#E8DACD]">
+              <strong>Order Notes:</strong> {cleanOrderNotes}
+            </div>
+          )}
+        </div>
+
+        {/* TICKET FOOTER & ACTION BUTTON */}
+        <div className="p-3 bg-[#FAF5EE] border-t border-[#EFE5DC] flex flex-col gap-2 shrink-0">
+          <div className="flex justify-between text-[11px] font-extrabold text-[#6E4B3D]">
+            <span>TOTAL ITEMS: {totalQty}</span>
+            <span>₹{order.grandTotal}</span>
+          </div>
+
+          {type === "PENDING" && order.isAddon && (
+            <button
+              disabled={actionLoading === `${order.id}-START_PREPARING`}
+              onClick={() => handleKitchenAction(order.id, "START_PREPARING")}
+              className="w-full py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-heading font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            >
+              <ChefHat size={16} />
+              <span>START COOKING (MERGE TO {order.tableNumber})</span>
+            </button>
+          )}
+
+          {type === "PENDING" && !order.isAddon && (
+            <button
+              disabled={actionLoading === `${order.id}-START_PREPARING`}
+              onClick={() => handleKitchenAction(order.id, "START_PREPARING")}
+              className="w-full py-2.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            >
+              <ChefHat size={16} />
+              <span>START COOKING</span>
+            </button>
+          )}
+
+          {type === "PREPARING" && (
+            <button
+              disabled={actionLoading === `${order.id}-MARK_READY`}
+              onClick={() => handleKitchenAction(order.id, "MARK_READY")}
+              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-heading font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            >
+              <CheckCircle2 size={16} />
+              <span>MARK AS READY</span>
+            </button>
+          )}
+
+          {type === "READY" && (
+            <button
+              disabled={actionLoading === `${order.id}-COMPLETE_ORDER`}
+              onClick={() => handleKitchenAction(order.id, "COMPLETE_ORDER")}
+              className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-heading font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            >
+              <CheckCheck size={16} />
+              <span>SERVE &amp; DISPATCH</span>
+            </button>
+          )}
+
+          {type === "COMPLETED" && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                <CheckCircle2 size={13} />
+                Served
+              </span>
+              <button
+                disabled={actionLoading === `${order.id}-START_PREPARING`}
+                onClick={() => handleKitchenAction(order.id, "START_PREPARING")}
+                className="px-2.5 py-1 text-[11px] font-bold text-[#8C3A1E] hover:text-[#CA340A] bg-white rounded-lg border border-[#DAC8B8] flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                title="Recall order back to cooking"
+              >
+                <RotateCcw size={11} />
+                <span>Recall</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <main className="min-h-screen bg-[#F7F2EB] text-[#2C1710] flex flex-col h-screen overflow-hidden antialiased select-none font-sans">
-      {/* ========================================================================= */}
       {/* 1. KDS TOP HEADER BAR */}
-      {/* ========================================================================= */}
       <header className="bg-[#EFE7DE] text-[#2C1710] px-4 py-2.5 flex items-center justify-between border-b border-[#E3D5C6] shrink-0 shadow-xs">
-        {/* Left Brand Section */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowSidebar(!showSidebar)}
@@ -398,7 +651,6 @@ export default function KitchenDisplayPage() {
 
         {/* Right Status Controls */}
         <div className="flex items-center gap-3">
-          {/* Connection Status */}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-[#FAF5EE] rounded-full border border-[#DAC8B8] text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -410,7 +662,6 @@ export default function KitchenDisplayPage() {
             </span>
           </div>
 
-          {/* Audio Chime Toggle */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
             className="p-2 rounded-xl bg-[#FAF5EE] border border-[#DAC8B8] hover:bg-[#F3EBE0] text-[#4A2D22] transition-colors cursor-pointer"
@@ -419,7 +670,6 @@ export default function KitchenDisplayPage() {
             {soundEnabled ? <Volume2 size={18} className="text-emerald-600" /> : <VolumeX size={18} />}
           </button>
 
-          {/* Refresh */}
           <button
             onClick={() => fetchKitchenOrders(pin)}
             className="p-2 rounded-xl bg-[#FAF5EE] border border-[#DAC8B8] hover:bg-[#F3EBE0] text-[#4A2D22] transition-colors cursor-pointer"
@@ -428,12 +678,10 @@ export default function KitchenDisplayPage() {
             <RefreshCw size={18} />
           </button>
 
-          {/* Live Monospaced Clock */}
           <div className="font-heading font-black text-sm sm:text-base text-[#8C3A1E] tracking-wider font-mono bg-[#FAF5EE] px-3 py-1 rounded-xl border border-[#DAC8B8]">
             {currentTime}
           </div>
 
-          {/* Admin Link */}
           <Link
             href="/admin"
             className="px-3 py-1.5 rounded-xl bg-[#FAF5EE] border border-[#DAC8B8] hover:bg-[#F3EBE0] text-[#4A2D22] text-xs font-bold transition-colors hidden md:block"
@@ -441,7 +689,6 @@ export default function KitchenDisplayPage() {
             Admin
           </Link>
 
-          {/* Lock / Exit Terminal Button */}
           <button
             onClick={handleLogout}
             className="p-2 rounded-xl bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 transition-colors cursor-pointer"
@@ -452,16 +699,11 @@ export default function KitchenDisplayPage() {
         </div>
       </header>
 
-      {/* ========================================================================= */}
-      {/* MAIN CONTENT AREA: SUMMARY SIDEBAR + TICKET GRID */}
-      {/* ========================================================================= */}
+      {/* 2. MAIN CONTENT AREA: SIDEBAR + 3-COLUMN SPLIT-UP */}
       <div className="flex-1 flex overflow-hidden">
-        {/* ======================================================================= */}
-        {/* 2. LEFT SIDEBAR: AGGREGATED PRODUCT & QTY SUMMARY */}
-        {/* ======================================================================= */}
+        {/* Product Qty Summary Sidebar */}
         {showSidebar && (
-          <aside className="w-72 bg-[#F2EAE0] border-r border-[#E3D5C6] flex flex-col shrink-0 overflow-hidden transition-all">
-            {/* Sidebar Header */}
+          <aside className="w-64 sm:w-72 bg-[#F2EAE0] border-r border-[#E3D5C6] flex flex-col shrink-0 overflow-hidden transition-all">
             <div className="bg-[#E8DED1] px-4 py-3 border-b border-[#DAC8B8] flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-[#8C3A1E]">
               <span className="flex items-center gap-1.5">
                 <Utensils size={14} className="text-[#CA340A]" />
@@ -470,7 +712,6 @@ export default function KitchenDisplayPage() {
               <span>QTY</span>
             </div>
 
-            {/* Aggregated List grouped by Category */}
             <div className="flex-1 overflow-y-auto p-3 space-y-4 divide-y divide-[#E3D5C6]/60">
               {Object.keys(summaryGrouped).length === 0 ? (
                 <div className="py-20 text-center text-zinc-500 text-xs">
@@ -506,7 +747,6 @@ export default function KitchenDisplayPage() {
               )}
             </div>
 
-            {/* Sidebar Footer Info */}
             <div className="p-3 bg-[#E8DED1] border-t border-[#DAC8B8] text-[11px] text-[#5C3F34] flex justify-between items-center font-bold">
               <span>ACTIVE PREP ITEMS:</span>
               <span className="font-black text-[#CA340A] font-mono text-xs">
@@ -516,217 +756,233 @@ export default function KitchenDisplayPage() {
           </aside>
         )}
 
-        {/* ======================================================================= */}
-        {/* 3. TICKET CARDS GRID */}
-        {/* ======================================================================= */}
-        <div className="flex-1 bg-[#F7F2EB] p-4 overflow-y-auto">
-          {displayTickets.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center text-zinc-500 p-8">
-              <ChefHat size={48} className="text-[#CA340A] opacity-40 mb-3" />
-              <h2 className="font-heading font-black text-lg text-[#2C1710]">ALL CLEAR! NO ACTIVE TICKETS</h2>
-              <p className="text-xs text-[#6E4B3D] mt-1 max-w-sm">
-                Incoming orders from table QR codes will appear here automatically with audio alerts.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start pb-16">
-              {displayTickets.map(({ order, type }) => {
-                const urgent = isUrgent(order.createdAt);
-                const totalQty = order.items.reduce((sum, i) => sum + i.quantity, 0);
-
-                // Color themes based on Status & Urgency
-                let headerBg = "bg-[#CA340A]"; // New/Pending
-                let borderStyle = "border-[#CA340A]";
-                let statusLabel = "NEW TICKET";
-
-                if (type === "PREPARING") {
-                  headerBg = "bg-amber-600";
-                  borderStyle = "border-amber-600";
-                  statusLabel = "COOKING";
-                } else if (type === "READY") {
-                  headerBg = "bg-emerald-600";
-                  borderStyle = "border-emerald-600";
-                  statusLabel = "READY";
-                }
-
-                if (urgent && type !== "READY") {
-                  headerBg = "bg-red-600";
-                  borderStyle = "border-red-600 animate-pulse";
-                  statusLabel = "DELAYED!";
-                }
-
-                return (
-                  <div
-                    key={order.id}
-                    className={`bg-white text-[#2C1710] rounded-2xl border-2 ${borderStyle} shadow-lg flex flex-col overflow-hidden transition-all`}
-                  >
-                    {/* ------------------------------------------------------------- */}
-                    {/* TICKET HEADER BAR */}
-                    {/* ------------------------------------------------------------- */}
-                    <div className={`${headerBg} text-white px-3.5 py-2.5 flex items-center justify-between shadow-xs`}>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm font-black tracking-tight">
-                            {new Date(order.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 bg-black/25 rounded">
-                            {statusLabel}
-                          </span>
-                        </div>
-                        <div className="text-xs font-bold mt-0.5 opacity-95 truncate max-w-[140px]">
-                          Table: <strong className="font-black text-amber-200 text-sm">{order.tableNumber}</strong>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-xs font-black font-mono block">
-                          #{order.orderNumber.replace("ORD-", "")}
-                        </span>
-                        <span className="text-[10px] font-extrabold bg-black/30 px-2 py-0.5 rounded-full inline-block mt-0.5">
-                          {getElapsedTime(order.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* ------------------------------------------------------------- */}
-                    {/* TICKET ITEMS LIST */}
-                    {/* ------------------------------------------------------------- */}
-                    <div className="p-3.5 flex-1 space-y-2.5 max-h-[380px] overflow-y-auto divide-y divide-[#F0DDD3]">
-                      {order.items.map((it, idx) => {
-                        const itemKey = `${order.id}_${it.id || idx}`;
-                        const isToggled = toggledItemKeys[itemKey];
-
-                        return (
-                          <div
-                            key={itemKey}
-                            onClick={() => toggleItemCheck(itemKey)}
-                            className={`pt-2 first:pt-0 flex items-start justify-between cursor-pointer group transition-opacity ${
-                              isToggled ? "opacity-35 line-through" : "opacity-100"
-                            }`}
-                          >
-                            <div className="pr-2">
-                              <div className="font-heading font-black text-sm text-[#2C1710] leading-snug group-hover:text-[#CA340A]">
-                                <span className="font-extrabold text-[#CA340A] mr-1.5">
-                                  {it.quantity}x
-                                </span>
-                                {it.name}
-                              </div>
-
-                              {/* Customer customization notes */}
-                              {it.notes && (
-                                <div className="text-[11px] font-bold text-red-600 uppercase tracking-wide mt-0.5">
-                                  ⚡ {it.notes}
-                                </div>
-                              )}
-                            </div>
-
-                            <button
-                              type="button"
-                              className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
-                                isToggled
-                                  ? "bg-emerald-600 border-emerald-600 text-white"
-                                  : "border-[#DAC8B8] group-hover:border-[#CA340A]"
-                              }`}
-                            >
-                              {isToggled && <Check size={13} />}
-                            </button>
-                          </div>
-                        );
-                      })}
-
-                      {/* Order level customer notes */}
-                      {order.notes && (
-                        <div className="pt-2 text-xs font-semibold text-[#8C3A1E] bg-[#FAF3EB] p-2 rounded-xl border border-[#E8DACD]">
-                          <strong>Order Notes:</strong> {order.notes}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ------------------------------------------------------------- */}
-                    {/* TICKET FOOTER & ACTION BUTTON */}
-                    {/* ------------------------------------------------------------- */}
-                    <div className="p-3 bg-[#FAF5EE] border-t border-[#EFE5DC] flex flex-col gap-2 shrink-0">
-                      <div className="flex justify-between text-[11px] font-extrabold text-[#6E4B3D]">
-                        <span>TOTAL ITEMS: {totalQty}</span>
-                        <span>₹{order.grandTotal}</span>
-                      </div>
-
-                      {type === "PENDING" && (
-                        <button
-                          disabled={actionLoading === `${order.id}-START_PREPARING`}
-                          onClick={() => handleKitchenAction(order.id, "START_PREPARING")}
-                          className="w-full py-2.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                        >
-                          <ChefHat size={16} />
-                          <span>START COOKING</span>
-                        </button>
-                      )}
-
-                      {type === "PREPARING" && (
-                        <button
-                          disabled={actionLoading === `${order.id}-MARK_READY`}
-                          onClick={() => handleKitchenAction(order.id, "MARK_READY")}
-                          className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-heading font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                        >
-                          <CheckCircle2 size={16} />
-                          <span>MARK AS READY</span>
-                        </button>
-                      )}
-
-                      {type === "READY" && (
-                        <button
-                          disabled={actionLoading === `${order.id}-COMPLETE_ORDER`}
-                          onClick={() => handleKitchenAction(order.id, "COMPLETE_ORDER")}
-                          className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-heading font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                        >
-                          <Check size={16} />
-                          <span>SERVE &amp; DISPATCH</span>
-                        </button>
-                      )}
-                    </div>
+        {/* 3-COLUMN SPLIT-UP CONTAINER */}
+        <div className="flex-1 bg-[#F7F2EB] p-3 sm:p-4 overflow-x-auto overflow-y-hidden">
+          <div
+            className={`h-full gap-4 ${
+              activeFilter === "ALL"
+                ? "grid grid-cols-1 md:grid-cols-3 min-w-[850px] md:min-w-0"
+                : "grid grid-cols-1 max-w-2xl mx-auto"
+            }`}
+          >
+            {/* ================================================================= */}
+            {/* COLUMN 1: PENDING ORDERS */}
+            {/* ================================================================= */}
+            {(activeFilter === "ALL" || activeFilter === "PENDING") && (
+              <section className="flex flex-col bg-[#EFE7DE]/80 rounded-2xl border-2 border-[#CA340A]/40 overflow-hidden shadow-xs h-full">
+                {/* Column Header */}
+                <div className="bg-[#CA340A] text-white px-4 py-3 flex items-center justify-between shrink-0 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <Clock size={18} />
+                    <h2 className="font-heading font-black text-sm sm:text-base tracking-wide uppercase">
+                      Pending Orders
+                    </h2>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <span className="px-2.5 py-0.5 rounded-full bg-black/25 text-white font-mono font-black text-xs">
+                    {pendingOrders.length}
+                  </span>
+                </div>
+
+                {/* Subtitle Bar */}
+                <div className="px-4 py-1.5 bg-[#FAF5EE] border-b border-[#DAC8B8] text-[11px] font-bold text-[#6E4B3D] flex justify-between">
+                  <span>Waiting for kitchen</span>
+                  <span>Action: Start Cooking</span>
+                </div>
+
+                {/* Cards List */}
+                <div className="flex-1 p-3 overflow-y-auto space-y-3">
+                  {pendingOrders.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 p-6">
+                      <Clock size={36} className="text-[#CA340A] opacity-30 mb-2" />
+                      <p className="font-bold text-xs text-[#2C1710]">No Pending Orders</p>
+                      <p className="text-[11px] text-[#6E4B3D] mt-0.5">
+                        New orders from tables will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    pendingOrders.map((order) => renderOrderCard(order, "PENDING"))
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* ================================================================= */}
+            {/* COLUMN 2: COOKING / PREPARING */}
+            {/* ================================================================= */}
+            {(activeFilter === "ALL" || activeFilter === "COOKING") && (
+              <section className="flex flex-col bg-[#EFE7DE]/80 rounded-2xl border-2 border-amber-500/50 overflow-hidden shadow-xs h-full">
+                {/* Column Header */}
+                <div className="bg-amber-600 text-white px-4 py-3 flex items-center justify-between shrink-0 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <ChefHat size={18} />
+                    <h2 className="font-heading font-black text-sm sm:text-base tracking-wide uppercase">
+                      Cooking
+                    </h2>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-black/25 text-white font-mono font-black text-xs">
+                    {preparingOrders.length}
+                  </span>
+                </div>
+
+                {/* Subtitle Bar */}
+                <div className="px-4 py-1.5 bg-[#FAF5EE] border-b border-[#DAC8B8] text-[11px] font-bold text-[#6E4B3D] flex justify-between">
+                  <span>In kitchen preparation</span>
+                  <span>Action: Mark Ready</span>
+                </div>
+
+                {/* Cards List */}
+                <div className="flex-1 p-3 overflow-y-auto space-y-3">
+                  {preparingOrders.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 p-6">
+                      <ChefHat size={36} className="text-amber-600 opacity-30 mb-2" />
+                      <p className="font-bold text-xs text-[#2C1710]">No Orders Cooking</p>
+                      <p className="text-[11px] text-[#6E4B3D] mt-0.5">
+                        Click "Start Cooking" on a pending order.
+                      </p>
+                    </div>
+                  ) : (
+                    preparingOrders.map((order) => renderOrderCard(order, "PREPARING"))
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* ================================================================= */}
+            {/* COLUMN 3: READY TO SERVE / DISPATCH */}
+            {/* ================================================================= */}
+            {(activeFilter === "ALL" || activeFilter === "COMPLETED") && (
+              <section className="flex flex-col bg-[#EFE7DE]/80 rounded-2xl border-2 border-emerald-600/50 overflow-hidden shadow-xs h-full">
+                {/* Column Header */}
+                <div className="bg-emerald-700 text-white px-4 py-3 flex items-center justify-between shrink-0 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={18} />
+                    <h2 className="font-heading font-black text-sm sm:text-base tracking-wide uppercase">
+                      Ready to Serve
+                    </h2>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-black/25 text-white font-mono font-black text-xs">
+                    {readyOrders.length}
+                  </span>
+                </div>
+
+                {/* Subtitle Bar */}
+                <div className="px-4 py-1.5 bg-[#FAF5EE] border-b border-[#DAC8B8] text-[11px] font-bold text-[#6E4B3D] flex justify-between">
+                  <span>{readyOrders.length} ready for dispatch</span>
+                  <span>Action: Serve &amp; Dispatch</span>
+                </div>
+
+                {/* Cards List: ONLY active ready-to-serve tickets */}
+                <div className="flex-1 p-3 overflow-y-auto space-y-3">
+                  {readyOrders.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 p-6 min-h-[180px]">
+                      <CheckCircle2 size={36} className="text-emerald-600 opacity-30 mb-2" />
+                      <p className="font-bold text-xs text-[#2C1710]">No Orders Waiting for Dispatch</p>
+                      <p className="text-[11px] text-[#6E4B3D] mt-0.5">
+                        Plated orders marked ready will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    readyOrders.map((order) => renderOrderCard(order, "READY"))
+                  )}
+
+                  {/* Collapsed Recently Served History Drawer */}
+                  {recentCompleted.length > 0 && (
+                    <div className="pt-3 border-t border-[#DAC8B8]/60 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowRecentlyServed(!showRecentlyServed)}
+                        className="w-full py-2 px-3 bg-[#FAF5EE] hover:bg-white border border-[#DAC8B8] rounded-xl text-xs font-bold text-[#6E4B3D] flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <CheckCheck size={14} className="text-emerald-700" />
+                          <span>Recently Served ({recentCompleted.length})</span>
+                        </span>
+                        <span className="text-[10px] text-[#8C3A1E] font-semibold underline">
+                          {showRecentlyServed ? "Hide History" : "View History"}
+                        </span>
+                      </button>
+
+                      {showRecentlyServed && (
+                        <div className="space-y-3 pt-3">
+                          {recentCompleted.map((order) => renderOrderCard(order, "COMPLETED"))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 4. BOTTOM TACTILE CONTROL / ACTION BAR (Reference KDS Style) */}
-      {/* ========================================================================= */}
+      {/* 4. BOTTOM ACTION & SPLIT FILTER BAR */}
       <footer className="bg-[#EFE7DE] border-t border-[#E3D5C6] p-2 flex items-center justify-between gap-2 overflow-x-auto shrink-0 shadow-md">
-        {/* Quick Filter Buttons */}
-        <div className="flex items-center gap-2">
-          {[
-            { id: "ALL", label: "ALL TICKETS", count: totalActive, activeColor: "bg-[#2C1710] text-[#FFF9F5] ring-2 ring-[#2C1710]/40 shadow-md scale-105" },
-            { id: "PENDING", label: "NEW (PENDING)", count: pendingOrders.length, activeColor: "bg-[#CA340A] text-white ring-2 ring-[#CA340A]/40 shadow-md scale-105" },
-            { id: "PREPARING", label: "IN PREP", count: preparingOrders.length, activeColor: "bg-amber-600 text-white ring-2 ring-amber-600/40 shadow-md scale-105" },
-            { id: "READY", label: "READY", count: readyOrders.length, activeColor: "bg-emerald-600 text-white ring-2 ring-emerald-600/40 shadow-md scale-105" },
-          ].map((btn) => (
-            <button
-              key={btn.id}
-              onClick={() => setActiveFilter(btn.id as any)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 border ${
-                activeFilter === btn.id
-                  ? btn.activeColor
-                  : "bg-[#FAF5EE] text-[#4A2D22] border-[#DAC8B8] hover:bg-white hover:border-[#CA340A]/40"
-              }`}
-            >
-              <span>{btn.label}</span>
-              <span className="px-2 py-0.5 rounded-full bg-black/15 text-[11px] font-mono">
-                {btn.count}
-              </span>
-            </button>
-          ))}
+        {/* Split / Column Filter Selector */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            onClick={() => setActiveFilter("ALL")}
+            className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 border ${
+              activeFilter === "ALL"
+                ? "bg-[#2C1710] text-[#FFF9F5] ring-2 ring-[#2C1710]/40 shadow-md"
+                : "bg-[#FAF5EE] text-[#4A2D22] border-[#DAC8B8] hover:bg-white"
+            }`}
+          >
+            <Columns3 size={15} />
+            <span>3-WAY SPLIT</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] font-mono">
+              {totalActive}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveFilter("PENDING")}
+            className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 border ${
+              activeFilter === "PENDING"
+                ? "bg-[#CA340A] text-white ring-2 ring-[#CA340A]/40 shadow-md"
+                : "bg-[#FAF5EE] text-[#4A2D22] border-[#DAC8B8] hover:bg-white"
+            }`}
+          >
+            <Clock size={14} />
+            <span>PENDING</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] font-mono">
+              {pendingOrders.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveFilter("COOKING")}
+            className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 border ${
+              activeFilter === "COOKING"
+                ? "bg-amber-600 text-white ring-2 ring-amber-600/40 shadow-md"
+                : "bg-[#FAF5EE] text-[#4A2D22] border-[#DAC8B8] hover:bg-white"
+            }`}
+          >
+            <ChefHat size={14} />
+            <span>COOKING</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] font-mono">
+              {preparingOrders.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveFilter("COMPLETED")}
+            className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 border ${
+              activeFilter === "COMPLETED"
+                ? "bg-emerald-700 text-white ring-2 ring-emerald-700/40 shadow-md"
+                : "bg-[#FAF5EE] text-[#4A2D22] border-[#DAC8B8] hover:bg-white"
+            }`}
+          >
+            <CheckCircle2 size={14} />
+            <span>READY TO SERVE</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] font-mono">
+              {readyOrders.length}
+            </span>
+          </button>
         </div>
 
-        {/* Action / Recall Buttons */}
+        {/* Quick Recall & Sidebar Toggle */}
         <div className="flex items-center gap-2">
-          {/* Recall Last Completed */}
           {recentCompleted.length > 0 && (
             <button
               onClick={() => {
@@ -735,20 +991,21 @@ export default function KitchenDisplayPage() {
                   handleKitchenAction(last.id, "START_PREPARING");
                 }
               }}
-              className="px-3.5 py-2 bg-[#FAF5EE] hover:bg-white border border-[#DAC8B8] text-[#8C3A1E] text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              title="Recall Last Completed Ticket"
+              className="px-3 py-1.5 sm:py-2 bg-[#FAF5EE] hover:bg-white border border-[#DAC8B8] text-[#8C3A1E] text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title="Recall Last Served Ticket back to Cooking"
             >
-              <RotateCcw size={14} />
-              <span>RECALL LAST (#{recentCompleted[0]?.orderNumber.slice(-4)})</span>
+              <RotateCcw size={13} />
+              <span className="hidden sm:inline">RECALL LAST</span>
+              <span className="font-mono">#{recentCompleted[0]?.orderNumber.slice(-4)}</span>
             </button>
           )}
 
           <button
             onClick={() => setShowSidebar(!showSidebar)}
-            className="px-3.5 py-2 bg-[#FAF5EE] hover:bg-white border border-[#DAC8B8] text-[#4A2D22] text-xs font-extrabold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            className="px-3 py-1.5 sm:py-2 bg-[#FAF5EE] hover:bg-white border border-[#DAC8B8] text-[#4A2D22] text-xs font-extrabold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
           >
-            <Utensils size={14} />
-            <span>{showSidebar ? "HIDE SUMMARY" : "SHOW SUMMARY"}</span>
+            <Utensils size={13} />
+            <span className="hidden md:inline">{showSidebar ? "HIDE SUMMARY" : "SHOW SUMMARY"}</span>
           </button>
         </div>
       </footer>

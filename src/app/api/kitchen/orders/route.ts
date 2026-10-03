@@ -4,6 +4,7 @@ import {
   getConfig,
   updateOrderStatus,
   updateOrderPayment,
+  mergeAddonToCooking,
 } from "@/lib/db";
 
 async function verifyKitchenAuth(req: NextRequest, bodyPin?: string): Promise<boolean> {
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId, action, pin } = body;
+    const { orderId, action, pin, addonRound } = body;
 
     if (!(await verifyKitchenAuth(req, pin))) {
       return NextResponse.json(
@@ -47,26 +48,38 @@ export async function PATCH(req: NextRequest) {
 
     let updatedOrder;
 
+    // Handle add-on ticket ID synthesis (e.g. ord_xxx__addon_r2)
+    const isAddonId = typeof orderId === "string" && orderId.includes("__addon_r");
+    const parentOrderId = isAddonId ? orderId.split("__addon_r")[0] : orderId;
+    const extractedRound = isAddonId
+      ? parseInt(orderId.split("__addon_r")[1], 10)
+      : addonRound;
+
+    if (action === "MERGE_ADDON_TO_COOKING" || (action === "START_PREPARING" && isAddonId)) {
+      updatedOrder = await mergeAddonToCooking(parentOrderId, extractedRound);
+      return NextResponse.json({ success: true, order: updatedOrder });
+    }
+
     switch (action) {
       case "START_PREPARING":
-        updatedOrder = await updateOrderStatus(orderId, "PREPARING", "kitchen");
+        updatedOrder = await updateOrderStatus(parentOrderId, "PREPARING", "kitchen");
         break;
 
       case "MARK_READY":
-        updatedOrder = await updateOrderStatus(orderId, "READY", "kitchen");
+        updatedOrder = await updateOrderStatus(parentOrderId, "READY", "kitchen");
         break;
 
       case "MARK_CASH_RECEIVED":
         // Cash confirmed by staff -> mark paid and complete
-        updatedOrder = await updateOrderPayment(orderId, "CASH", "PAID", true);
+        updatedOrder = await updateOrderPayment(parentOrderId, "CASH", "PAID", true);
         break;
 
       case "COMPLETE_ORDER":
-        updatedOrder = await updateOrderStatus(orderId, "COMPLETED", "kitchen");
+        updatedOrder = await updateOrderStatus(parentOrderId, "COMPLETED", "kitchen");
         break;
 
       case "CANCEL_ORDER":
-        updatedOrder = await updateOrderStatus(orderId, "CANCELLED", "kitchen");
+        updatedOrder = await updateOrderStatus(parentOrderId, "CANCELLED", "kitchen");
         break;
 
       default:

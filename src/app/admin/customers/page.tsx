@@ -92,69 +92,69 @@ export default function AdminCustomersPage() {
         {/* Customers Table */}
         <div className="bg-white rounded-2xl border border-[#CA340A]/15 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-[#2C1710]">
-              <thead className="bg-[#FFF9F5] text-[#52525b] font-extrabold uppercase tracking-wider text-[10px] border-b border-zinc-100">
+            <table className="w-full text-left text-sm text-[#2C1710]">
+              <thead className="bg-[#FFF9F5] text-zinc-500 font-bold uppercase tracking-wider text-xs border-b border-zinc-100">
                 <tr>
-                  <th className="py-3 px-4">Customer Mobile</th>
-                  <th className="py-3 px-4">Name / Alias</th>
-                  <th className="py-3 px-4 text-center">Total Orders</th>
-                  <th className="py-3 px-4 text-right">Lifetime Spend</th>
-                  <th className="py-3 px-4 text-center">Transactional SMS</th>
-                  <th className="py-3 px-4 text-center">Marketing SMS</th>
-                  <th className="py-3 px-4">First Visit</th>
-                  <th className="py-3 px-4">Last Active</th>
+                  <th className="py-3.5 px-5 font-bold">Customer Mobile</th>
+                  <th className="py-3.5 px-5 font-bold">Name / Alias</th>
+                  <th className="py-3.5 px-5 text-center font-bold">Total Orders</th>
+                  <th className="py-3.5 px-5 text-right font-bold">Lifetime Spend</th>
+                  <th className="py-3.5 px-5 text-center font-bold">Transactional SMS</th>
+                  <th className="py-3.5 px-5 text-center font-bold">Marketing SMS</th>
+                  <th className="py-3.5 px-5 font-bold">First Visit</th>
+                  <th className="py-3.5 px-5 font-bold">Last Active</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-[#52525b]">
+                    <td colSpan={8} className="py-12 text-center text-sm font-medium text-[#52525b]">
                       No customer records found. Guests are registered on menu check-in.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((c) => (
-                    <tr key={c.id} className="hover:bg-amber-50/20">
-                      <td className="py-3.5 px-4 font-mono font-bold text-[#2C1710]">
-                        <span className="flex items-center gap-1.5">
-                          <Phone size={12} className="text-[#CA340A]" />
+                    <tr key={c.id} className="hover:bg-[#FFF9F5]/70 transition-colors">
+                      <td className="py-4 px-5 font-mono font-bold text-sm text-[#2C1710]">
+                        <span className="flex items-center gap-2">
+                          <Phone size={14} className="text-[#CA340A]" />
                           +91 {c.phoneNumber.slice(-10)}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 font-medium text-[#52525b]">
+                      <td className="py-4 px-5 font-semibold text-sm text-[#2C1710]">
                         {c.name || "Guest Diner"}
                       </td>
 
-                      <td className="py-3.5 px-4 text-center font-bold text-[#2C1710]">
+                      <td className="py-4 px-5 text-center font-bold text-sm text-[#2C1710]">
                         {c.totalOrders}
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-heading font-extrabold text-sm text-[#CA340A]">
-                        ₹{c.totalSpent}
+                      <td className="py-4 px-5 text-right font-heading font-black text-sm sm:text-base text-[#CA340A]">
+                        ₹{(c.totalSpent || 0).toLocaleString()}
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                          <CheckCircle2 size={11} /> Granted
+                      <td className="py-4 px-5 text-center">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                          <CheckCircle2 size={13} /> Granted
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-4 px-5 text-center">
                         {c.marketingConsent ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                            <CheckCircle2 size={11} /> Opted-in
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                            <CheckCircle2 size={13} /> Opted-in
                           </span>
                         ) : (
-                          <span className="text-[10px] text-zinc-400">Opt-out</span>
+                          <span className="text-xs text-zinc-400 font-medium">Opt-out</span>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 text-[#52525b] text-[11px]">
+                      <td className="py-4 px-5 text-zinc-600 text-xs font-medium">
                         {new Date(c.firstSeenAt).toLocaleDateString()}
                       </td>
 
-                      <td className="py-3.5 px-4 text-[#52525b] text-[11px]">
+                      <td className="py-4 px-5 text-zinc-600 text-xs font-medium">
                         {new Date(c.lastSeenAt).toLocaleDateString()}
                       </td>
                     </tr>

@@ -34,6 +34,7 @@ export interface PlacedOrderItem {
   lineTotal: number;
   image: string;
   notes?: string;
+  round?: number;
 }
 
 export interface PlacedOrder {
@@ -57,6 +58,12 @@ export interface PlacedOrder {
   readyAt?: string;
   completedAt?: string;
   cancelledAt?: string;
+  isAddon?: boolean;
+  addonRound?: number;
+  parentOrderId?: string;
+  customerAddingFood?: boolean;
+  addingFoodUntil?: number;
+  cookingRounds?: number[];
 }
 
 interface CartContextType {
@@ -76,6 +83,8 @@ interface CartContextType {
   setActiveSheetTab: (tab: "cart" | "orders") => void;
   placedOrders: PlacedOrder[];
   isPlacingOrder: boolean;
+  activeTableOrder: PlacedOrder | null;
+  notifyAddingFood: (isAdding?: boolean) => Promise<void>;
   addToCart: (item: {
     id: string;
     name: string;
@@ -458,6 +467,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const activeTableOrder =
+    placedOrders.find((o) => o.paymentStatus !== "PAID" && o.status !== "CANCELLED") || null;
+
+  const notifyAddingFood = useCallback(
+    async (isAdding = true) => {
+      try {
+        const activeTable = tableNumber || "Table 01";
+        const currentActive = placedOrders.find(
+          (o) => o.paymentStatus !== "PAID" && o.status !== "CANCELLED"
+        );
+        await fetch("/api/orders/adding-food", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId: currentActive?.id,
+            tableNumber: activeTable,
+            isAdding,
+          }),
+        });
+      } catch (e) {
+        console.warn("Adding food notification warning:", e);
+      }
+    },
+    [tableNumber, placedOrders]
+  );
+
   const openCart = useCallback(() => {
     setActiveSheetTab("cart");
     setIsCartOpen(true);
@@ -487,6 +522,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setActiveSheetTab,
         placedOrders,
         isPlacingOrder,
+        activeTableOrder,
+        notifyAddingFood,
         addToCart,
         removeFromCart,
         increaseQuantity,

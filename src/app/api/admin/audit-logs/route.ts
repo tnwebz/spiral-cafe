@@ -5,7 +5,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get("limit") || "100", 10);
-    const logs = getAuditLogs(limit);
+    const logs = await getAuditLogs(limit);
     return NextResponse.json({ success: true, logs });
   } catch (err: any) {
     return NextResponse.json(

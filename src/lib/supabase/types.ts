@@ -533,6 +533,7 @@ export interface OrderItem {
   lineTotal: number;
   image?: string;
   notes?: string;
+  round?: number;
 }
 
 export interface Order {
@@ -563,6 +564,12 @@ export interface Order {
   paidAt?: string | null;
   completedAt?: string | null;
   cancelledAt?: string | null;
+  isAddon?: boolean;
+  addonRound?: number;
+  parentOrderId?: string;
+  customerAddingFood?: boolean;
+  addingFoodUntil?: number;
+  cookingRounds?: number[];
 }
 
 export interface Customer {

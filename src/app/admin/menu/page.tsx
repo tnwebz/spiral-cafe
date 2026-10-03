@@ -35,8 +35,10 @@ export default function AdminMenuPage() {
     try {
       const res = await fetch("/api/menu/items");
       const data = await res.json();
-      if (data.success) {
-        setItems(data.items || []);
+      if (data.success && Array.isArray(data.items)) {
+        setItems(data.items);
+      } else {
+        setItems([]);
       }
     } catch (e) {
       console.error("Fetch menu error:", e);
@@ -121,9 +123,10 @@ export default function AdminMenuPage() {
     }
   };
 
-  const categories = Array.from(new Set(items.map((it) => it.categoryName))).sort();
+  const safeItems = Array.isArray(items) ? items : [];
+  const categories = Array.from(new Set(safeItems.map((it) => it.categoryName))).sort();
 
-  const filteredItems = items.filter((it) => {
+  const filteredItems = safeItems.filter((it) => {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       q === "" ||

@@ -8,12 +8,12 @@ export async function GET(req: NextRequest) {
     const history = searchParams.get("history");
 
     if (history === "true") {
-      const all = getAllSettlements();
+      const all = await getAllSettlements();
       return NextResponse.json({ success: true, settlements: all });
     }
 
-    const summary = getSettlementSummary(date);
-    const settlements = getAllSettlements();
+    const summary = await getSettlementSummary(date);
+    const settlements = await getAllSettlements();
 
     return NextResponse.json({
       success: true,
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const settlement = recordSettlement({
+    const settlement = await recordSettlement({
       date,
       cashCounted,
       cashSettled,

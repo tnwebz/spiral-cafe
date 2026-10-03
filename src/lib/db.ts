@@ -69,7 +69,38 @@ export const DEFAULT_CONFIG: CafeConfig = {
 // HELPER CONVERTERS (DB Snake_Case <-> App CamelCase)
 // ----------------------------------------------------
 
+export function normalizeTableNumber(table: string): string {
+  let clean = (table || "").trim();
+  const numMatch = clean.match(/\d+/);
+  if (numMatch) {
+    return `Table ${numMatch[0].padStart(2, "0")}`;
+  }
+  return clean || "Table 01";
+}
+
 function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
+  const mappedItems: OrderItem[] =
+    items.length > 0
+      ? items
+      : row.order_items
+      ? row.order_items.map(mapDbOrderItemToOrderItem)
+      : [];
+
+  const notesStr = row.notes || "";
+  const addingMatch = notesStr.match(/\[ADDING_FOOD_UNTIL:(\d+)\]/);
+  const addingFoodUntil = addingMatch ? parseInt(addingMatch[1], 10) : undefined;
+  const customerAddingFood = addingFoodUntil ? Date.now() < addingFoodUntil : false;
+
+  const cookingMatch = notesStr.match(/\[COOKING_ROUNDS:([0-9,]+)\]/);
+  const cookingRounds = cookingMatch
+    ? cookingMatch[1]
+        .split(",")
+        .map(Number)
+        .filter((n: number) => !isNaN(n))
+    : row.status === "PENDING"
+    ? []
+    : [1];
+
   return {
     id: row.id,
     orderNumber: row.order_number,
@@ -77,7 +108,7 @@ function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
     customerSessionId: row.customer_session_id || "",
     customerId: row.customer_id || undefined,
     customerPhone: row.customer_phone || undefined,
-    items: items.length > 0 ? items : (row.order_items ? row.order_items.map(mapDbOrderItemToOrderItem) : []),
+    items: mappedItems,
     subtotal: Number(row.subtotal || 0),
     tax: Number(row.tax || 0),
     packagingFee: Number(row.packaging_fee || 0),
@@ -98,10 +129,16 @@ function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
     paidAt: row.paid_at || undefined,
     completedAt: row.completed_at || undefined,
     cancelledAt: row.cancelled_at || undefined,
+    customerAddingFood,
+    addingFoodUntil,
+    cookingRounds,
   };
 }
 
 function mapDbOrderItemToOrderItem(row: any): OrderItem {
+  const roundMatch = (row.notes || "").match(/\[ROUND:(\d+)\]/);
+  const round = roundMatch ? parseInt(roundMatch[1], 10) : 1;
+
   return {
     id: row.id,
     productId: row.product_id || "",
@@ -111,6 +148,7 @@ function mapDbOrderItemToOrderItem(row: any): OrderItem {
     lineTotal: Number(row.line_total || 0),
     image: row.image || "",
     notes: row.notes || undefined,
+    round,
   };
 }
 
@@ -328,17 +366,289 @@ export async function getSessionOrders(customerSessionId: string): Promise<Order
   return (data || []).map((row: any) => mapDbOrderToOrder(row));
 }
 
+export async function getActiveOrderForTable(tableNumber: string): Promise<Order | null> {
+  const cleanTable = normalizeTableNumber(tableNumber);
+
+  const { data, error } = await supabaseAdmin
+    .from("orders")
+    .select("*, order_items(*)")
+    .eq("table_number", cleanTable)
+    .neq("status", "CANCELLED")
+    .neq("payment_status", "PAID")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return mapDbOrderToOrder(data);
+}
+
+export async function addItemsToExistingOrder(params: {
+  orderId: string;
+  items: Array<{
+    productId: string;
+    name: string;
+    price: number;
+    quantity: number;
+    image: string;
+    notes?: string;
+  }>;
+  notes?: string;
+}): Promise<Order> {
+  const current = await getOrderById(params.orderId);
+  if (!current) {
+    throw new Error(`Active order not found for ID: ${params.orderId}`);
+  }
+
+  const config = await getConfig();
+  const now = new Date().toISOString();
+
+  // Determine current max round from existing items
+  const existingRounds = current.items.map((it) => {
+    const match = (it.notes || "").match(/\[ROUND:(\d+)\]/);
+    return match ? parseInt(match[1], 10) : (it.round || 1);
+  });
+  const currentMaxRound = existingRounds.length > 0 ? Math.max(...existingRounds) : 1;
+  const nextRound = current.status === "PENDING" ? currentMaxRound : currentMaxRound + 1;
+
+  // Prepare new items payload with [ROUND:nextRound]
+  const newOrderItems: OrderItem[] = params.items.map((item, index) => {
+    const qty = Math.max(1, Math.floor(item.quantity));
+    const lineTotal = item.price * qty;
+    const itemNote = (item.notes || "").trim();
+    const taggedNote = itemNote ? `${itemNote} [ROUND:${nextRound}]` : `[ROUND:${nextRound}]`;
+
+    return {
+      id: `oi_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`,
+      productId: item.productId,
+      name: item.name,
+      price: item.price,
+      quantity: qty,
+      lineTotal,
+      image: item.image,
+      notes: taggedNote,
+      round: nextRound,
+    };
+  });
+
+  const allItems = [...current.items, ...newOrderItems];
+  const subtotal = allItems.reduce((sum, it) => sum + it.lineTotal, 0);
+  const tax = Math.round((subtotal * config.taxPercentage) / 100);
+  const packagingFee = config.packagingFee;
+  const serviceCharge = config.serviceCharge;
+  const grandTotal = subtotal + tax + packagingFee + serviceCharge;
+
+  // Clean adding-food flag from notes and append any new customer note
+  let updatedNotes = current.notes || "";
+  updatedNotes = updatedNotes.replace(/\[ADDING_FOOD_UNTIL:\d+\]/g, "").trim();
+  if (params.notes && params.notes.trim()) {
+    updatedNotes = updatedNotes ? `${updatedNotes} | ${params.notes.trim()}` : params.notes.trim();
+  }
+
+  const itemsPayload: Database["public"]["Tables"]["order_items"]["Insert"][] = newOrderItems.map((it) => ({
+    id: it.id!,
+    order_id: current.id,
+    product_id: it.productId || null,
+    name: it.name,
+    price: it.price,
+    quantity: it.quantity,
+    line_total: it.lineTotal,
+    image: it.image || "",
+    notes: it.notes || null,
+  }));
+
+  const { error: insertErr } = await supabaseAdmin.from("order_items").insert(itemsPayload);
+  if (insertErr) {
+    throw new Error(`Failed to insert add-on items: ${insertErr.message}`);
+  }
+
+  // Status transition when adding items:
+  // If the previous order was COMPLETED (already served) or READY:
+  // Since new items have been added to the table order that need cooking,
+  // the order status MUST become "PENDING" so it enters the kitchen workflow!
+  let newStatus: OrderStatus = current.status;
+  if (current.status === "COMPLETED" || current.status === "READY") {
+    newStatus = "PENDING";
+  }
+
+  // If the previous order was already cooking/served, preserve those rounds in [COOKING_ROUNDS]
+  if (current.status !== "PENDING" && !updatedNotes.includes("[COOKING_ROUNDS:")) {
+    const prevRounds = Array.from(new Set(existingRounds)).sort((a, b) => a - b);
+    const cookedRounds = prevRounds.length > 0 ? prevRounds : [1];
+    updatedNotes = updatedNotes ? `${updatedNotes} [COOKING_ROUNDS:${cookedRounds.join(",")}]` : `[COOKING_ROUNDS:${cookedRounds.join(",")}]`;
+  }
+
+  const orderUpdates: Database["public"]["Tables"]["orders"]["Update"] = {
+    status: newStatus,
+    subtotal,
+    tax,
+    packaging_fee: packagingFee,
+    service_charge: serviceCharge,
+    grand_total: grandTotal,
+    notes: updatedNotes,
+    updated_at: now,
+  };
+
+  const { error: updateErr } = await supabaseAdmin
+    .from("orders")
+    .update(orderUpdates)
+    .eq("id", current.id);
+
+  if (updateErr) {
+    throw new Error(`Failed to update order totals: ${updateErr.message}`);
+  }
+
+  return {
+    ...current,
+    status: newStatus,
+    items: allItems,
+    subtotal,
+    tax,
+    packagingFee,
+    serviceCharge,
+    grandTotal,
+    notes: updatedNotes,
+    updatedAt: now,
+  };
+}
+
+export async function setCustomerAddingFoodFlag(params: {
+  orderId?: string;
+  tableNumber?: string;
+  isAdding: boolean;
+}): Promise<boolean> {
+  let targetOrder: Order | null | undefined = null;
+  if (params.orderId) {
+    targetOrder = await getOrderById(params.orderId);
+  }
+  if (!targetOrder && params.tableNumber) {
+    targetOrder = await getActiveOrderForTable(params.tableNumber);
+  }
+
+  if (!targetOrder) {
+    return false;
+  }
+
+  let notes = targetOrder.notes || "";
+  notes = notes.replace(/\[ADDING_FOOD_UNTIL:\d+\]/g, "").trim();
+
+  if (params.isAdding) {
+    const expireTs = Date.now() + 120000; // 2 minutes window
+    notes = notes ? `${notes} [ADDING_FOOD_UNTIL:${expireTs}]` : `[ADDING_FOOD_UNTIL:${expireTs}]`;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("orders")
+    .update({ notes, updated_at: new Date().toISOString() })
+    .eq("id", targetOrder.id);
+
+  return !error;
+}
+
+export async function mergeAddonToCooking(orderId: string, addonRound?: number): Promise<Order> {
+  const current = await getOrderById(orderId);
+  if (!current) {
+    throw new Error(`Order not found: ${orderId}`);
+  }
+
+  let notes = current.notes || "";
+  const match = notes.match(/\[COOKING_ROUNDS:([0-9,]+)\]/);
+  const existingCooking = match
+    ? match[1].split(",").map(Number).filter((n) => !isNaN(n))
+    : [1];
+
+  let targetRounds = [...existingCooking];
+  if (addonRound && !targetRounds.includes(addonRound)) {
+    targetRounds.push(addonRound);
+  } else {
+    const allRounds = Array.from(new Set(current.items.map((it) => it.round || 1)));
+    targetRounds = Array.from(new Set([...targetRounds, ...allRounds]));
+  }
+  targetRounds.sort((a, b) => a - b);
+
+  notes = notes.replace(/\[COOKING_ROUNDS:[0-9,]+\]/g, "").trim();
+  notes = notes ? `${notes} [COOKING_ROUNDS:${targetRounds.join(",")}]` : `[COOKING_ROUNDS:${targetRounds.join(",")}]`;
+
+  const now = new Date().toISOString();
+  const updates: Database["public"]["Tables"]["orders"]["Update"] = {
+    notes,
+    status: "PREPARING",
+    preparing_at: current.preparingAt || now,
+    updated_at: now,
+  };
+
+  const { error } = await supabaseAdmin.from("orders").update(updates).eq("id", current.id);
+  if (error) {
+    throw new Error(`Failed to merge add-on into cooking: ${error.message}`);
+  }
+
+  return {
+    ...current,
+    status: "PREPARING",
+    notes,
+    cookingRounds: targetRounds,
+    updatedAt: now,
+  };
+}
+
+export async function getTablesStatus(): Promise<
+  Array<{
+    tableNumber: string;
+    isLocked: boolean;
+    activeOrderId?: string;
+    orderNumber?: string;
+    customerSessionId?: string;
+    grandTotal?: number;
+    status?: OrderStatus;
+  }>
+> {
+  const TABLES = Array.from({ length: 15 }, (_, i) => `Table ${String(i + 1).padStart(2, "0")}`);
+
+  const { data } = await supabaseAdmin
+    .from("orders")
+    .select("id, order_number, table_number, customer_session_id, grand_total, status, payment_status")
+    .neq("status", "CANCELLED")
+    .neq("payment_status", "PAID");
+
+  const activeByTable = new Map<string, any>();
+  for (const row of data || []) {
+    const norm = normalizeTableNumber(row.table_number);
+    if (!activeByTable.has(norm)) {
+      activeByTable.set(norm, row);
+    }
+  }
+
+  return TABLES.map((t) => {
+    const active = activeByTable.get(t);
+    return {
+      tableNumber: t,
+      isLocked: !!active,
+      activeOrderId: active?.id,
+      orderNumber: active?.order_number,
+      customerSessionId: active?.customer_session_id,
+      grandTotal: active ? Number(active.grand_total) : 0,
+      status: active?.status,
+    };
+  });
+}
+
 export async function getActiveKitchenOrders(): Promise<{
   pending: Order[];
   preparing: Order[];
   ready: Order[];
   recentCompleted: Order[];
 }> {
+  // Fetch active table orders that are not settled (payment_status !== PAID and status !== CANCELLED)
+  // as well as recently completed orders
   const [activeRes, completedRes] = await Promise.all([
     supabaseAdmin
       .from("orders")
       .select("*, order_items(*)")
-      .in("status", ["PENDING", "PREPARING", "READY"])
+      .neq("status", "CANCELLED")
+      .neq("payment_status", "PAID")
       .order("created_at", { ascending: true }),
     supabaseAdmin
       .from("orders")
@@ -349,12 +659,119 @@ export async function getActiveKitchenOrders(): Promise<{
   ]);
 
   const activeOrders = (activeRes.data || []).map((r: any) => mapDbOrderToOrder(r));
-  const recentCompleted = (completedRes.data || []).map((r: any) => mapDbOrderToOrder(r));
+  const rawCompleted = (completedRes.data || []).map((r: any) => mapDbOrderToOrder(r));
+
+  const pending: Order[] = [];
+  const preparing: Order[] = [];
+  const ready: Order[] = [];
+
+  for (const order of activeOrders) {
+    const roundsPresent = Array.from(new Set(order.items.map((it) => it.round || 1))).sort((a, b) => a - b);
+    const cookingRounds =
+      order.cookingRounds && order.cookingRounds.length > 0
+        ? order.cookingRounds
+        : order.status === "PENDING"
+        ? []
+        : [1];
+
+    const unmergedRounds = roundsPresent.filter((r) => !cookingRounds.includes(r));
+
+    // Self-healing database check:
+    // If order was marked COMPLETED or READY, but has unmerged rounds that need cooking:
+    if (order.status === "COMPLETED" && unmergedRounds.length > 0) {
+      order.status = "PENDING";
+      void Promise.resolve(
+        supabaseAdmin
+          .from("orders")
+          .update({ status: "PENDING", updated_at: new Date().toISOString() })
+          .eq("id", order.id)
+      ).catch((e: unknown) => console.warn("Notice: auto healing order status:", e));
+    }
+
+    if (order.status === "PENDING") {
+      if (cookingRounds.length === 0) {
+        // Initial order where all rounds/items are pending together
+        pending.push(order);
+      } else {
+        // Order where previous rounds were already cooked/served, and newly added rounds are pending
+        for (const r of unmergedRounds) {
+          const roundItems = order.items.filter((it) => (it.round || 1) === r);
+          const roundTotal = roundItems.reduce((sum, it) => sum + it.lineTotal, 0);
+          pending.push({
+            ...order,
+            id: `${order.id}__addon_r${r}`,
+            parentOrderId: order.id,
+            isAddon: true,
+            addonRound: r,
+            items: roundItems,
+            grandTotal: roundTotal,
+            subtotal: roundTotal,
+            notes: order.notes,
+          });
+        }
+      }
+    } else if (order.status === "PREPARING") {
+      // Items currently in cooking
+      const cookingItems = order.items.filter((it) => cookingRounds.includes(it.round || 1));
+      if (cookingItems.length > 0) {
+        preparing.push({
+          ...order,
+          items: cookingItems,
+        });
+      }
+
+      // Synthesize an Add-On ticket in PENDING for each unmerged round
+      for (const r of unmergedRounds) {
+        const roundItems = order.items.filter((it) => (it.round || 1) === r);
+        const roundTotal = roundItems.reduce((sum, it) => sum + it.lineTotal, 0);
+        pending.push({
+          ...order,
+          id: `${order.id}__addon_r${r}`,
+          parentOrderId: order.id,
+          isAddon: true,
+          addonRound: r,
+          items: roundItems,
+          grandTotal: roundTotal,
+          subtotal: roundTotal,
+          notes: order.notes,
+        });
+      }
+    } else if (order.status === "READY") {
+      const readyItems = order.items.filter((it) => cookingRounds.includes(it.round || 1));
+      ready.push({
+        ...order,
+        items: readyItems.length > 0 ? readyItems : order.items,
+      });
+
+      for (const r of unmergedRounds) {
+        const roundItems = order.items.filter((it) => (it.round || 1) === r);
+        const roundTotal = roundItems.reduce((sum, it) => sum + it.lineTotal, 0);
+        pending.push({
+          ...order,
+          id: `${order.id}__addon_r${r}`,
+          parentOrderId: order.id,
+          isAddon: true,
+          addonRound: r,
+          items: roundItems,
+          grandTotal: roundTotal,
+          subtotal: roundTotal,
+          notes: order.notes,
+        });
+      }
+    }
+  }
+
+  // Remove any order from recentCompleted if it has active pending or preparing add-ons
+  const activeOrderIds = new Set([
+    ...pending.map((p) => p.parentOrderId || p.id),
+    ...preparing.map((p) => p.parentOrderId || p.id),
+  ]);
+  const recentCompleted = rawCompleted.filter((c) => !activeOrderIds.has(c.id));
 
   return {
-    pending: activeOrders.filter((o) => o.status === "PENDING"),
-    preparing: activeOrders.filter((o) => o.status === "PREPARING"),
-    ready: activeOrders.filter((o) => o.status === "READY"),
+    pending,
+    preparing,
+    ready,
     recentCompleted,
   };
 }
@@ -384,10 +801,12 @@ export async function createOrder(params: {
   const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const orderNumber = generateOrderNumber();
 
-  // Price calculations
+  // Price calculations - Tag initial items with [ROUND:1]
   const orderItems: OrderItem[] = params.items.map((item, index) => {
     const qty = Math.max(1, Math.floor(item.quantity));
     const lineTotal = item.price * qty;
+    const note = (item.notes || "").trim();
+    const taggedNote = note ? `${note} [ROUND:1]` : `[ROUND:1]`;
     return {
       id: `item-${Date.now()}-${index}`,
       productId: item.productId,
@@ -396,7 +815,8 @@ export async function createOrder(params: {
       quantity: qty,
       lineTotal,
       image: item.image,
-      notes: item.notes,
+      notes: taggedNote,
+      round: 1,
     };
   });
 
@@ -406,12 +826,7 @@ export async function createOrder(params: {
   const serviceCharge = config.serviceCharge;
   const grandTotal = subtotal + tax + packagingFee + serviceCharge;
 
-  let cleanTable = params.tableNumber.trim();
-  if (/^\d+$/.test(cleanTable)) {
-    cleanTable = `Table ${cleanTable.padStart(2, "0")}`;
-  } else if (!cleanTable.toLowerCase().startsWith("table")) {
-    cleanTable = `Table ${cleanTable}`;
-  }
+  const cleanTable = normalizeTableNumber(params.tableNumber);
 
   const orderPayload = {
     id: orderId,
@@ -537,8 +952,8 @@ export async function updateOrderStatus(
   const validTransitions: Record<OrderStatus, OrderStatus[]> = {
     PENDING: ["PREPARING", "CANCELLED"],
     PREPARING: ["READY", "CANCELLED"],
-    READY: ["COMPLETED", "CANCELLED"],
-    COMPLETED: [],
+    READY: ["COMPLETED", "PREPARING", "PENDING", "CANCELLED"],
+    COMPLETED: ["PREPARING", "PENDING"],
     CANCELLED: [],
   };
 
@@ -548,22 +963,37 @@ export async function updateOrderStatus(
   }
 
   const now = new Date().toISOString();
+  let updatedNotes = current.notes || "";
+
   const updates: Database["public"]["Tables"]["orders"]["Update"] = {
     status: newStatus,
     updated_at: now,
   };
 
-  if (newStatus === "PREPARING") updates.preparing_at = now;
-  else if (newStatus === "READY") updates.ready_at = now;
-  else if (newStatus === "COMPLETED") updates.completed_at = now;
-  else if (newStatus === "CANCELLED") updates.cancelled_at = now;
+  if (newStatus === "PREPARING") {
+    updates.preparing_at = now;
+    // Strip adding food flag since kitchen is now preparing
+    updatedNotes = updatedNotes.replace(/\[ADDING_FOOD_UNTIL:\d+\]/g, "").trim();
+    if (!updatedNotes.includes("[COOKING_ROUNDS:")) {
+      const allRounds = Array.from(new Set(current.items.map((it) => it.round || 1))).sort((a, b) => a - b);
+      const roundsToCook = allRounds.length > 0 ? allRounds : [1];
+      updatedNotes = updatedNotes ? `${updatedNotes} [COOKING_ROUNDS:${roundsToCook.join(",")}]` : `[COOKING_ROUNDS:${roundsToCook.join(",")}]`;
+    }
+    updates.notes = updatedNotes;
+  } else if (newStatus === "READY") {
+    updates.ready_at = now;
+  } else if (newStatus === "COMPLETED") {
+    updates.completed_at = now;
+  } else if (newStatus === "CANCELLED") {
+    updates.cancelled_at = now;
+  }
 
   const { error } = await supabaseAdmin.from("orders").update(updates).eq("id", current.id);
   if (error) {
     throw new Error(`Failed to update order status in Supabase: ${error.message}`);
   }
 
-  const updatedOrder = { ...current, ...updates };
+  const updatedOrder = { ...current, ...updates, notes: updatedNotes };
 
   await recordAuditLog(
     actorName,

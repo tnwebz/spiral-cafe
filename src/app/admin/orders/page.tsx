@@ -21,16 +21,21 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Tab: COMPLETED (history of paid & completed orders) vs UNSETTLED (active / unpaid tickets)
+  const [orderTab, setOrderTab] = useState<"COMPLETED" | "UNSETTLED">("COMPLETED");
+
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [methodFilter, setMethodFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("");
 
@@ -139,7 +144,17 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const filteredOrders = orders.filter((o) => {
+  // Split into Completed Order History vs Unsettled / Active
+  const completedOrdersList = orders.filter(
+    (o) => (o.status === "COMPLETED" && o.paymentStatus === "PAID") || o.status === "CANCELLED"
+  );
+  const unsettledOrdersList = orders.filter(
+    (o) => !(o.status === "COMPLETED" && o.paymentStatus === "PAID") && o.status !== "CANCELLED"
+  );
+
+  const baseOrders = orderTab === "COMPLETED" ? completedOrdersList : unsettledOrdersList;
+
+  const filteredOrders = baseOrders.filter((o) => {
     const matchesSearch =
       searchQuery === "" ||
       o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -147,12 +162,15 @@ export default function AdminOrdersPage() {
       o.tableNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (o.items || []).some((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesStatus = statusFilter === "ALL" || o.status === statusFilter;
-    const matchesPayment = paymentFilter === "ALL" || o.paymentStatus === paymentFilter;
-    const matchesMethod = methodFilter === "ALL" || o.paymentMethod === methodFilter;
+    const matchesStatus =
+      statusFilter === "ALL" || o.status === statusFilter;
+
+    const matchesMethod =
+      methodFilter === "ALL" || o.paymentMethod === methodFilter;
+
     const matchesDate = !dateFilter || o.createdAt.startsWith(dateFilter);
 
-    return matchesSearch && matchesStatus && matchesPayment && matchesMethod && matchesDate;
+    return matchesSearch && matchesStatus && matchesMethod && matchesDate;
   });
 
   const totalPages = Math.ceil(filteredOrders.length / pageSize) || 1;
@@ -171,7 +189,7 @@ export default function AdminOrdersPage() {
               Order History &amp; Records
             </h1>
             <p className="text-xs sm:text-sm text-[#52525b]">
-              Complete archive of dine-in tickets, payment statuses, and customer orders
+              Complete archive of dine-in tickets, receipts, and customer orders
             </p>
           </div>
 
@@ -185,6 +203,62 @@ export default function AdminOrdersPage() {
             </button>
           </div>
         </div>
+
+        {/* TABS: COMPLETED ORDER HISTORY vs UNSETTLED / ACTIVE */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => {
+              setOrderTab("COMPLETED");
+              setStatusFilter("ALL");
+              setMethodFilter("ALL");
+              setCurrentPage(1);
+            }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+              orderTab === "COMPLETED"
+                ? "bg-[#2C1710] text-[#FFF9F5] border-[#2C1710] shadow-sm"
+                : "bg-white text-[#52525b] border-zinc-200 hover:bg-[#FFF9F5]"
+            }`}
+          >
+            <CheckCircle2 size={15} className={orderTab === "COMPLETED" ? "text-emerald-400" : "text-emerald-600"} />
+            <span>Completed Order History</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/20 text-white">
+              {completedOrdersList.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              setOrderTab("UNSETTLED");
+              setStatusFilter("ALL");
+              setMethodFilter("ALL");
+              setCurrentPage(1);
+            }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+              orderTab === "UNSETTLED"
+                ? "bg-[#CA340A] text-white border-[#CA340A] shadow-sm"
+                : "bg-white text-[#52525b] border-zinc-200 hover:bg-[#FFF9F5]"
+            }`}
+          >
+            <Clock size={15} />
+            <span>Unsettled / Active Orders</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/20 text-white">
+              {unsettledOrdersList.length}
+            </span>
+            {unsettledOrdersList.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            )}
+          </button>
+        </div>
+
+        {/* Info banner for Unsettled tab */}
+        {orderTab === "UNSETTLED" && (
+          <div className="bg-amber-50 border border-amber-200/80 p-3.5 rounded-2xl flex items-center gap-2.5 text-xs text-amber-900">
+            <AlertCircle size={16} className="text-amber-700 shrink-0" />
+            <span>
+              These orders are active on the Main Dashboard and awaiting completion or payment. Once collected &amp; completed, they automatically move to <strong>Completed Order History</strong>.
+            </span>
+          </div>
+        )}
 
         {/* Filters Card */}
         <div className="bg-white p-4 rounded-2xl border border-[#CA340A]/15 shadow-xs space-y-3">
@@ -227,29 +301,37 @@ export default function AdminOrdersPage() {
                 }}
                 className="w-full px-3 py-2 text-xs rounded-xl bg-[#FFF9F5] border border-zinc-200 font-semibold text-[#2C1710]"
               >
-                <option value="ALL">All Order States</option>
-                <option value="PENDING">PENDING</option>
-                <option value="PREPARING">PREPARING</option>
-                <option value="READY">READY</option>
-                <option value="COMPLETED">COMPLETED</option>
-                <option value="CANCELLED">CANCELLED</option>
+                {orderTab === "COMPLETED" ? (
+                  <>
+                    <option value="ALL">All Completed States</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="CANCELLED">CANCELLED</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="ALL">All Active States</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="PREPARING">PREPARING</option>
+                    <option value="READY">READY</option>
+                    <option value="COMPLETED">COMPLETED (Unpaid)</option>
+                  </>
+                )}
               </select>
             </div>
 
-            {/* Payment Status */}
+            {/* Payment Method */}
             <div>
               <select
-                value={paymentFilter}
+                value={methodFilter}
                 onChange={(e) => {
-                  setPaymentFilter(e.target.value);
+                  setMethodFilter(e.target.value);
                   setCurrentPage(1);
                 }}
                 className="w-full px-3 py-2 text-xs rounded-xl bg-[#FFF9F5] border border-zinc-200 font-semibold text-[#2C1710]"
               >
-                <option value="ALL">All Payments</option>
-                <option value="PAID">PAID</option>
-                <option value="UNPAID">UNPAID</option>
-                <option value="PENDING_CASH">PENDING_CASH</option>
+                <option value="ALL">All Payment Methods</option>
+                <option value="CASH">CASH</option>
+                <option value="ONLINE">ONLINE / UPI</option>
               </select>
             </div>
           </div>
@@ -258,26 +340,38 @@ export default function AdminOrdersPage() {
         {/* Table View */}
         <div className="bg-white rounded-2xl border border-[#CA340A]/15 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-[#2C1710]">
-              <thead className="bg-[#FFF9F5] text-[#52525b] font-extrabold uppercase tracking-wider text-[10px] border-b border-zinc-100">
+            <table className="w-full text-left text-sm text-[#2C1710]">
+              <thead className="bg-[#FFF9F5] text-zinc-500 font-bold uppercase tracking-wider text-xs border-b border-zinc-100">
                 <tr>
-                  <th className="py-3 px-4">Order No</th>
-                  <th className="py-3 px-4">Date &amp; Time</th>
-                  <th className="py-3 px-4">Table</th>
-                  <th className="py-3 px-4">Customer</th>
-                  <th className="py-3 px-4">Items</th>
-                  <th className="py-3 px-4 text-right">Total</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-center">Payment</th>
-                  <th className="py-3 px-4 text-center">Invoice</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3.5 px-4 font-bold">Order No</th>
+                  <th className="py-3.5 px-4 font-bold">Date &amp; Time</th>
+                  <th className="py-3.5 px-4 font-bold">Table</th>
+                  <th className="py-3.5 px-4 font-bold">Customer</th>
+                  <th className="py-3.5 px-4 font-bold">Items</th>
+                  <th className="py-3.5 px-4 text-right font-bold">Total</th>
+                  <th className="py-3.5 px-4 text-center font-bold">Status</th>
+                  <th className="py-3.5 px-4 text-center font-bold">Payment</th>
+                  <th className="py-3.5 px-4 text-center font-bold">Invoice</th>
+                  <th className="py-3.5 px-4 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {paginatedOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-[#52525b]">
-                      No orders found matching your search.
+                    <td colSpan={10} className="py-14 text-center text-sm font-medium text-[#52525b]">
+                      <div className="flex flex-col items-center justify-center">
+                        <CheckCircle2 size={32} className="text-emerald-600 mb-2 opacity-60" />
+                        <p className="font-bold text-sm text-[#2C1710]">
+                          {orderTab === "COMPLETED"
+                            ? "No completed orders found matching your search."
+                            : "No unsettled orders. All active orders are paid and completed!"}
+                        </p>
+                        <p className="text-xs text-[#52525b] mt-1">
+                          {orderTab === "COMPLETED"
+                            ? "Orders automatically appear here once cooked/served and paid."
+                            : "Unpaid or in-progress orders from the dashboard will show here."}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -286,8 +380,8 @@ export default function AdminOrdersPage() {
                     const isCashUnpaid = order.paymentMethod === "CASH" && !isPaid;
 
                     return (
-                      <tr key={order.id} className="hover:bg-amber-50/20 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-[#2C1710]">
+                      <tr key={order.id} className="hover:bg-[#FFF9F5]/70 transition-colors">
+                        <td className="py-4 px-4 font-mono font-bold text-sm text-[#2C1710]">
                           <Link
                             href={`/admin/orders/${order.id}`}
                             className="hover:text-[#CA340A] hover:underline"
@@ -296,9 +390,9 @@ export default function AdminOrdersPage() {
                           </Link>
                         </td>
 
-                        <td className="py-3 px-4 text-[#52525b]">
-                          <div>{new Date(order.createdAt).toLocaleDateString()}</div>
-                          <div className="text-[10px] text-zinc-400">
+                        <td className="py-4 px-4 text-[#52525b]">
+                          <div className="font-semibold text-xs sm:text-sm text-[#2C1710]">{new Date(order.createdAt).toLocaleDateString()}</div>
+                          <div className="text-xs text-zinc-500 font-medium">
                             {new Date(order.createdAt).toLocaleTimeString([], {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -306,81 +400,83 @@ export default function AdminOrdersPage() {
                           </div>
                         </td>
 
-                        <td className="py-3 px-4 font-bold text-[#CA340A]">
-                          {order.tableNumber}
+                        <td className="py-4 px-4 font-bold text-xs sm:text-sm text-[#CA340A]">
+                          <span className="px-2 py-0.5 rounded-md bg-[#CA340A]/10 inline-block">
+                            {order.tableNumber}
+                          </span>
                         </td>
 
-                        <td className="py-3 px-4 text-[#52525b]">
+                        <td className="py-4 px-4 text-[#52525b]">
                           {order.customerPhone ? (
-                            <span className="font-mono text-[11px] flex items-center gap-1">
-                              <Phone size={10} className="text-[#CA340A]" />
+                            <span className="font-mono text-xs sm:text-sm flex items-center gap-1.5 font-medium text-[#2C1710]">
+                              <Phone size={12} className="text-[#CA340A]" />
                               {order.customerPhone}
                             </span>
                           ) : (
-                            <span className="text-zinc-400">Walk-in</span>
+                            <span className="text-zinc-400 text-xs sm:text-sm">Walk-in</span>
                           )}
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="truncate max-w-[160px]">
+                        <td className="py-4 px-4">
+                          <div className="truncate max-w-[200px] text-xs sm:text-sm font-medium text-[#2C1710]" title={order.items.map((i) => `${i.name} ×${i.quantity}`).join(", ")}>
                             {order.items.map((i) => `${i.name} ×${i.quantity}`).join(", ")}
                           </div>
                         </td>
 
-                        <td className="py-3 px-4 text-right font-heading font-extrabold text-[#2C1710]">
-                          ₹{order.grandTotal}
+                        <td className="py-4 px-4 text-right font-heading font-black text-sm sm:text-base text-[#2C1710]">
+                          ₹{(order.grandTotal || 0).toLocaleString()}
                         </td>
 
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-4 px-4 text-center">
                           <span
-                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                            className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                               order.status === "COMPLETED"
-                                ? "bg-emerald-100 text-emerald-800"
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                 : order.status === "READY"
-                                ? "bg-green-100 text-green-800"
+                                ? "bg-green-50 text-green-800 border border-green-200"
                                 : order.status === "PREPARING"
-                                ? "bg-blue-100 text-blue-800"
+                                ? "bg-blue-50 text-blue-800 border border-blue-200"
                                 : order.status === "CANCELLED"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-amber-100 text-amber-800"
+                                ? "bg-red-50 text-red-800 border border-red-200"
+                                : "bg-amber-50 text-amber-800 border border-amber-200"
                             }`}
                           >
                             {order.status}
                           </span>
                         </td>
 
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-4 px-4 text-center">
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
                               isPaid
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-amber-100 text-amber-800"
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                : "bg-amber-50 text-amber-800 border border-amber-200"
                             }`}
                           >
                             {order.paymentStatus}
                           </span>
                         </td>
 
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-4 px-4 text-center">
                           {order.invoiceNumber ? (
                             <button
                               onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                              className="text-[11px] font-mono font-bold text-[#CA340A] hover:underline cursor-pointer"
+                              className="text-xs font-mono font-bold text-[#CA340A] hover:underline cursor-pointer"
                               title="View Invoice Receipt"
                             >
                               {order.invoiceNumber}
                             </button>
                           ) : (
-                            <span className="text-zinc-400 text-[10px]">None</span>
+                            <span className="text-zinc-400 text-xs">None</span>
                           )}
                         </td>
 
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-4 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
                             {isCashUnpaid && (
                               <button
                                 onClick={() => setSelectedOrderForCash(order)}
-                                className="px-2 py-1 bg-[#15803D] hover:bg-[#166534] text-white rounded-md text-[10px] font-bold"
+                                className="px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer"
                               >
                                 Collect
                               </button>
@@ -390,7 +486,7 @@ export default function AdminOrdersPage() {
                               <button
                                 disabled={!isPaid || generatingId === order.id}
                                 onClick={() => handleGenerateInvoice(order.id)}
-                                className={`px-2 py-1 rounded-md text-[10px] font-bold ${
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-2xs transition-all ${
                                   isPaid
                                     ? "bg-[#CA340A] text-white hover:bg-[#A82806] cursor-pointer"
                                     : "bg-zinc-100 text-zinc-400 opacity-60 cursor-not-allowed"
@@ -402,18 +498,18 @@ export default function AdminOrdersPage() {
                               <>
                                 <button
                                   onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                                  className="px-2 py-1 bg-[#FFF9F5] border border-[#CA340A]/30 text-[#CA340A] hover:bg-[#CA340A] hover:text-white rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                  className="px-3 py-1.5 bg-[#FFF9F5] border border-[#CA340A]/30 text-[#CA340A] hover:bg-[#CA340A] hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                                   title="View 58mm Thermal Bill"
                                 >
-                                  <Printer size={11} />
+                                  <Printer size={13} />
                                   <span>View Bill</span>
                                 </button>
                                 <button
                                   onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                                  className="px-1.5 py-1 bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-md text-[10px] font-bold flex items-center gap-0.5 cursor-pointer transition-colors shadow-2xs"
+                                  className="px-2.5 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                                   title="Send Bill via SMS to Customer"
                                 >
-                                  <MessageSquare size={10} />
+                                  <MessageSquare size={12} />
                                   <span>SMS</span>
                                 </button>
                               </>
@@ -421,10 +517,10 @@ export default function AdminOrdersPage() {
 
                             <Link
                               href={`/admin/orders/${order.id}`}
-                              className="p-1 text-zinc-600 hover:text-[#2C1710]"
+                              className="p-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:text-[#CA340A] hover:border-[#CA340A]/40 hover:bg-[#FFF9F5] transition-colors"
                               title="View Details"
                             >
-                              <Eye size={13} />
+                              <Eye size={15} />
                             </Link>
                           </div>
                         </td>

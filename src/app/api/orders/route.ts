@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOrder, getAllOrders, getSessionOrders } from "@/lib/db";
+import {
+  createOrder,
+  getAllOrders,
+  getSessionOrders,
+  getActiveOrderForTable,
+  addItemsToExistingOrder,
+  normalizeTableNumber,
+} from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,8 +37,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const cleanTable = normalizeTableNumber(tableNumber || "Table 01");
+
+    // Single Master Order per Table Session:
+    // Check if there is an active, unpaid order already for this table
+    const activeOrder = await getActiveOrderForTable(cleanTable);
+
+    if (activeOrder) {
+      // Append items to the existing order ticket and recalculate consolidated total
+      const updatedOrder = await addItemsToExistingOrder({
+        orderId: activeOrder.id,
+        items,
+        notes,
+      });
+
+      return NextResponse.json(
+        { success: true, order: updatedOrder, isAddon: true },
+        { status: 200 }
+      );
+    }
+
+    // First order for this table sitting -> create new master order
     const order = await createOrder({
-      tableNumber: tableNumber || "Table 01",
+      tableNumber: cleanTable,
       customerSessionId,
       customerId,
       customerPhone,
@@ -39,11 +67,11 @@ export async function POST(req: NextRequest) {
       notes,
     });
 
-    return NextResponse.json({ success: true, order }, { status: 201 });
+    return NextResponse.json({ success: true, order, isAddon: false }, { status: 201 });
   } catch (err: any) {
     console.error("Order creation error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to create order." },
+      { success: false, error: err.message || "Failed to process order." },
       { status: 500 }
     );
   }
@@ -53,13 +81,19 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get("sessionId");
+    const table = searchParams.get("table");
+
+    if (table) {
+      const activeOrder = await getActiveOrderForTable(table);
+      return NextResponse.json({ success: true, activeOrder });
+    }
 
     if (sessionId) {
       const orders = await getSessionOrders(sessionId);
       return NextResponse.json({ success: true, orders });
     }
 
-    // If no session filter provided, return all orders (e.g. for general queries)
+    // If no session or table filter provided, return all orders
     const all = await getAllOrders();
     return NextResponse.json({ success: true, orders: all });
   } catch (err: any) {

@@ -79,6 +79,15 @@ export async function GET() {
       unpaid: pendingPaymentsAmount,
     };
 
+    const pendingOrders = orders.filter((o) => o.status === "PENDING").length;
+    const preparingOrders = orders.filter((o) => o.status === "PREPARING").length;
+    const readyOrders = orders.filter((o) => o.status === "READY").length;
+
+    // Current / Active orders: in kitchen pipeline OR unpaid / awaiting cash settlement
+    const currentOrders = orders.filter(
+      (o) => !(o.status === "COMPLETED" && o.paymentStatus === "PAID") && o.status !== "CANCELLED"
+    );
+
     return NextResponse.json({
       success: true,
       kpis: {
@@ -88,6 +97,9 @@ export async function GET() {
         unpaidOrders: todayUnpaidOrders.length,
         pendingPaymentsAmount,
         pendingPayments: pendingPaymentsAmount,
+        pendingOrders,
+        preparingOrders,
+        readyOrders,
         avgOrderValue,
         onlinePayments,
         cashPayments,
@@ -99,7 +111,8 @@ export async function GET() {
       hourlySales: hourlyData,
       paymentSplit,
       topSellingItems,
-      recentOrders: orders.slice(0, 50),
+      currentOrders: currentOrders.slice(0, 20),
+      recentOrders: orders.slice(0, 20),
     });
   } catch (err: any) {
     console.error("Admin overview API error:", err);

@@ -3,7 +3,7 @@ import { getAllMenuItems, createMenuItem } from "@/lib/db";
 
 export async function GET() {
   try {
-    const items = getAllMenuItems();
+    const items = await getAllMenuItems();
     return NextResponse.json({ success: true, items });
   } catch (err: any) {
     return NextResponse.json(
