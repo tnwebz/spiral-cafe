@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "spiral-cafe",
+  "name": "spiral-cafe2",
   "account_id": "a306a8676872a371974e008648f5bfa6",
   "compatibility_date": "2026-09-28",
   "compatibility_flags": ["nodejs_compat"],
@@ -20,6 +20,6 @@
     "NEXT_PUBLIC_RAZORPAY_KEY_ID": "rzp_test_TglDyNQunmzfuz",
 
     "SMS_PROVIDER": "mock",
-    "SMS_SENDER_ID": "SPIRAL"
-  }
+    "SMS_SENDER_ID": "SPIRAL",
+  },
 }
