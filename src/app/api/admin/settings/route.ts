@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConfig, updateConfig } from "@/lib/db";
+import { requireAdminAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requireAdminAuth(req);
+  if (authError) return authError;
+
   try {
     const config = await getConfig();
-    // Return sanitized config (exclude hashed passwords)
+    // Return sanitized config
     const sanitized = {
       taxPercentage: config.taxPercentage,
       packagingFee: config.packagingFee,
@@ -29,6 +33,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requireAdminAuth(req, "ADMIN");
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { updates, adminUser = "Admin" } = body;
@@ -45,7 +52,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error("Settings update error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to update settings." },
+      { success: false, error: "Failed to update settings." },
       { status: 500 }
     );
   }

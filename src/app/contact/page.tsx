@@ -7,25 +7,26 @@ import { MapPin, Phone, Mail, Clock, ExternalLink } from "lucide-react";
 import { FaInstagram, FaWhatsapp } from "react-icons/fa";
 
 const contactDetails = [
-  { 
-    icon: MapPin, 
-    title: "Location Address", 
-    value: "Spiral cafe, Government Hospital opposite Road, CSI Mahimai Illam, Alagesan Nagar, Varadharaja Nagar, Chengalpattu, Tamil Nadu 603001" 
+  {
+    icon: MapPin,
+    title: "Location Address",
+    value:
+      "Spiral cafe, Government Hospital opposite Road, CSI Mahimai Illam, Alagesan Nagar, Varadharaja Nagar, Chengalpattu, Tamil Nadu 603001",
   },
-  { 
-    icon: Clock, 
-    title: "Operating Hours", 
-    value: "Everyday: 6:00 PM – 11:00 PM (Rooftop Dining & Takeaway)" 
+  {
+    icon: Clock,
+    title: "Operating Hours",
+    value: "Everyday: 3:00 PM – 11:00 PM (Rooftop Dining & Takeaway)",
   },
-  { 
-    icon: Phone, 
-    title: "Call / Reservations", 
-    value: "+91 98765 43210" 
+  {
+    icon: Phone,
+    title: "Call / Reservations",
+    value: "+91 98765 43210",
   },
-  { 
-    icon: Mail, 
-    title: "Email Support", 
-    value: "contact@spiralcafe.in" 
+  {
+    icon: Mail,
+    title: "Email Support",
+    value: "contact@spiralcafe.in",
   },
 ];
 
@@ -38,13 +39,21 @@ export default function ContactPage() {
       <div className="hidden md:flex items-center justify-between px-6 lg:px-8 py-3 max-w-6xl xl:max-w-7xl mx-auto border-b border-border/60 mb-6">
         <Link href="/" className="flex items-center gap-3 group">
           <div className="relative w-10 h-10 rounded-full bg-primary/10 p-1 border border-primary/20 flex items-center justify-center overflow-hidden shadow-xs group-hover:scale-105 transition-transform">
-            <Image src="/logo.png" alt="Spiral Cafe" width={34} height={34} className="object-contain" />
+            <Image
+              src="/logo.png"
+              alt="Spiral Cafe"
+              width={34}
+              height={34}
+              className="object-contain"
+            />
           </div>
           <div>
             <h1 className="font-heading font-extrabold text-xl text-foreground leading-none group-hover:text-primary transition-colors">
               Spiral Cafe
             </h1>
-            <span className="text-[11px] text-[#8C5E51] font-semibold">Location &amp; Contact</span>
+            <span className="text-[11px] text-[#8C5E51] font-semibold">
+              Location &amp; Contact
+            </span>
           </div>
         </Link>
 
@@ -84,13 +93,20 @@ export default function ContactPage() {
           className="text-center mb-8 flex flex-col items-center"
         >
           <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 p-1 flex items-center justify-center mb-3">
-            <Image src="/logo.png" alt="Spiral Cafe" width={56} height={56} className="object-contain" />
+            <Image
+              src="/logo.png"
+              alt="Spiral Cafe"
+              width={56}
+              height={56}
+              className="object-contain"
+            />
           </div>
           <h1 className="text-3xl sm:text-4xl font-heading font-extrabold text-foreground mb-2">
             Visit Spiral Cafe
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base max-w-md">
-            Join us on our rooftop opposite the Government Hospital in Chengalpattu. We can&apos;t wait to serve you!
+            Join us on our rooftop opposite the Government Hospital in
+            Chengalpattu. We can&apos;t wait to serve you!
           </p>
         </motion.div>
 
@@ -127,7 +143,10 @@ export default function ContactPage() {
 
           <div className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             {contactDetails.map((detail, idx) => (
-              <div key={idx} className="flex items-start gap-3 p-3 rounded-2xl bg-muted/40 border border-border/40">
+              <div
+                key={idx}
+                className="flex items-start gap-3 p-3 rounded-2xl bg-muted/40 border border-border/40"
+              >
                 <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0 mt-0.5">
                   <detail.icon size={18} />
                 </div>
@@ -155,7 +174,8 @@ export default function ContactPage() {
             Connect With Spiral Cafe
           </h3>
           <p className="text-xs sm:text-sm text-beige max-w-sm mb-6">
-            Tag us in your rooftop stories and reels on Instagram or reach us on WhatsApp for fast inquiries!
+            Tag us in your rooftop stories and reels on Instagram or reach us on
+            WhatsApp for fast inquiries!
           </p>
 
           <div className="flex gap-4">
@@ -180,7 +200,7 @@ export default function ContactPage() {
           </div>
         </motion.div>
       </div>
-      
+
       <BottomNav />
     </main>
   );

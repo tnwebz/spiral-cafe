@@ -94,7 +94,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "side-quest",
     name: "Side Quest",
-    icon: "🍟",
+    icon: "fries",
     heroImage: "https://images.unsplash.com/photo-1576107232684-1279f3908594?q=80&w=1200&auto=format&fit=crop",
     description: "Golden crispy hand-cut fries & heavily loaded indulgence bowls",
     items: [
@@ -147,7 +147,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "the-wing-dept",
     name: "The Wing Dept",
-    icon: "🍗",
+    icon: "chicken",
     heroImage: "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?q=80&w=1200&auto=format&fit=crop",
     description: "Crispy hand-breaded chicken wings glazed & tossed in bold signature flavors",
     items: [
@@ -189,7 +189,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "share-club",
     name: "Share Club",
-    icon: "🧀",
+    icon: "cheese",
     heroImage: "https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?q=80&w=1200&auto=format&fit=crop",
     description: "Crowd-favorite shareables, loaded nachos, and crunchy bites for your crew",
     items: [
@@ -231,7 +231,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "burgers",
     name: "Burgers",
-    icon: "🍔",
+    icon: "burger",
     heroImage: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=1200&auto=format&fit=crop",
     description: "Juicy smashed patties, molten artisan cheeses & toasted butter brioche",
     items: [
@@ -295,7 +295,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "sandos",
     name: "Sandos",
-    icon: "🥪",
+    icon: "sandwich",
     heroImage: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?q=80&w=1200&auto=format&fit=crop",
     description: "Layered Japanese style toasted sandwich creations & gourmet artisan paninis",
     items: [
@@ -381,7 +381,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "pasta",
     name: "Pasta",
-    icon: "🍝",
+    icon: "pasta",
     heroImage: "https://images.unsplash.com/photo-1621996316565-e31514c9f056?q=80&w=1200&auto=format&fit=crop",
     description: "Silky alfredo creams, vibrant pestos & slow-cooked coastal sauces",
     items: [
@@ -445,7 +445,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "milk-coffee",
     name: "Milk Coffee",
-    icon: "☕",
+    icon: "coffee",
     heroImage: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=1200&auto=format&fit=crop",
     description: "Specialty cold espresso lattes crafted with gourmet natural syrups",
     items: [
@@ -487,7 +487,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "non-milk-coffee",
     name: "Non Milk Coffee",
-    icon: "🧊",
+    icon: "cold-brew",
     heroImage: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=1200&auto=format&fit=crop",
     description: "Clean, aromatic dark brews, sparkling citrus espressos & smoky notes",
     items: [
@@ -529,7 +529,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "coolers",
     name: "Coolers",
-    icon: "🍹",
+    icon: "cooler",
     heroImage: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1200&auto=format&fit=crop",
     description: "Sparkling fruit quenchers, crushed berries & vibrant citrus coolers",
     items: [
@@ -571,7 +571,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "iced-tea",
     name: "Iced Tea",
-    icon: "🧋",
+    icon: "tea",
     heroImage: "https://images.unsplash.com/photo-1499638673689-79a0b5115d87?q=80&w=1200&auto=format&fit=crop",
     description: "Slow-steeped artisan Ceylon teas infused with natural fruit nectars",
     items: [
@@ -602,7 +602,7 @@ export const menuData: MenuCategory[] = [
   {
     id: "shakes",
     name: "Shakes",
-    icon: "🥤",
+    icon: "shake",
     heroImage: "https://images.unsplash.com/photo-1572490122747-3968b75cc699?q=80&w=1200&auto=format&fit=crop",
     description: "Decadent thick gelato shakes crowned with whipped cream & crunch toppings",
     items: [

@@ -1,14 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAllOrders, getAllInvoices, getAllCustomers, getConfig } from "@/lib/db";
+import { requireAdminAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requireAdminAuth(req);
+  if (authError) return authError;
   try {
-    const [orders, invoices, customers, config] = await Promise.all([
+    const [allOrdersRaw, invoices, customers, config] = await Promise.all([
       getAllOrders(),
       getAllInvoices(),
       getAllCustomers(),
       getConfig(),
     ]);
+
+    // Exclude private orders strictly from normal customer overview metrics
+    const orders = allOrdersRaw.filter((o) => o.orderType !== "PRIVATE");
 
     const todayStr = new Date().toISOString().split("T")[0];
     const todayOrders = orders.filter((o) => o.createdAt.startsWith(todayStr));

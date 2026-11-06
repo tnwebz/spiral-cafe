@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef } from "react";
 import { menuData } from "@/data/menu";
+import FoodIcon from "@/components/FoodIcon";
 
 export default function CategorySlider() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,7 +58,9 @@ export default function CategorySlider() {
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
               
               <div className="relative z-10 flex flex-col gap-1">
-                <span className="text-2xl filter drop-shadow">{category.icon}</span>
+                <div className="w-8 h-8 rounded-lg bg-black/40 backdrop-blur-md flex items-center justify-center mb-0.5 p-1">
+                  <FoodIcon nameOrId={category.id} className="w-5 h-5" />
+                </div>
                 <span className="text-cream font-heading font-bold text-base tracking-wide">
                   {category.name}
                 </span>

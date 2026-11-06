@@ -3,13 +3,37 @@
 import { motion } from "framer-motion";
 import Image from "next/image";
 import BottomNav from "@/components/BottomNav";
-import { Award, Flame, Heart, Sparkles, MapPin, Coffee, Utensils } from "lucide-react";
+import {
+  Award,
+  Flame,
+  Heart,
+  Sparkles,
+  MapPin,
+  Coffee,
+  Utensils,
+} from "lucide-react";
 
 const features = [
-  { icon: Flame, title: "Artisan Quality", desc: "Crafted fresh with authentic spices and gourmet ingredients" },
-  { icon: Sparkles, title: "Rooftop Vibe", desc: "Open-air starry ambience in the heart of Chengalpattu" },
-  { icon: Coffee, title: "Specialty Drinks", desc: "Signature brews, cold drops & indulgent thick shakes" },
-  { icon: Heart, title: "Made with Love", desc: "Every plate served with care for you and your friends" },
+  {
+    icon: Flame,
+    title: "Artisan Quality",
+    desc: "Crafted fresh with authentic spices and gourmet ingredients",
+  },
+  {
+    icon: Sparkles,
+    title: "Rooftop Vibe",
+    desc: "Open-air starry ambience in the heart of Chengalpattu",
+  },
+  {
+    icon: Coffee,
+    title: "Specialty Drinks",
+    desc: "Signature brews, cold drops & indulgent thick shakes",
+  },
+  {
+    icon: Heart,
+    title: "Made with Love",
+    desc: "Every plate served with care for you and your friends",
+  },
 ];
 
 export default function AboutPage() {
@@ -24,13 +48,21 @@ export default function AboutPage() {
           className="text-center mb-8 flex flex-col items-center"
         >
           <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 p-1 flex items-center justify-center mb-3">
-            <Image src="/logo.png" alt="Spiral Cafe Logo" width={56} height={56} className="object-contain" />
+            <Image
+              src="/logo.png"
+              alt="Spiral Cafe Logo"
+              width={56}
+              height={56}
+              className="object-contain"
+            />
           </div>
           <h1 className="text-3xl sm:text-4xl font-heading font-extrabold text-foreground mb-2">
             About Spiral Cafe
           </h1>
           <p className="text-muted-foreground leading-relaxed text-sm sm:text-base max-w-xl">
-            Welcome to <strong className="text-primary">Spiral Cafe</strong>, Chengalpattu&apos;s premier rooftop cafe sanctuary where culinary passion meets unforgettable rooftop vibes.
+            Welcome to <strong className="text-primary">Spiral Cafe</strong>,
+            Chengalpattu&apos;s premier rooftop cafe sanctuary where culinary
+            passion meets unforgettable rooftop vibes.
           </p>
         </motion.div>
 
@@ -70,10 +102,16 @@ export default function AboutPage() {
             <Utensils size={20} className="text-primary" /> Our Passion
           </h2>
           <p className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-4">
-            At Spiral Cafe, we set out with a simple yet bold idea: to serve delicious gourmet snacks—from crunchy peri-peri loaded fries and toasted panini sandwiches to double-cheese smashed burgers, wood-fired pizzas, and specialty frappes—all in a cozy, breezy rooftop haven.
+            At Spiral Cafe, we set out with a simple yet bold idea: to serve
+            delicious gourmet snacks—from crunchy peri-peri loaded fries and
+            toasted panini sandwiches to double-cheese smashed burgers,
+            wood-fired pizzas, and specialty frappes—all in a cozy, breezy
+            rooftop haven.
           </p>
           <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-            Whether you are catching up with friends after college, enjoying a sunset snack, or stopping by for dinner under the lights, Spiral Cafe is designed to be your second home.
+            Whether you are catching up with friends after college, enjoying a
+            sunset snack, or stopping by for dinner under the lights, Spiral
+            Cafe is designed to be your second home.
           </p>
         </motion.div>
 
@@ -94,12 +132,14 @@ export default function AboutPage() {
               <h3 className="font-heading font-bold text-foreground text-sm sm:text-base mb-1">
                 {feat.title}
               </h3>
-              <p className="text-xs text-muted-foreground leading-snug">{feat.desc}</p>
+              <p className="text-xs text-muted-foreground leading-snug">
+                {feat.desc}
+              </p>
             </motion.div>
           ))}
         </div>
       </div>
-      
+
       <BottomNav />
     </main>
   );

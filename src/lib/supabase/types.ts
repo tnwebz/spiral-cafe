@@ -523,6 +523,9 @@ export interface Database {
 // Application Domain Models (compatible with existing UI/API)
 // ==========================================
 
+export type OrderType = "CUSTOMER" | "PRIVATE";
+export type PrivatePurpose = "OWNER" | "STAFF" | "OTHER_INTERNAL";
+
 export interface OrderItem {
   id?: string;
   orderId?: string;
@@ -540,6 +543,10 @@ export interface Order {
   id: string;
   orderNumber: string;
   tableNumber: string;
+  orderType?: OrderType;
+  privatePurpose?: PrivatePurpose;
+  privateNote?: string;
+  actualCost?: number;
   customerSessionId?: string | null;
   customerId?: string | null;
   customerPhone?: string | null;

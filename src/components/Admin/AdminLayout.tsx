@@ -5,8 +5,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useOrderSync } from "@/hooks/useOrderSync";
+import AdminConnectivityBar from "@/components/Admin/AdminConnectivityBar";
 import {
   LayoutDashboard,
+  Grid2X2,
   TrendingUp,
   ShoppingBag,
   Receipt,
@@ -15,6 +18,7 @@ import {
   Users,
   ChefHat,
   Settings,
+  Printer,
   LogOut,
   Menu as MenuIcon,
   X,
@@ -38,6 +42,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [adminRole, setAdminRole] = useState<string>("ADMIN");
   const [isConnected, setIsConnected] = useState(true);
   const [liveOrdersCount, setLiveOrdersCount] = useState(0);
+
+  // Authoritative Order Sync & Power-Cut Resilience Engine
+  const orderSync = useOrderSync(12000);
 
   // Authenticate user session
   useEffect(() => {
@@ -99,10 +106,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const navItems = [
     { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+    { label: "Tables", href: "/admin/tables", icon: Grid2X2 },
     { label: "Sales & Analytics", href: "/admin/analytics", icon: TrendingUp },
     { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
     { label: "Menu Management", href: "/admin/menu", icon: UtensilsCrossed },
     { label: "Customers", href: "/admin/customers", icon: Users },
+    { label: "Kitchen Printer", href: "/admin/printer", icon: Printer },
     { label: "Kitchen KDS", href: "/kitchen", icon: ChefHat, targetBlank: true },
     { label: "Settings & Audit", href: "/admin/settings", icon: Settings },
   ];
@@ -296,6 +305,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* PAGE CONTENT CONTAINER */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full pb-16">
+          <AdminConnectivityBar syncState={orderSync} />
           {children}
         </main>
       </div>

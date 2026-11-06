@@ -16,6 +16,8 @@ import type {
   DynamicMenuItem,
   AuditLog,
   CafeConfig,
+  OrderType,
+  PrivatePurpose,
 } from "./supabase/types";
 
 // Re-export domain types for full backward compatibility
@@ -26,6 +28,8 @@ export type {
   AdminRole,
   OrderItem,
   Order,
+  OrderType,
+  PrivatePurpose,
   Customer,
   CustomerSession,
   Invoice,
@@ -71,14 +75,33 @@ export const DEFAULT_CONFIG: CafeConfig = {
 
 export function normalizeTableNumber(table: string): string {
   let clean = (table || "").trim();
+  if (!clean) return "A1";
+
+  // If table has letter code format like A1, A2, B3, F4, F4-A
+  const letterCodeMatch = clean.match(/^([A-Za-z]+[\-_\s]*\d+.*)$/);
+  if (letterCodeMatch) {
+    return clean.replace(/[\s\-_]+/g, "").toUpperCase();
+  }
+
+  // If table is "Table A1" or "Table 01"
+  const tablePrefixMatch = clean.match(/^Table[\s\-_]*([A-Za-z0-9\-_]+)$/i);
+  if (tablePrefixMatch) {
+    const code = tablePrefixMatch[1].trim();
+    const numOnly = code.match(/^\d+$/);
+    if (numOnly) {
+      return `A${parseInt(numOnly[0], 10)}`;
+    }
+    return code.toUpperCase();
+  }
+
   const numMatch = clean.match(/\d+/);
   if (numMatch) {
-    return `Table ${numMatch[0].padStart(2, "0")}`;
+    return `A${parseInt(numMatch[0], 10)}`;
   }
-  return clean || "Table 01";
+  return clean.toUpperCase();
 }
 
-function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
+export function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
   const mappedItems: OrderItem[] =
     items.length > 0
       ? items
@@ -101,10 +124,31 @@ function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
     ? []
     : [1];
 
+  const isPrivate =
+    row.order_type === "PRIVATE" ||
+    row.table_number === "COUNTER" ||
+    row.table_number === "GIVE ON COUNTER" ||
+    notesStr.includes("[ORDER_TYPE:PRIVATE]");
+
+  const orderType: OrderType = isPrivate ? "PRIVATE" : "CUSTOMER";
+
+  const purposeMatch = notesStr.match(/\[PRIVATE_PURPOSE:([A-Z_]+)\]/);
+  const privatePurpose: PrivatePurpose | undefined = purposeMatch
+    ? (purposeMatch[1] as PrivatePurpose)
+    : isPrivate
+    ? "STAFF"
+    : undefined;
+
+  const noteMatch = notesStr.match(/\[PRIVATE_NOTE:([^\]]+)\]/);
+  const privateNote: string | undefined = noteMatch ? noteMatch[1].trim() : undefined;
+
   return {
     id: row.id,
     orderNumber: row.order_number,
     tableNumber: row.table_number,
+    orderType,
+    privatePurpose,
+    privateNote,
     customerSessionId: row.customer_session_id || "",
     customerId: row.customer_id || undefined,
     customerPhone: row.customer_phone || undefined,
@@ -333,8 +377,183 @@ export async function getAllOrders(): Promise<Order[]> {
   return (data || []).map((row: any) => mapDbOrderToOrder(row));
 }
 
+export async function getCustomerOrders(): Promise<Order[]> {
+  const all = await getAllOrders();
+  return all.filter((o) => o.orderType !== "PRIVATE");
+}
+
+export async function getPrivateOrders(): Promise<Order[]> {
+  const all = await getAllOrders();
+  return all.filter((o) => o.orderType === "PRIVATE");
+}
+
+export async function createPrivateOrder(params: {
+  purpose: PrivatePurpose;
+  privateNote?: string;
+  items: Array<{
+    productId: string;
+    name: string;
+    price: number;
+    quantity: number;
+    image?: string;
+    notes?: string;
+  }>;
+  specialInstructions?: string;
+}): Promise<Order> {
+  const now = new Date().toISOString();
+  if (!params.items || params.items.length === 0) {
+    throw new Error("Private order must contain at least one item.");
+  }
+
+  // Find latest PRV- order number
+  let nextNumber = 1001;
+  try {
+    const { data: latestPrv } = await supabaseAdmin
+      .from("orders")
+      .select("order_number")
+      .ilike("order_number", "PRV-%")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (latestPrv && latestPrv.length > 0) {
+      for (const row of latestPrv) {
+        const numPart = parseInt((row.order_number || "").replace(/\D/g, ""), 10);
+        if (!isNaN(numPart) && numPart >= nextNumber) {
+          nextNumber = numPart + 1;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not determine next PRV number, using fallback:", err);
+  }
+
+  const orderNumber = `PRV-${nextNumber}`;
+  const orderId = `prv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const orderItems: OrderItem[] = params.items.map((item, index) => {
+    const qty = Math.max(1, Math.floor(item.quantity));
+    const lineTotal = item.price * qty;
+    return {
+      id: `item-${Date.now()}-${index}`,
+      productId: item.productId,
+      name: item.name,
+      price: item.price,
+      quantity: qty,
+      lineTotal,
+      image: item.image || "",
+      notes: (item.notes || "").trim() || undefined,
+      round: 1,
+    };
+  });
+
+  const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  const grandTotal = subtotal;
+
+  const purpose = params.purpose || "STAFF";
+  const noteTag = params.privateNote ? `[PRIVATE_NOTE:${params.privateNote.trim()}] ` : "";
+  const instr = params.specialInstructions ? ` ${params.specialInstructions.trim()}` : "";
+  const notesStr = `[ORDER_TYPE:PRIVATE] [PRIVATE_PURPOSE:${purpose}] [DESTINATION:GIVE_ON_COUNTER] ${noteTag}${instr}`.trim();
+
+  // Ensure internal dummy session exists to satisfy foreign key constraint
+  const dummySession = "INTERNAL_COUNTER_SESSION";
+  let validSessionId: string | null = dummySession;
+  try {
+    const { error: sessErr } = await supabaseAdmin
+      .from("customer_sessions")
+      .upsert(
+        {
+          id: dummySession,
+          session_token: dummySession,
+          table_number: "GIVE ON COUNTER",
+          started_at: now,
+          last_active_at: now,
+        },
+        { onConflict: "id" }
+      );
+    if (sessErr) {
+      console.warn("Internal session upsert warning:", sessErr);
+      validSessionId = null;
+    }
+  } catch (sessCatch) {
+    console.warn("Internal session upsert error:", sessCatch);
+    validSessionId = null;
+  }
+
+  const orderPayload = {
+    id: orderId,
+    order_number: orderNumber,
+    table_number: "GIVE ON COUNTER",
+    customer_session_id: validSessionId,
+    customer_id: null,
+    customer_phone: null,
+    subtotal,
+    tax: 0,
+    packaging_fee: 0,
+    service_charge: 0,
+    grand_total: grandTotal,
+    status: "PENDING" as OrderStatus,
+    payment_status: "PAID" as PaymentStatus,
+    payment_method: "CASH" as PaymentMethod,
+    payment_txn_id: null,
+    payment_provider: null,
+    invoice_id: null,
+    invoice_number: null,
+    notes: notesStr,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const itemsPayload = orderItems.map((it) => ({
+    id: it.id || `oi_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    order_id: orderId,
+    product_id: it.productId || null,
+    name: it.name,
+    price: it.price,
+    quantity: it.quantity,
+    line_total: it.lineTotal,
+    image: it.image || "",
+    notes: it.notes || null,
+  }));
+
+  const { error: orderError } = await supabaseAdmin.from("orders").insert(orderPayload as any);
+  if (orderError) {
+    console.error("Failed to insert private order:", orderError);
+    throw new Error(`Failed to create private order: ${orderError.message}`);
+  }
+
+  const { error: itemsError } = await supabaseAdmin.from("order_items").insert(itemsPayload as any);
+  if (itemsError) {
+    console.error("Failed to insert private order items:", itemsError);
+  }
+
+  return {
+    id: orderId,
+    orderNumber,
+    tableNumber: "GIVE ON COUNTER",
+    orderType: "PRIVATE",
+    privatePurpose: purpose,
+    privateNote: params.privateNote,
+    customerSessionId: dummySession,
+    items: orderItems,
+    subtotal,
+    tax: 0,
+    packagingFee: 0,
+    serviceCharge: 0,
+    grandTotal,
+    status: "PENDING",
+    paymentStatus: "PAID",
+    paymentMethod: "CASH",
+    notes: notesStr,
+    createdAt: now,
+    updatedAt: now,
+    cookingRounds: [1],
+  };
+}
+
 export async function getOrderById(idOrNumber: string): Promise<Order | undefined> {
-  const isOrdNumber = idOrNumber.toUpperCase().startsWith("ORD-");
+  const isOrdNumber =
+    idOrNumber.toUpperCase().startsWith("ORD-") ||
+    idOrNumber.toUpperCase().startsWith("PRV-");
 
   let query = supabaseAdmin.from("orders").select("*, order_items(*)");
   if (isOrdNumber) {
@@ -366,6 +585,28 @@ export async function getSessionOrders(customerSessionId: string): Promise<Order
   return (data || []).map((row: any) => mapDbOrderToOrder(row));
 }
 
+export async function getOrdersByVisitId(visitId: string): Promise<Order[]> {
+  try {
+    const { data } = await supabaseAdmin
+      .from("orders" as any)
+      .select("*, order_items(*)")
+      .ilike("notes", `%[VISIT_ID:${visitId}]%`)
+      .neq("status", "CANCELLED")
+      .order("created_at", { ascending: true });
+
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((row: any) => mapDbOrderToOrder(row));
+    }
+  } catch {}
+
+  const all = await getAllOrders();
+  return all.filter(
+    (o) =>
+      o.status !== "CANCELLED" &&
+      (o.notes?.includes(`[VISIT_ID:${visitId}]`) || (o as any).visitId === visitId)
+  );
+}
+
 export async function getActiveOrderForTable(tableNumber: string): Promise<Order | null> {
   const cleanTable = normalizeTableNumber(tableNumber);
 
@@ -384,6 +625,80 @@ export async function getActiveOrderForTable(tableNumber: string): Promise<Order
   }
 
   return mapDbOrderToOrder(data);
+}
+
+export async function getActiveVisitOrdersForTable(tableNumber: string): Promise<{
+  visitId: string | null;
+  orders: Order[];
+}> {
+  const cleanTable = normalizeTableNumber(tableNumber);
+
+  // 1. Fetch the latest active unpaid order for this table
+  const latestActive = await getActiveOrderForTable(cleanTable);
+  if (!latestActive) {
+    return { visitId: null, orders: [] };
+  }
+
+  // 2. Extract visit ID from notes or property
+  const visitId =
+    latestActive.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
+    (latestActive as any).visit_id ||
+    `VISIT-${cleanTable}-${latestActive.id.slice(0, 8).toUpperCase()}`;
+
+  // 3. Query all orders that share this visitId
+  let visitOrders: Order[] = [];
+  try {
+    const { data } = await supabaseAdmin
+      .from("orders" as any)
+      .select("*, order_items(*)")
+      .ilike("notes", `%[VISIT_ID:${visitId}]%`)
+      .neq("status", "CANCELLED")
+      .neq("payment_status", "PAID")
+      .order("created_at", { ascending: false });
+
+    if (Array.isArray(data) && data.length > 0) {
+      visitOrders = data.map((row: any) => mapDbOrderToOrder(row));
+    }
+  } catch (err) {
+    console.warn("Error fetching visit orders by tag:", err);
+  }
+
+  // 4. Fallback: if no orders found by visit tag, query all unpaid orders for this specific table
+  if (visitOrders.length === 0) {
+    try {
+      const { data } = await supabaseAdmin
+        .from("orders" as any)
+        .select("*, order_items(*)")
+        .eq("table_number", cleanTable)
+        .neq("status", "CANCELLED")
+        .neq("payment_status", "PAID")
+        .order("created_at", { ascending: false });
+
+      if (Array.isArray(data) && data.length > 0) {
+        visitOrders = data.map((row: any) => mapDbOrderToOrder(row));
+      }
+    } catch {}
+  }
+
+  // Ensure latestActive is present
+  if (visitOrders.length === 0) {
+    visitOrders = [latestActive];
+  }
+
+  // Strict hygiene: filter strictly to cleanTable and unpaid, non-cancelled
+  visitOrders = visitOrders.filter(
+    (o) =>
+      normalizeTableNumber(o.tableNumber) === cleanTable &&
+      o.paymentStatus !== "PAID" &&
+      o.status !== "CANCELLED"
+  );
+
+  // Sort newest first (created_at DESC)
+  visitOrders.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return { visitId, orders: visitOrders };
 }
 
 export async function addItemsToExistingOrder(params: {
@@ -605,7 +920,29 @@ export async function getTablesStatus(): Promise<
     status?: OrderStatus;
   }>
 > {
-  const TABLES = Array.from({ length: 15 }, (_, i) => `Table ${String(i + 1).padStart(2, "0")}`);
+  const DEFAULT_FLOOR_TABLES = [
+    "A1", "A2",
+    "B1", "B2", "B3", "B4", "B5", "B6",
+    "C1", "C2", "C3",
+    "F1", "F2", "F3", "F4",
+  ];
+
+  let tableList = DEFAULT_FLOOR_TABLES;
+  try {
+    const { data: customTables } = await supabaseAdmin
+      .from("restaurant_tables" as any)
+      .select("table_number")
+      .order("created_at", { ascending: true });
+
+    if (customTables && customTables.length > 0) {
+      tableList = Array.from(
+        new Set([
+          ...DEFAULT_FLOOR_TABLES,
+          ...customTables.map((t: any) => normalizeTableNumber(t.table_number)),
+        ])
+      );
+    }
+  } catch {}
 
   const { data } = await supabaseAdmin
     .from("orders")
@@ -621,7 +958,7 @@ export async function getTablesStatus(): Promise<
     }
   }
 
-  return TABLES.map((t) => {
+  return tableList.map((t) => {
     const active = activeByTable.get(t);
     return {
       tableNumber: t,

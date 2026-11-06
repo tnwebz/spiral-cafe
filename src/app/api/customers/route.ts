@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveCustomer, getAllCustomers, saveCustomerSession } from "@/lib/db";
+import { requireAdminAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requireAdminAuth(req);
+  if (authError) return authError;
+
   try {
     const customers = await getAllCustomers();
     return NextResponse.json({ success: true, customers });

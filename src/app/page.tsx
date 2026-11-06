@@ -4,13 +4,18 @@ import { useState, useEffect } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import BottomNav from "@/components/BottomNav";
 import HeroBanner from "@/components/Home/HeroBanner";
-import CategorySlider from "@/components/Menu/CategorySlider";
+import CategoryCardsList from "@/components/Menu/CategoryCardsList";
 import MenuItemCard from "@/components/Menu/MenuItemCard";
+import FoodIcon from "@/components/FoodIcon";
 import { menuData } from "@/data/menu";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Sparkles, MapPin, Clock } from "lucide-react";
+import { useCart } from "@/context/CartContext";
 
 export default function Home() {
+  const router = useRouter();
+  const { foodPreference } = useCart();
   const [showSplash, setShowSplash] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -30,15 +35,33 @@ export default function Home() {
     return <SplashScreen onComplete={handleSplashComplete} />;
   }
 
+  // Helper to filter according to dietary preference
+  const isDietMatch = (item: { badges?: string[] }) =>
+    foodPreference === "ALL" ||
+    (item.badges &&
+      item.badges.some(
+        (b) => typeof b === "string" && b.toLowerCase() === "veg",
+      ));
+
   // Filter items if search query is entered
   const allFilteredItems = searchQuery.trim()
     ? menuData.flatMap((cat) =>
-        cat.items.filter((item) =>
-          item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          cat.name.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+        cat.items
+          .filter(isDietMatch)
+          .filter(
+            (item) =>
+              item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              cat.name.toLowerCase().includes(searchQuery.toLowerCase()),
+          ),
       )
     : [];
+
+  const categoriesForHome = menuData
+    .map((cat) => ({
+      ...cat,
+      items: cat.items.filter(isDietMatch),
+    }))
+    .filter((cat) => cat.items.length > 0);
 
   return (
     <main className="min-h-screen bg-background pb-28">
@@ -53,7 +76,7 @@ export default function Home() {
               Search Results ({allFilteredItems.length})
             </h2>
             {allFilteredItems.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6">
                 {allFilteredItems.map((item, idx) => (
                   <MenuItemCard key={item.id} index={idx} {...item} />
                 ))}
@@ -77,25 +100,29 @@ export default function Home() {
             {/* Soft Opening Special Showcase Card inspired by the poster */}
             <div className="mt-4 mb-2 p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#B73F1D] to-[#9D3E22] text-cream shadow-lg border border-beige/30 relative overflow-hidden">
               <div className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-cream/10 blur-xl pointer-events-none" />
-              
+
               <div className="flex items-center gap-2 mb-2">
                 <span className="px-2.5 py-0.5 rounded-full bg-cream/20 text-cream text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                   <Sparkles size={11} /> Rooftop Lounge
                 </span>
-                <span className="text-xs text-beige font-semibold">Doors are open</span>
+                <span className="text-xs text-beige font-semibold">
+                  Doors are open
+                </span>
               </div>
 
               <h2 className="font-heading font-extrabold text-xl sm:text-2xl lg:text-3xl text-cream leading-tight">
                 Welcome to Spiral Cafe
               </h2>
               <p className="text-xs sm:text-sm text-beige/90 mt-1 max-w-2xl leading-relaxed">
-                Enjoy gourmet smash burgers, crispy chicken wings, artisan sandos, creamy pastas, specialty coffees, and refreshing coolers under the starry sky.
+                Enjoy gourmet smash burgers, crispy chicken wings, artisan
+                sandos, creamy pastas, specialty coffees, and refreshing coolers
+                under the starry sky.
               </p>
 
               <div className="flex flex-wrap items-center gap-3 mt-4 pt-3 border-t border-cream/15 text-xs text-cream/90">
                 <div className="flex items-center gap-1.5 font-medium">
                   <Clock size={13} className="text-beige" />
-                  <span>6:00 PM – 11:00 PM</span>
+                  <span>3:00 PM – 11:00 PM</span>
                 </div>
                 <div className="flex items-center gap-1.5 font-medium">
                   <MapPin size={13} className="text-beige" />
@@ -104,65 +131,17 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Explore Categories Horizontal Slider (Fries, Sandwich, Burgers, Pizzas, Drinks) */}
-            <CategorySlider />
-
-            {/* Featured Highlights Per Category on Home Page */}
-            <div className="flex flex-col gap-8 py-4">
-              <div className="flex items-center justify-between border-b border-border/70 pb-3">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-heading font-bold text-foreground">
-                    Menu Highlights
-                  </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Handpicked customer favorites from each section
-                  </p>
-                </div>
-                <Link
-                  href="/menu"
-                  className="text-xs font-bold text-primary hover:text-primary-dark transition-colors"
-                >
-                  Full Menu &rarr;
-                </Link>
-              </div>
-
-              {menuData.map((category) => {
-                // Select top items per category for a rich showcase on home page
-                const topItems = category.items.slice(0, 4);
-
-                if (!topItems.length) return null;
-
-                return (
-                  <section key={category.id} className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{category.icon}</span>
-                        <h3 className="text-lg sm:text-xl font-heading font-bold text-foreground">
-                          {category.name}
-                        </h3>
-                        <span className="text-[11px] font-semibold text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full border border-border/50">
-                          {category.items.length} varieties
-                        </span>
-                      </div>
-
-                      <Link
-                        href={`/menu?category=${category.id}`}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline group"
-                      >
-                        <span>View All {category.name}</span>
-                        <ArrowRight size={13} className="transition-transform group-hover:translate-x-1" />
-                      </Link>
-                    </div>
-
-                    {/* Responsive Card Grid: 1 col on mobile, 2 on tablet, 3 on desktop, 4 on large */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
-                      {topItems.map((item, idx) => (
-                        <MenuItemCard key={item.id} index={idx} {...item} />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+            {/* Explore Categories - Vertical Merged Cards (including Special Combos at the end) */}
+            <div className="py-5">
+              <CategoryCardsList
+                categories={categoriesForHome}
+                onSelectCategory={(catId) =>
+                  router.push(`/menu?category=${encodeURIComponent(catId)}`)
+                }
+                title="Explore Categories"
+                subtitle="Discover our handcrafted cafe favorites"
+                showCombosOption={true}
+              />
             </div>
           </>
         )}

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "RES-A1-MW1RUIPQ",
+    "tableNumber": "A1",
+    "customerSessionId": "sess_1793775842506_x44240g",
+    "customerPhone": "9629181283",
+    "reservedAt": "2026-11-04T07:04:44.246Z",
+    "expiresAt": "2026-11-04T07:16:03.413Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-A1-MW1RWCAT"
+  },
+  {
+    "id": "RES-B5-MW1U0J6Q",
+    "tableNumber": "B5",
+    "customerSessionId": "sess_1793779152880_v5am6fa",
+    "customerPhone": "1234567891",
+    "reservedAt": "2026-11-04T08:05:24.212Z",
+    "expiresAt": "2026-11-04T08:15:24.212Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B5-MW1U3T7U"
+  },
+  {
+    "id": "RES-B4-MW3CXU2Q",
+    "tableNumber": "B4",
+    "customerSessionId": "sess_1793721512886_3hj9irs",
+    "customerPhone": "1234567899",
+    "reservedAt": "2026-11-05T09:42:57.020Z",
+    "expiresAt": "2026-11-05T09:53:14.204Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B4-MW3CY9AJ"
+  }
+]

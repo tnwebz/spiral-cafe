@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllMenuItems, createMenuItem } from "@/lib/db";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -14,6 +15,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requireAdminAuth(req, "ADMIN");
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const {

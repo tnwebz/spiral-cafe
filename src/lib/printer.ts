@@ -113,7 +113,7 @@ export function formatReceipt58mm(invoice: any): string {
   const receiptData: ReceiptData = {
     invoiceNumber: invoice.invoiceNumber || "INV-000000",
     orderNumber: invoice.orderNumber || "ORD-000000",
-    tableNumber: invoice.tableNumber || "Table 01",
+    tableNumber: invoice.tableNumber || "A1",
     date: dateStr,
     time: timeStr,
     customerPhone: invoice.customerPhone,

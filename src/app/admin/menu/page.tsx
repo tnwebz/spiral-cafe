@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import AdminLayout from "@/components/Admin/AdminLayout";
+import FoodIcon from "@/components/FoodIcon";
 import { DynamicMenuItem } from "@/lib/db";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -271,14 +272,17 @@ export default function AdminMenuPage() {
 
                       {/* Category */}
                       <td className="py-3 px-4 font-semibold text-[#52525b]">
-                        {item.categoryName}
+                        <div className="flex items-center gap-1.5">
+                          <FoodIcon nameOrId={item.categoryId || item.categoryName} className="w-4 h-4 shrink-0" />
+                          <span>{item.categoryName}</span>
+                        </div>
                       </td>
 
                       {/* Diet & Badge */}
                       <td className="py-3 px-4">
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap items-center gap-1">
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               item.dietType === "veg"
                                 ? "bg-emerald-100 text-emerald-800"
                                 : item.dietType === "egg"
@@ -286,6 +290,7 @@ export default function AdminMenuPage() {
                                 : "bg-red-100 text-red-800"
                             }`}
                           >
+                            <FoodIcon nameOrId={item.dietType} className="w-2.5 h-2.5 shrink-0" />
                             {item.dietType.toUpperCase()}
                           </span>
 

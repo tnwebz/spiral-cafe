@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSettlementSummary, recordSettlement, getAllSettlements } from "@/lib/db";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const authError = await requireAdminAuth(req);
+  if (authError) return authError;
   try {
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date") || undefined;
@@ -29,6 +32,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requireAdminAuth(req);
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { date, cashCounted, cashSettled, notes, settledBy = "Admin" } = body;

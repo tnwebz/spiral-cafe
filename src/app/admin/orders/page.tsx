@@ -7,6 +7,7 @@ import CollectCashModal from "@/components/Admin/CollectCashModal";
 import ThermalReceiptModal from "@/components/Admin/ThermalReceipt";
 import { Order, Invoice } from "@/lib/db";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { PrinterClient, CustomerBillPayload } from "@/services/printerClient";
 import {
   ShoppingBag,
   Search,
@@ -24,14 +25,15 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Flame,
 } from "lucide-react";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Tab: COMPLETED (history of paid & completed orders) vs UNSETTLED (active / unpaid tickets)
-  const [orderTab, setOrderTab] = useState<"COMPLETED" | "UNSETTLED">("COMPLETED");
+  // Tab: COMPLETED (history of paid & completed orders) vs UNSETTLED (active / unpaid tickets) vs AWAITING_KITCHEN (unprinted KOTs)
+  const [orderTab, setOrderTab] = useState<"COMPLETED" | "UNSETTLED" | "AWAITING_KITCHEN">("COMPLETED");
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,6 +45,10 @@ export default function AdminOrdersPage() {
   const [selectedOrderForCash, setSelectedOrderForCash] = useState<Order | null>(null);
   const [selectedInvoiceForPrint, setSelectedInvoiceForPrint] = useState<Invoice | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+
+  // USB Receipt Printer Direct Action
+  const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
+  const [printFeedback, setPrintFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -144,15 +150,90 @@ export default function AdminOrdersPage() {
     }
   };
 
-  // Split into Completed Order History vs Unsettled / Active
+  const handleDirectPrintCustomerBill = async (order: Order, isReprint = true) => {
+    setPrintingOrderId(order.id);
+    setPrintFeedback(null);
+    try {
+      const billPayload: CustomerBillPayload = {
+        visitId: (order as any).visitId || `V-${order.id}`,
+        billNumber:
+          (order as any).billNumber ||
+          (order.orderNumber ? order.orderNumber.replace(/^(ORD-|#)/, "") : String(Date.now()).slice(-4)),
+        orderNumber: order.orderNumber,
+        tableNumber: order.tableNumber,
+        dateStr: new Date(order.createdAt).toLocaleDateString("en-GB"),
+        timeStr: new Date(order.createdAt).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        }),
+        terminalName: "Billing 1",
+        paymentMode: order.paymentMethod || "CASH",
+        items: (order.items || []).map((it) => ({
+          name: it.name,
+          quantity: it.quantity || 1,
+          price: it.price || 0,
+          lineTotal: (it.price || 0) * (it.quantity || 1),
+        })),
+        totalItems: order.items?.length || 0,
+        totalQuantity: order.items?.reduce((acc, it) => acc + (it.quantity || 1), 0) || 0,
+        subtotal: order.subtotal || order.grandTotal || 0,
+        tax: order.tax || 0,
+        packagingFee: (order as any).packagingFee || 0,
+        grandTotal: order.grandTotal || 0,
+        isDuplicate: isReprint,
+      };
+
+      const res = await PrinterClient.printCustomerBill(billPayload);
+      if (res.success) {
+        setPrintFeedback({ id: order.id, success: true, message: "Bill printed to counter printer!" });
+      } else {
+        setPrintFeedback({
+          id: order.id,
+          success: false,
+          message: res.message || "Counter printer offline or disconnected.",
+        });
+      }
+      setTimeout(() => setPrintFeedback(null), 4000);
+    } catch (err: any) {
+      setPrintFeedback({ id: order.id, success: false, message: err.message || "Print failed." });
+      setTimeout(() => setPrintFeedback(null), 4000);
+    } finally {
+      setPrintingOrderId(null);
+    }
+  };
+
+  // Split into Completed Order History vs Unsettled / Active vs Awaiting Kitchen Action
   const completedOrdersList = orders.filter(
     (o) => (o.status === "COMPLETED" && o.paymentStatus === "PAID") || o.status === "CANCELLED"
   );
   const unsettledOrdersList = orders.filter(
     (o) => !(o.status === "COMPLETED" && o.paymentStatus === "PAID") && o.status !== "CANCELLED"
   );
+  const awaitingKitchenOrdersList = orders.filter((o) => {
+    if (o.status === "CANCELLED" || o.paymentStatus === "PAID") return false;
+    const notes = o.notes || "";
+    const rounds = o.items.map((it) => {
+      const match = (it.notes || "").match(/\[ROUND:(\d+)\]/);
+      return match ? parseInt(match[1], 10) : it.round || 1;
+    });
+    const highestRound = rounds.length > 0 ? Math.max(...rounds) : 1;
+    const confirmedMatch = notes.match(/\[KOT_CONFIRMED_ROUNDS:([0-9,]+)\]/);
+    const confirmedRounds = confirmedMatch
+      ? confirmedMatch[1].split(",").map(Number).filter((n) => !isNaN(n))
+      : [];
+    const isConfirmed = confirmedRounds.includes(highestRound) || o.status === "PREPARING" || o.status === "READY";
+    const manuallyDelivered = notes.includes("[KOT_MANUALLY_DELIVERED]");
+    return !isConfirmed && !manuallyDelivered;
+  });
 
-  const baseOrders = orderTab === "COMPLETED" ? completedOrdersList : unsettledOrdersList;
+  const baseOrders =
+    orderTab === "COMPLETED"
+      ? completedOrdersList
+      : orderTab === "UNSETTLED"
+      ? unsettledOrdersList
+      : awaitingKitchenOrdersList;
 
   const filteredOrders = baseOrders.filter((o) => {
     const matchesSearch =
@@ -248,7 +329,42 @@ export default function AdminOrdersPage() {
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             )}
           </button>
+
+          <button
+            onClick={() => {
+              setOrderTab("AWAITING_KITCHEN");
+              setStatusFilter("ALL");
+              setMethodFilter("ALL");
+              setCurrentPage(1);
+            }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+              orderTab === "AWAITING_KITCHEN"
+                ? "bg-[#CA340A] text-white border-[#CA340A] shadow-sm"
+                : "bg-white text-[#52525b] border-zinc-200 hover:bg-[#FFF9F5]"
+            }`}
+          >
+            <Flame size={15} className={orderTab === "AWAITING_KITCHEN" ? "text-white" : "text-[#CA340A]"} />
+            <span>Kitchen Recovery Queue</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/20 text-white">
+              {awaitingKitchenOrdersList.length}
+            </span>
+            {awaitingKitchenOrdersList.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
+            )}
+          </button>
         </div>
+
+        {/* Info banner for Awaiting Kitchen tab */}
+        {orderTab === "AWAITING_KITCHEN" && (
+          <div className="bg-[#FFF9F5] border border-[#CA340A]/30 p-4 rounded-2xl flex items-center justify-between text-xs text-[#4A2117] shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <Flame size={18} className="text-[#CA340A] shrink-0" />
+              <span>
+                <strong>Kitchen Recovery Queue:</strong> Showing <strong>{awaitingKitchenOrdersList.length}</strong> order{awaitingKitchenOrdersList.length === 1 ? "" : "s"} awaiting kitchen transmission. Use this queue during or after power cuts to safely review, transmit, or mark tickets without duplicate printing.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Info banner for Unsettled tab */}
         {orderTab === "UNSETTLED" && (
@@ -336,6 +452,32 @@ export default function AdminOrdersPage() {
             </div>
           </div>
         </div>
+
+        {/* Print Feedback Banner */}
+        {printFeedback && (
+          <div
+            className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between border animate-in fade-in ${
+              printFeedback.success
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : "bg-rose-50 text-rose-800 border-rose-200"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {printFeedback.success ? (
+                <CheckCircle2 size={16} className="text-emerald-600" />
+              ) : (
+                <AlertCircle size={16} className="text-rose-600" />
+              )}
+              <span>{printFeedback.message}</span>
+            </div>
+            <button
+              onClick={() => setPrintFeedback(null)}
+              className="text-[11px] underline opacity-80 hover:opacity-100"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Table View */}
         <div className="bg-white rounded-2xl border border-[#CA340A]/15 shadow-xs overflow-hidden">
@@ -473,12 +615,34 @@ export default function AdminOrdersPage() {
 
                         <td className="py-4 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {orderTab === "AWAITING_KITCHEN" && (
+                              <Link
+                                href={`/admin/tables/${encodeURIComponent(order.tableNumber)}`}
+                                className="px-3 py-1.5 bg-[#CA340A] hover:bg-[#A82806] text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors"
+                              >
+                                <Flame size={12} />
+                                <span>Table {order.tableNumber}</span>
+                              </Link>
+                            )}
+
                             {isCashUnpaid && (
                               <button
                                 onClick={() => setSelectedOrderForCash(order)}
                                 className="px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer"
                               >
                                 Collect
+                              </button>
+                            )}
+
+                            {isPaid && (
+                              <button
+                                disabled={printingOrderId === order.id}
+                                onClick={() => handleDirectPrintCustomerBill(order, true)}
+                                className="px-2.5 py-1.5 bg-[#3A1710] hover:bg-[#2C1710] text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                                title="Reprint 58mm Customer Bill via Counter USB Printer"
+                              >
+                                <Printer size={12} className={printingOrderId === order.id ? "animate-spin" : ""} />
+                                <span>{printingOrderId === order.id ? "Printing..." : "Reprint Bill"}</span>
                               </button>
                             )}
 

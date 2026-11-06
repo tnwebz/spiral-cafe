@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderById, updateOrderPayment } from "@/lib/db";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requireAdminAuth(req);
+  if (authError) return authError;
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMenuItemById, updateMenuItem, deleteMenuItem } from "@/lib/db";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
@@ -29,6 +30,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requireAdminAuth(req, "ADMIN");
+  if (authError) return authError;
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -49,6 +53,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requireAdminAuth(req, "ADMIN");
+  if (authError) return authError;
+
   try {
     const { id } = await params;
     const { searchParams } = new URL(req.url);

@@ -6,6 +6,7 @@ import { CartProvider } from "@/context/CartContext";
 import FloatingCartBar from "@/components/Menu/FloatingCartBar";
 import CartOrdersSheet from "@/components/Menu/CartOrdersSheet";
 import CustomerPhoneModal from "@/components/Menu/CustomerPhoneModal";
+import CustomerSessionProtection from "@/components/Menu/CustomerSessionProtection";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -48,6 +49,7 @@ export default function RootLayout({
             {children}
           </SmoothScroll>
           <CustomerPhoneModal />
+          <CustomerSessionProtection />
           <FloatingCartBar />
           <CartOrdersSheet />
         </CartProvider>

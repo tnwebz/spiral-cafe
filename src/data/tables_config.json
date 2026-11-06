@@ -1,0 +1,121 @@
+{
+  "tables": [
+    {
+      "id": "A1",
+      "tableNumber": "A1",
+      "capacity": 4,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "A2",
+      "tableNumber": "A2",
+      "capacity": 4,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "B1",
+      "tableNumber": "B1",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "B2",
+      "tableNumber": "B2",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "B3",
+      "tableNumber": "B3",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "B4",
+      "tableNumber": "B4",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "B5",
+      "tableNumber": "B5",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "B6",
+      "tableNumber": "B6",
+      "capacity": 2,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "C1",
+      "tableNumber": "C1",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "C2",
+      "tableNumber": "C2",
+      "capacity": 4,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "C3",
+      "tableNumber": "C3",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "F1",
+      "tableNumber": "F1",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "F2",
+      "tableNumber": "F2",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "F3",
+      "tableNumber": "F3",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": "F4",
+      "tableNumber": "F4",
+      "capacity": 3,
+      "section": "Dine-In",
+      "createdAt": "2026-11-03T00:00:00.000Z"
+    }
+  ],
+  "printerSettings": {
+    "printerModel": "CN811-UEWB",
+    "interfaceType": "ETHERNET",
+    "ipAddress": "192.168.1.233",
+    "port": 9100,
+    "paperWidthMm": 80,
+    "qzPrinterName": "CN811-UEWB",
+    "autoCut": true,
+    "terminalName": "Billing 1",
+    "lastCheckedAt": "2026-11-05T09:51:34.019Z",
+    "status": "READY"
+  }
+}

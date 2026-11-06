@@ -2,232 +2,461 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Phone,
   ArrowRight,
   ShieldCheck,
-  Utensils,
-  ChevronLeft,
   CheckCircle2,
-  Lock,
   Sparkles,
+  UtensilsCrossed,
+  Leaf,
+  RotateCcw,
+  Check,
+  Salad,
+  Drumstick,
 } from "lucide-react";
-import { useCart } from "@/context/CartContext";
-
-const TABLES = Array.from({ length: 15 }, (_, i) => `Table ${String(i + 1).padStart(2, "0")}`);
+import FoodIcon from "@/components/FoodIcon";
+import { useCart, FoodPreference, CustomerProfile } from "@/context/CartContext";
 
 interface CustomerPhoneModalProps {
   currentTable?: string;
   onPhoneSaved?: (phone: string, table?: string) => void;
 }
 
-interface TableStatusInfo {
-  tableNumber: string;
-  isLocked: boolean;
-  customerSessionId?: string;
-  status?: string;
-}
-
 export default function CustomerPhoneModal({
   currentTable,
   onPhoneSaved,
 }: CustomerPhoneModalProps) {
-  const { tableNumber, setTableNumber, customerSessionId } = useCart();
+  const {
+    tableNumber,
+    setTableNumber,
+    customerSessionId,
+    foodPreference,
+    setFoodPreference,
+    customerProfile,
+    setCustomerProfile,
+  } = useCart();
+
+  const pathname = usePathname();
+  const router = useRouter();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState<"phone" | "table">("phone");
+  const [step, setStep] = useState<"welcome_back" | "phone" | "preference" | "table_select">("phone");
   const [phone, setPhone] = useState("");
-  const [selectedTable, setSelectedTable] = useState<string>(currentTable || tableNumber || "Table 01");
-  const [tablesStatus, setTablesStatus] = useState<TableStatusInfo[]>([]);
-  const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [tablesList, setTablesList] = useState<any[]>([]);
+  const [selectedTable, setSelectedTable] = useState(tableNumber || currentTable || "A1");
+  const [loadingTables, setLoadingTables] = useState(false);
+  const [conflictVisitTable, setConflictVisitTable] = useState<string | null>(null);
 
-  // Sync initial table from props or CartContext
-  useEffect(() => {
-    const active = currentTable || tableNumber || "Table 01";
-    setSelectedTable(active);
-  }, [currentTable, tableNumber]);
-
-  // Check storage & splash screen coordination to open immediately after loading
-  useEffect(() => {
+  // Fetch live tables overview with 5 colors & check active visit immediately
+  const fetchTablesList = async () => {
+    setLoadingTables(true);
     try {
-      const savedPhone = localStorage.getItem("spiral_customer_phone");
-      if (savedPhone) {
-        if (onPhoneSaved) onPhoneSaved(savedPhone, selectedTable);
-        setIsOpen(false);
-        return;
+      const savedPhone =
+        phone.replace(/\D/g, "").slice(-10) ||
+        (typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : "") ||
+        "";
+      const res = await fetch(
+        `/api/tables?visitorId=${encodeURIComponent(customerSessionId)}&phone=${encodeURIComponent(savedPhone || "")}`
+      );
+      const d = await res.json();
+      if (d.success && Array.isArray(d.tables)) {
+        setTablesList(d.tables);
       }
+      if (d.activeCustomerVisit && d.activeCustomerVisit.hasActiveVisit && d.activeCustomerVisit.tableNumber) {
+        setConflictVisitTable(d.activeCustomerVisit.tableNumber);
+      }
+    } catch {}
+    finally {
+      setLoadingTables(false);
+    }
+  };
 
-      // Check if splash screen is running on the page
-      const checkAndOpen = () => {
-        const isSplashDone = sessionStorage.getItem("spiral_cafe_splash") === "true";
-        if (isSplashDone) {
-          setIsOpen(true);
-        } else {
-          // Poll until splash screen finishes, or fallback to 3.2s
-          const interval = setInterval(() => {
-            if (sessionStorage.getItem("spiral_cafe_splash") === "true") {
-              clearInterval(interval);
+  const handleContinueWithActiveTable = (rawTable: string) => {
+    const clean = rawTable.replace(/^Table\s*/i, "").trim();
+    setTableNumber(clean);
+    setSelectedTable(clean);
+    setIsOpen(false);
+    const savedPhone =
+      phone.replace(/\D/g, "").slice(-10) ||
+      (typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : "") ||
+      "";
+    if (onPhoneSaved && savedPhone) {
+      onPhoneSaved(savedPhone, clean);
+    }
+    router.push("/menu");
+  };
+
+  // Check returning customer session on load (30-day retention window)
+  useEffect(() => {
+    if (pathname?.startsWith("/admin") || pathname?.startsWith("/kitchen")) {
+      return;
+    }
+    try {
+      const savedProfileStr = localStorage.getItem("spiral_customer_profile");
+      const savedPhone = localStorage.getItem("spiral_customer_phone");
+
+      const checkAndTrigger = () => {
+        if (savedProfileStr) {
+          try {
+            const parsed: CustomerProfile = JSON.parse(savedProfileStr);
+            const isExpired = parsed.expiresAt
+              ? Date.now() > new Date(parsed.expiresAt).getTime()
+              : false;
+
+            if (!isExpired && parsed.maskedPhone) {
+              // Returning Customer within 30 days: show Welcome Back Screen
+              fetchTablesList();
+              setStep("welcome_back");
               setIsOpen(true);
+              return;
+            } else {
+              // Session expired after 30 days -> prompt for phone again
+              localStorage.removeItem("spiral_customer_profile");
+              localStorage.removeItem("spiral_customer_phone");
+              setStep("phone");
+              setIsOpen(true);
+              return;
             }
-          }, 300);
-
-          const fallbackTimer = setTimeout(() => {
-            clearInterval(interval);
+          } catch {
+            setStep("phone");
             setIsOpen(true);
-          }, 3400);
-
-          return () => {
-            clearInterval(interval);
-            clearTimeout(fallbackTimer);
-          };
+            return;
+          }
         }
+
+        if (savedPhone && savedPhone.length >= 10) {
+          // If legacy raw phone was saved without profile, show welcome back with masked number
+          const masked = `******${savedPhone.slice(-4)}`;
+          const profile: CustomerProfile = {
+            maskedPhone: masked,
+            foodPreference: foodPreference || "ALL",
+            lastVisited: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          };
+          localStorage.setItem("spiral_customer_profile", JSON.stringify(profile));
+          setCustomerProfile(profile);
+          fetchTablesList();
+          setStep("welcome_back");
+          setIsOpen(true);
+          return;
+        }
+
+        // First-time customer: show Phone Entry
+        setStep("phone");
+        setIsOpen(true);
       };
 
-      const cleanup = checkAndOpen();
-      return cleanup;
+      // Coordinate with splash screen
+      const isSplashDone = sessionStorage.getItem("spiral_cafe_splash") === "true";
+      if (isSplashDone) {
+        checkAndTrigger();
+      } else {
+        const interval = setInterval(() => {
+          if (sessionStorage.getItem("spiral_cafe_splash") === "true") {
+            clearInterval(interval);
+            checkAndTrigger();
+          }
+        }, 250);
+
+        const timeout = setTimeout(() => {
+          clearInterval(interval);
+          checkAndTrigger();
+        }, 3200);
+
+        return () => {
+          clearInterval(interval);
+          clearTimeout(timeout);
+        };
+      }
     } catch {
       setIsOpen(true);
     }
-  }, [onPhoneSaved, selectedTable]);
+  }, [setCustomerProfile, foodPreference]);
 
-  // Fetch live table occupancy status when modal opens or step changes to table
-  useEffect(() => {
-    if (isOpen) {
-      fetch("/api/tables/status")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && Array.isArray(data.tables)) {
-            setTablesStatus(data.tables);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isOpen, step]);
-
-  const handleProceedToTable = (e: React.FormEvent) => {
+  // Handler for First-Time Phone Submission -> Moves to Food Preference Screen
+  const handlePhoneSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const clean = phone.replace(/\D/g, "");
 
-    // Validate 10-digit phone
     if (clean.length < 10) {
       setError("Please enter a valid 10-digit mobile number.");
       return;
     }
 
     setError("");
-    setStep("table");
+    setStep("preference");
   };
 
-  const handleFinalSubmit = async () => {
-    const clean = phone.replace(/\D/g, "");
-    if (clean.length < 10) {
-      setStep("phone");
-      setError("Please enter a valid 10-digit mobile number.");
-      return;
-    }
-
-    if (!selectedTable) {
-      setError("Please choose a table number to continue.");
-      return;
-    }
-
+  // Handler for Food Preference Selection (Saves 30-day session & closes modal)
+  const handleSelectPreference = async (pref: FoodPreference) => {
+    const clean = phone.replace(/\D/g, "").slice(-10);
     setSubmitting(true);
     setError("");
 
     try {
-      const activeSessionId =
-        customerSessionId ||
-        localStorage.getItem("spiral_customer_session_id") ||
-        localStorage.getItem("spiral_session_id") ||
-        `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const masked = `******${clean.slice(-4)}`;
+      const profile: CustomerProfile = {
+        maskedPhone: masked,
+        foodPreference: pref,
+        lastVisited: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      };
 
-      localStorage.setItem("spiral_customer_session_id", activeSessionId);
-      localStorage.setItem("spiral_session_id", activeSessionId);
+      // 1. Update CartContext
+      setFoodPreference(pref);
+      setCustomerProfile(profile);
+
+      // 2. Browser Storage (masked for display, full for backend order requests)
       localStorage.setItem("spiral_customer_phone", clean);
-      localStorage.setItem("spiral_table_session", selectedTable);
+      localStorage.setItem("spiral_customer_profile", JSON.stringify(profile));
 
-      setTableNumber(selectedTable);
-
-      await fetch("/api/customers", {
+      // 3. Register with backend
+      await fetch("/api/customers/identify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: clean,
-          serviceSmsConsent: true,
-          marketingConsent,
-          tableNumber: selectedTable,
-          sessionId: activeSessionId,
+          foodPreference: pref,
+          tableNumber: tableNumber || currentTable || "A1",
+          sessionId: customerSessionId,
         }),
       });
 
       if (onPhoneSaved) {
-        onPhoneSaved(clean, selectedTable);
+        onPhoneSaved(clean, tableNumber || currentTable || "A1");
       }
 
-      setIsOpen(false);
+      fetchTablesList();
+      setStep("table_select");
     } catch (err) {
-      console.error("Error saving customer session:", err);
-      // Fallback local save
-      localStorage.setItem("spiral_customer_phone", clean);
-      localStorage.setItem("spiral_table_session", selectedTable);
-      setTableNumber(selectedTable);
-      if (onPhoneSaved) onPhoneSaved(clean, selectedTable);
-      setIsOpen(false);
+      console.error("Preference save error:", err);
+      fetchTablesList();
+      setStep("table_select");
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (!isOpen) return null;
+  // Handler for Returning Customer: "Continue"
+  const handleWelcomeBackContinue = () => {
+    // Refresh last visited timestamp and extend 30-day expiry
+    if (customerProfile) {
+      const updated: CustomerProfile = {
+        ...customerProfile,
+        lastVisited: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+      setCustomerProfile(updated);
+      try {
+        localStorage.setItem("spiral_customer_profile", JSON.stringify(updated));
+      } catch {}
+    }
+
+    const savedPhone = typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : null;
+    if (savedPhone && onPhoneSaved) {
+      onPhoneSaved(savedPhone, tableNumber || currentTable || "A1");
+    }
+
+    fetchTablesList();
+    setStep("table_select");
+  };
+
+  // Handler for Reserving Table in Step 3
+  const handleReserveTable = async (tableNum: string) => {
+    const cleanActive = conflictVisitTable?.replace(/^Table\s*/i, "").trim().toUpperCase();
+    if (cleanActive && cleanActive === tableNum.toUpperCase()) {
+      handleContinueWithActiveTable(tableNum);
+      return;
+    }
+
+    if (cleanActive && cleanActive !== tableNum.toUpperCase()) {
+      setError(
+        `You currently have an active dining session at Table ${cleanActive}. To move to Table ${tableNum}, please click "Change Table" to request a table transfer.`
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      const clean =
+        phone.replace(/\D/g, "").slice(-10) ||
+        (typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : "") ||
+        "";
+
+      const res = await fetch("/api/tables/reserve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber: tableNum,
+          customerSessionId,
+          customerPhone: clean,
+        }),
+      });
+
+      const d = await res.json();
+      if (d.success) {
+        setTableNumber(tableNum);
+        setSelectedTable(tableNum);
+        if (onPhoneSaved) {
+          onPhoneSaved(clean, tableNum);
+        }
+        setIsOpen(false);
+        router.push("/menu");
+      } else if (d.conflictActiveVisit && d.currentActiveTable) {
+        setConflictVisitTable(d.currentActiveTable);
+        setError(d.error || `You already have an active dining visit at ${d.currentActiveTable}.`);
+      } else {
+        setError(d.error || `Table ${tableNum} is currently reserved or occupied.`);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to reserve table.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handler for Returning Customer: "Not you? Change"
+  const handleNotYouChange = () => {
+    // End remembered customer session and return to phone entry
+    setCustomerProfile(null);
+    try {
+      localStorage.removeItem("spiral_customer_profile");
+      localStorage.removeItem("spiral_customer_phone");
+    } catch {}
+    setPhone("");
+    setError("");
+    setStep("phone");
+  };
+
+  if (!isOpen || pathname?.startsWith("/admin") || pathname?.startsWith("/kitchen")) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl border border-[#CA340A]/20 shadow-2xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 relative overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Step Indicator Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-[#EBDAD0] mb-4">
-          {step === "table" ? (
-            <button
-              onClick={() => {
-                setStep("phone");
-                setError("");
-              }}
-              className="inline-flex items-center gap-1 text-xs font-bold text-[#CA340A] hover:underline cursor-pointer"
-            >
-              <ChevronLeft size={16} />
-              <span>Change Phone</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[#8C5E51]">
-              <Sparkles size={14} className="text-[#CA340A]" />
-              <span>Dine-In Check-In</span>
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+      <div className="bg-[#FFF8F3] rounded-3xl border border-[#CA340A]/20 shadow-2xl max-w-sm sm:max-w-md w-full p-6 sm:p-7 relative overflow-hidden flex flex-col">
+        {/* ========================================================= */}
+        {/* SCENARIO 2: RETURNING CUSTOMER (WELCOME BACK) */}
+        {/* ========================================================= */}
+        {step === "welcome_back" && (
+          <div className="space-y-5 text-center">
+            {/* Cafe Logo */}
+            <div className="relative w-16 h-16 rounded-3xl bg-[#3A1710] p-2 mx-auto flex items-center justify-center shadow-lg">
+              <Image
+                src="/logo.png"
+                alt="Spiral Cafe"
+                width={48}
+                height={48}
+                className="object-contain"
+              />
             </div>
-          )}
 
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                step === "phone" ? "bg-[#CA340A] scale-110" : "bg-[#CA340A]/40"
-              }`}
-            />
-            <span
-              className={`w-2 h-2 rounded-full ${
-                step === "table" ? "bg-[#CA340A] scale-110" : "bg-[#E2C7BA]"
-              }`}
-            />
-            <span className="text-[11px] font-bold text-[#8C5E51] ml-1 uppercase tracking-wider">
-              {step === "phone" ? "Step 1 of 2" : "Step 2 of 2"}
-            </span>
+            <div>
+              <span className="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-extrabold uppercase tracking-wider mb-2 border border-emerald-200">
+                Recognized Guest
+              </span>
+              <h2 className="font-heading font-black text-2xl text-[#2C1710] tracking-tight">
+                WELCOME BACK!
+              </h2>
+              <p className="text-xs text-[#6B5E55] mt-1 font-medium">
+                Continue with your saved mobile number?
+              </p>
+            </div>
+
+            {/* Masked Number & Preference Badge Display */}
+            <div className="bg-white rounded-2xl p-4 border border-[#EBDAD0] shadow-xs space-y-2">
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xs text-zinc-400 font-mono">+91</span>
+                <span className="font-mono font-extrabold text-xl text-[#2C1710] tracking-wider">
+                  {customerProfile?.maskedPhone ||
+                    (typeof window !== "undefined" && localStorage.getItem("spiral_customer_phone")
+                      ? `******${localStorage.getItem("spiral_customer_phone")!.slice(-4)}`
+                      : "******3210")}
+                </span>
+              </div>
+
+              <div className="pt-2 border-t border-zinc-100 flex items-center justify-center gap-2 text-xs">
+                <span className="text-zinc-500 font-medium">Saved Preference:</span>
+                <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  {customerProfile?.foodPreference === "VEG_ONLY" ? (
+                    <>
+                      <FoodIcon nameOrId="veg" className="w-3.5 h-3.5" />
+                      <span>Veg Only</span>
+                    </>
+                  ) : (
+                    <>
+                      <FoodIcon nameOrId="non-veg" className="w-4.5 h-3.5" />
+                      <span>Veg &amp; Non-Veg</span>
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {/* Actions: Active Table Prompt OR Continue */}
+            {conflictVisitTable ? (
+              <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-3.5 text-xs space-y-2 text-center shadow-xs">
+                <div className="flex items-center justify-center gap-1.5 font-heading font-extrabold text-amber-950 text-sm">
+                  <span>📍</span>
+                  <span>Active Session at Table {conflictVisitTable.replace(/^Table\s*/i, "")}</span>
+                </div>
+                <p className="text-[11px] text-amber-800">
+                  You already placed orders at Table {conflictVisitTable.replace(/^Table\s*/i, "")}. Would you like to continue?
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleContinueWithActiveTable(conflictVisitTable)}
+                    className="flex-1 py-3 px-3 bg-[#CA340A] hover:bg-[#B73F1D] text-white rounded-xl text-xs font-heading font-extrabold shadow-md shadow-[#CA340A]/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Continue at Table {conflictVisitTable.replace(/^Table\s*/i, "")}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetchTablesList();
+                      setStep("table_select");
+                    }}
+                    className="flex-1 py-3 px-3 bg-white border border-[#CA340A] text-[#CA340A] hover:bg-amber-50 rounded-xl text-xs font-heading font-bold transition-all cursor-pointer"
+                  >
+                    Change Table
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={handleWelcomeBackContinue}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-[#CA340A] text-white font-heading font-extrabold text-sm hover:bg-[#B73F1D] shadow-lg shadow-[#CA340A]/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                >
+                  <span>Continue to Menu</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleNotYouChange}
+              className="w-full py-2 text-xs font-bold text-[#8C5E51] hover:text-[#2C1710] hover:underline cursor-pointer transition-colors"
+            >
+              Not you? Change number
+            </button>
           </div>
-        </div>
+        )}
 
-        {/* STEP 1: COLLECT PHONE NUMBER */}
+        {/* ========================================================= */}
+        {/* SCENARIO 1 - SCREEN 1: FIRST-TIME WELCOME & PHONE ENTRY */}
+        {/* ========================================================= */}
         {step === "phone" && (
-          <form onSubmit={handleProceedToTable} className="flex flex-col space-y-4">
-            {/* Brand Top Header */}
-            <div className="text-center">
-              <div className="relative w-14 h-14 rounded-2xl bg-[#3A1710] p-1.5 mx-auto mb-2.5 flex items-center justify-center shadow-md">
+          <form onSubmit={handlePhoneSubmit} className="space-y-4">
+            <div className="text-center space-y-2">
+              <div className="relative w-14 h-14 rounded-2xl bg-[#3A1710] p-1.5 mx-auto flex items-center justify-center shadow-md">
                 <Image
                   src="/logo.png"
                   alt="Spiral Cafe"
@@ -236,160 +465,338 @@ export default function CustomerPhoneModal({
                   className="object-contain"
                 />
               </div>
-              <h2 className="font-heading font-black text-xl sm:text-2xl text-[#2C1710] tracking-tight">
-                Welcome to Spiral Cafe
-              </h2>
-              <p className="text-xs text-[#52525b] mt-1">
-                Enter your mobile number to start your dine-in session
-              </p>
+
+              <div>
+                <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
+                  WELCOME TO OUR CAFE
+                </h2>
+                <p className="text-xs text-[#6B5E55] mt-0.5 font-medium">
+                  Enter your mobile number to view menu &amp; order
+                </p>
+              </div>
             </div>
 
-            {/* Input Form */}
+            {/* Phone Number Input */}
             <div>
-              <label className="block text-xs font-bold text-[#2C1710] mb-1 uppercase tracking-wider">
+              <label
+                htmlFor="customer-phone-input"
+                className="block text-xs font-bold text-[#4A2117] mb-1.5"
+              >
                 Mobile Number
               </label>
               <div className="relative flex items-center">
-                <span className="absolute left-3.5 font-mono font-bold text-sm text-[#52525b]">
-                  +91
-                </span>
+                <div className="absolute left-3.5 flex items-center gap-1 text-zinc-500 font-bold text-sm pointer-events-none border-r border-zinc-200 pr-2">
+                  <span className="text-xs">🇮🇳</span>
+                  <span>+91</span>
+                </div>
                 <input
+                  id="customer-phone-input"
                   type="tel"
-                  inputMode="numeric"
                   maxLength={10}
-                  required
+                  autoFocus
+                  placeholder="98765 43210"
                   value={phone}
                   onChange={(e) => {
-                    setPhone(e.target.value);
-                    setError("");
+                    const val = e.target.value.replace(/\D/g, "");
+                    setPhone(val);
+                    if (error) setError("");
                   }}
-                  placeholder="98765 43210"
-                  className="w-full pl-14 pr-3.5 py-3 bg-[#FFF9F5] border-2 border-[#CA340A]/20 focus:border-[#CA340A] rounded-2xl text-base font-bold text-[#2C1710] font-mono focus:outline-none transition-colors"
-                  autoFocus
+                  className="w-full pl-22 pr-4 py-3 rounded-2xl bg-white border border-[#EBDAD0] text-[#2C1710] font-mono text-base font-bold placeholder:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-[#CA340A]/40 focus:border-[#CA340A] shadow-2xs transition-all"
                 />
               </div>
-              {error && <p className="text-[11px] text-red-600 font-bold mt-1.5">{error}</p>}
+              {error && (
+                <p className="text-xs text-red-600 font-bold mt-1.5 flex items-center gap-1">
+                  <span>⚠️</span> {error}
+                </p>
+              )}
             </div>
 
-            {/* Privacy Note */}
-            <div className="flex items-start gap-2 pt-0.5 text-[11px] text-[#52525b]">
-              <ShieldCheck size={15} className="shrink-0 text-emerald-600 mt-0.5" />
-              <span>We use this number to send digital invoices and order updates.</span>
+            {/* Privacy notice */}
+            <div className="flex items-center gap-2 p-2.5 bg-white/70 rounded-xl border border-[#EBDAD0]/60 text-[11px] text-[#8C5E51]">
+              <ShieldCheck size={16} className="text-emerald-700 shrink-0" />
+              <span>We remember your preference so you don&apos;t have to type again.</span>
             </div>
 
-            {/* Marketing Opt-in Checkbox */}
-            <label className="flex items-center gap-2 text-xs text-[#52525b] cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={marketingConsent}
-                onChange={(e) => setMarketingConsent(e.target.checked)}
-                className="w-4 h-4 rounded text-[#CA340A] border-zinc-300 focus:ring-[#CA340A]"
-              />
-              <span>Send me offers, discounts and updates</span>
-            </label>
-
-            {/* Next Step CTA (Proceed to Table Selection) */}
+            {/* Continue CTA */}
             <button
               type="submit"
-              className="w-full py-3.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 mt-2"
+              disabled={phone.replace(/\D/g, "").length < 10}
+              className="w-full py-3.5 px-4 rounded-2xl bg-[#CA340A] text-white font-heading font-extrabold text-sm hover:bg-[#B73F1D] shadow-lg shadow-[#CA340A]/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed active:scale-98"
             >
-              <span>CHOOSE YOUR TABLE</span>
+              <span>Continue</span>
               <ArrowRight size={16} />
             </button>
           </form>
         )}
 
-        {/* STEP 2: CHOOSE TABLE */}
-        {step === "table" && (
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <div className="text-center mb-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center mx-auto mb-1.5">
-                <Utensils size={20} />
-              </div>
-              <h3 className="font-heading font-black text-xl text-[#2C1710]">
-                Choose Your Table
-              </h3>
-              <p className="text-xs text-[#52525b] mt-0.5">
-                Mobile: <strong className="text-[#2C1710] font-mono">+91 {phone}</strong> • Pick your table (1 - 15)
+        {/* ========================================================= */}
+        {/* SCENARIO 1 - SCREEN 2: FOOD PREFERENCE SELECTION */}
+        {/* ========================================================= */}
+        {step === "preference" && (
+          <div className="space-y-4">
+            <div className="text-center space-y-1">
+              <span className="text-[11px] font-extrabold text-[#CA340A] uppercase tracking-wider">
+                Step 2 of 2
+              </span>
+              <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
+                WHAT DO YOU PREFER?
+              </h2>
+              <p className="text-xs text-[#6B5E55] font-medium">
+                Choose your diet type. You can switch this anytime in the menu.
               </p>
             </div>
 
-            {/* 15 Table Grid */}
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 my-2 overflow-y-auto max-h-[38vh] p-1">
-              {TABLES.map((t) => {
-                const isSelected = selectedTable === t;
-                const num = t.replace("Table ", "");
-                const info = tablesStatus.find((ts) => ts.tableNumber === t);
-                const isOccupiedByOther =
-                  info?.isLocked && info?.customerSessionId !== customerSessionId;
-                const isMyActiveTable =
-                  info?.isLocked && info?.customerSessionId === customerSessionId;
+            {/* Preference Cards */}
+            <div className="space-y-3 pt-2">
+              {/* Option 1: VEG ONLY */}
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleSelectPreference("VEG_ONLY")}
+                className="w-full p-4 rounded-2xl bg-white border-2 border-emerald-500/40 hover:border-emerald-600 hover:bg-emerald-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform p-1.5">
+                    <FoodIcon nameOrId="veg" className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
+                      VEG ONLY
+                    </h3>
+                    <p className="text-[11px] text-[#6B5E55]">
+                      Show only 100% pure vegetarian items
+                    </p>
+                  </div>
+                </div>
+                <span className="w-6 h-6 rounded-full border border-emerald-500 flex items-center justify-center text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Check size={14} />
+                </span>
+              </button>
 
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    disabled={isOccupiedByOther}
-                    onClick={() => {
-                      setSelectedTable(t);
-                      setError("");
-                    }}
-                    className={`py-2.5 px-1.5 rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer border active:scale-95 ${
-                      isOccupiedByOther
-                        ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60"
-                        : isSelected
-                        ? "bg-[#CA340A] text-white border-[#A82806] shadow-md ring-2 ring-[#CA340A]/30"
-                        : "bg-white text-[#4A2117] border-[#EBDAD0] hover:border-[#CA340A] hover:bg-[#FFF8F3]"
-                    }`}
-                  >
-                    <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">
-                      Table
-                    </span>
-                    <span className="font-heading font-extrabold text-base leading-tight mt-0.5">
-                      {num}
-                    </span>
-                    {isOccupiedByOther ? (
-                      <span className="text-[8px] font-bold bg-zinc-200 text-zinc-600 px-1 py-0.2 rounded-full mt-1 flex items-center gap-0.5">
-                        <Lock size={8} /> Occupied
-                      </span>
-                    ) : isMyActiveTable ? (
-                      <span className="text-[8px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1 py-0.2 rounded-full mt-1">
-                        ✓ Yours
-                      </span>
-                    ) : isSelected ? (
-                      <span className="text-[8px] font-bold bg-white/25 text-white px-1.5 py-0.2 rounded-full mt-1">
-                        Selected
-                      </span>
-                    ) : (
-                      <span className="text-[8px] text-emerald-700 font-bold mt-1">
-                        Available
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+              {/* Option 2: VEG & NON-VEG */}
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleSelectPreference("ALL")}
+                className="w-full p-4 rounded-2xl bg-white border-2 border-[#3A1710]/20 hover:border-[#3A1710] hover:bg-amber-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-[#3A1710]/10 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform p-1.5">
+                    <FoodIcon nameOrId="non-veg" className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
+                      VEG &amp; NON-VEG
+                    </h3>
+                    <p className="text-[11px] text-[#6B5E55]">
+                      Explore the complete culinary menu
+                    </p>
+                  </div>
+                </div>
+                <span className="w-6 h-6 rounded-full border border-[#3A1710] flex items-center justify-center text-[#3A1710] opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Check size={14} />
+                </span>
+              </button>
             </div>
 
-            {error && <p className="text-[11px] text-red-600 font-bold text-center mt-1">{error}</p>}
+            <p className="text-[11px] text-[#8C5E51] text-center pt-1">
+              Remembered for 30 days on this device.
+            </p>
+          </div>
+        )}
 
-            {/* Selected Summary Bar */}
-            <div className="mt-2 py-2 px-3 bg-[#FFF9F5] border border-[#CA340A]/20 rounded-xl flex items-center justify-between text-xs">
-              <span className="text-[#52525b]">Selected Sitting:</span>
-              <span className="font-heading font-black text-sm text-[#CA340A]">
-                {selectedTable}
+        {/* ========================================================= */}
+        {/* STEP 3: CHOOSE YOUR TABLE & TEMPORARY LOCK */}
+        {/* ========================================================= */}
+        {step === "table_select" && (
+          <div className="space-y-4">
+            <div className="text-center space-y-1">
+              <span className="text-[11px] font-extrabold text-[#CA340A] uppercase tracking-wider">
+                Step 3 of 3
               </span>
+              <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
+                SELECT YOUR TABLE
+              </h2>
+              <p className="text-xs text-[#6B5E55] font-medium">
+                Choose your floor table to reserve it for 10 minutes.
+              </p>
             </div>
 
-            {/* Final Continue CTA */}
-            <button
-              type="button"
-              disabled={submitting || !selectedTable}
-              onClick={handleFinalSubmit}
-              className="w-full py-3.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-3"
-            >
-              <span>{submitting ? "Confirming Session..." : "CONTINUE TO MENU"}</span>
-              <ArrowRight size={16} />
-            </button>
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs font-semibold text-red-700 text-center">
+                {error}
+              </div>
+            )}
+
+            {conflictVisitTable && (
+              <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-2">
+                <div className="font-heading font-extrabold text-amber-950 text-center">
+                  📍 Active Visit at {conflictVisitTable}
+                </div>
+                <p className="text-[11px] text-amber-800 text-center">
+                  You already have an active dining session. Would you like to continue at {conflictVisitTable}?
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleanTable = conflictVisitTable.replace("Table ", "");
+                      setTableNumber(cleanTable);
+                      setSelectedTable(cleanTable);
+                      setIsOpen(false);
+                      router.push("/menu");
+                    }}
+                    className="flex-1 py-2 bg-[#CA340A] text-white rounded-xl text-xs font-heading font-bold shadow-xs hover:bg-[#B73F1D] cursor-pointer"
+                  >
+                    Continue at {conflictVisitTable}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(new CustomEvent("open-table-transfer"));
+                      }
+                    }}
+                    className="flex-1 py-2 bg-white border border-[#CA340A] text-[#CA340A] rounded-xl text-xs font-heading font-bold hover:bg-amber-50 cursor-pointer"
+                  >
+                    Change Table
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {loadingTables ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center">
+                <div className="w-8 h-8 border-2 border-[#CA340A] border-t-transparent rounded-full animate-spin mb-2" />
+                <p className="text-xs font-bold text-zinc-500">Checking table availability...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2.5 max-h-[42vh] overflow-y-auto p-1">
+                {(tablesList.length > 0
+                  ? tablesList
+                  : [
+                      { tableNumber: "A1", color: "WHITE" },
+                      { tableNumber: "A2", color: "WHITE" },
+                      { tableNumber: "B1", color: "WHITE" },
+                      { tableNumber: "B2", color: "WHITE" },
+                      { tableNumber: "B3", color: "WHITE" },
+                      { tableNumber: "B4", color: "WHITE" },
+                      { tableNumber: "B5", color: "WHITE" },
+                      { tableNumber: "B6", color: "WHITE" },
+                      { tableNumber: "C1", color: "WHITE" },
+                      { tableNumber: "C2", color: "WHITE" },
+                      { tableNumber: "C3", color: "WHITE" },
+                      { tableNumber: "F1", color: "WHITE" },
+                      { tableNumber: "F2", color: "WHITE" },
+                      { tableNumber: "F3", color: "WHITE" },
+                      { tableNumber: "F4", color: "WHITE" },
+                    ]
+                ).map((t: any) => {
+                  const cleanActive = conflictVisitTable?.replace(/^Table\s*/i, "").trim().toUpperCase();
+                  const isMyTable =
+                    Boolean(t.isMyActiveTable) ||
+                    (cleanActive && t.tableNumber.toUpperCase() === cleanActive);
+
+                  const isSelected = selectedTable === t.tableNumber;
+                  const isAvailable =
+                    isMyTable ||
+                    t.color === "WHITE" ||
+                    (t.color === "BLUE" && t.reservation?.customerSessionId === customerSessionId);
+                  const isBlueOther =
+                    !isMyTable &&
+                    t.color === "BLUE" &&
+                    t.reservation?.customerSessionId !== customerSessionId;
+                  const isOccupiedOther =
+                    !isMyTable &&
+                    (t.color === "RED" || t.color === "YELLOW" || t.color === "GREEN");
+
+                  return (
+                    <button
+                      key={t.tableNumber}
+                      type="button"
+                      disabled={!isAvailable || submitting}
+                      onClick={() => handleReserveTable(t.tableNumber)}
+                      className={`p-3 rounded-2xl flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                        isMyTable
+                          ? "bg-emerald-50 text-emerald-950 border-2 border-emerald-600 shadow-md ring-2 ring-emerald-500/30 scale-102"
+                          : isSelected
+                          ? "bg-[#CA340A] text-white border-[#CA340A] shadow-md ring-2 ring-[#CA340A]/30 scale-102"
+                          : isBlueOther
+                          ? "bg-blue-50/70 text-blue-400 border-blue-200 cursor-not-allowed opacity-75"
+                          : isOccupiedOther
+                          ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60"
+                          : "bg-white text-[#2C1710] border-[#EBDAD0] hover:border-[#CA340A] hover:bg-amber-50/40"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 mb-0.5">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            isMyTable
+                              ? "bg-emerald-500 animate-pulse"
+                              : isAvailable
+                              ? isSelected
+                                ? "bg-white"
+                                : "bg-zinc-300"
+                              : isBlueOther
+                              ? "bg-blue-500 animate-pulse"
+                              : t.color === "RED"
+                              ? "bg-red-500"
+                              : t.color === "YELLOW"
+                              ? "bg-amber-500"
+                              : "bg-emerald-500"
+                          }`}
+                        />
+                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">
+                          Table
+                        </span>
+                      </span>
+                      <span className="font-heading font-extrabold text-lg sm:text-xl leading-none">
+                        {t.tableNumber}
+                      </span>
+                      <span className="text-[9px] font-semibold mt-1">
+                        {isMyTable
+                          ? "Your Table"
+                          : isBlueOther
+                          ? "Reserved"
+                          : isOccupiedOther
+                          ? "Occupied"
+                          : "Available"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Legend as requested:
+                ⚪ Available
+                🔵 Reserved
+                🔴🟡🟢 Occupied
+                ⚠️ If your table shows occupied, please contact the counter. */}
+            <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-around text-[11px] font-bold text-zinc-700">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-300 border border-zinc-400" />
+                  Available
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  Reserved
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="flex gap-0.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  </span>
+                  Occupied
+                </span>
+              </div>
+              <p className="text-[10px] text-amber-900 text-center font-semibold pt-0.5">
+                ⚠️ If your table shows occupied, please contact the counter.
+              </p>
+            </div>
           </div>
         )}
       </div>

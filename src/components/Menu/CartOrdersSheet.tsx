@@ -24,7 +24,12 @@ import {
 } from "lucide-react";
 import { useCart, PlacedOrder } from "@/context/CartContext";
 
-const TABLES = Array.from({ length: 15 }, (_, i) => `Table ${String(i + 1).padStart(2, "0")}`);
+const DEFAULT_FLOOR_TABLES = [
+  "A1", "A2",
+  "B1", "B2", "B3", "B4", "B5", "B6",
+  "C1", "C2", "C3",
+  "F1", "F2", "F3", "F4",
+];
 
 export default function CartOrdersSheet() {
   const {
@@ -36,6 +41,9 @@ export default function CartOrdersSheet() {
     tableNumber,
     setTableNumber,
     customerSessionId,
+    tableReservation,
+    transferTableReservation,
+    refreshTableReservation,
     totalItems,
     subtotal,
     taxPercentage,
@@ -58,7 +66,20 @@ export default function CartOrdersSheet() {
   const [orderNotes, setOrderNotes] = useState("");
   const [showTableModal, setShowTableModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [selectedTable, setSelectedTable] = useState(tableNumber || "Table 01");
+  const [selectedTable, setSelectedTable] = useState(tableNumber || "A1");
+  const [availableTables, setAvailableTables] = useState<string[]>(DEFAULT_FLOOR_TABLES);
+  const [overviewTables, setOverviewTables] = useState<
+    Array<{
+      tableNumber: string;
+      color: "WHITE" | "BLUE" | "RED" | "YELLOW" | "GREEN";
+      status: string;
+      capacity: number;
+      reservation?: {
+        remainingSeconds: number;
+        customerPhone?: string;
+      };
+    }>
+  >([]);
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<{
     [orderId: string]: { type: "info" | "error" | "cancelled"; message: string };
@@ -82,6 +103,18 @@ export default function CartOrdersSheet() {
 
   useEffect(() => {
     if (showTableModal) {
+      // Fetch dynamic tables with full 5-color status
+      fetch(`/api/tables?visitorId=${encodeURIComponent(customerSessionId)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && Array.isArray(d.tables) && d.tables.length > 0) {
+            setOverviewTables(d.tables);
+            setAvailableTables(d.tables.map((t: any) => t.tableNumber));
+          }
+        })
+        .catch(() => {});
+
+      // Fetch occupancy status fallback
       fetch("/api/tables/status")
         .then((r) => r.json())
         .then((d) => {
@@ -91,23 +124,45 @@ export default function CartOrdersSheet() {
         })
         .catch(() => {});
     }
-  }, [showTableModal]);
+  }, [showTableModal, customerSessionId]);
 
   if (!isCartOpen) return null;
 
-  const handleSelectTable = (table: string) => {
-    const info = tablesStatus.find((ts) => ts.tableNumber === table);
-    const isOccupiedByOther =
-      info?.isLocked && info?.customerSessionId !== customerSessionId;
+  const handleSelectTable = async (table: string) => {
+    setOrderError(null);
+    const tableItem = overviewTables.find((t) => t.tableNumber === table);
 
-    if (isOccupiedByOther) {
+    // If occupied with active order
+    if (
+      tableItem &&
+      (tableItem.color === "RED" || tableItem.color === "YELLOW" || tableItem.color === "GREEN")
+    ) {
       setOrderError(
-        `${table} is currently occupied with an active dining session. Please choose an available table.`
+        `Table ${table} is currently occupied with an active dining session. If your table shows occupied, please contact the counter.`
       );
       return;
     }
 
-    setOrderError(null);
+    // If temporarily reserved by someone else
+    if (tableItem && tableItem.color === "BLUE") {
+      const isMyRes =
+        (tableReservation?.tableNumber === table && !tableReservation.isExpired) ||
+        selectedTable === table;
+      if (!isMyRes) {
+        setOrderError(
+          `Table ${table} is temporarily reserved by another customer. Please choose an available table.`
+        );
+        return;
+      }
+    }
+
+    // Transfer or create reservation atomically
+    const res = await transferTableReservation(table);
+    if (!res.success) {
+      setOrderError(res.error || `Failed to reserve Table ${table}.`);
+      return;
+    }
+
     setTableNumber(table);
     setSelectedTable(table);
     setShowTableModal(false);
@@ -119,7 +174,7 @@ export default function CartOrdersSheet() {
 
   const handleFinalConfirmOrder = async () => {
     setOrderError(null);
-    const targetTable = selectedTable || tableNumber || "Table 01";
+    const targetTable = selectedTable || tableNumber || "A1";
     const res = await placeOrder(orderNotes, targetTable);
     if (!res.success) {
       setOrderError(res.error || "Failed to place order.");
@@ -211,11 +266,11 @@ export default function CartOrdersSheet() {
               <span>Dining at</span>
               <button
                 onClick={() => {
-                  setSelectedTable(tableNumber || "Table 01");
+                  setSelectedTable(tableNumber || "A1");
                   setShowTableModal(true);
                 }}
                 className="font-bold text-[#B73F1D] underline inline-flex items-center gap-1 cursor-pointer hover:text-[#9D3E22]"
-                title="Tap to change table (1-15)"
+                title="Tap to change table"
               >
                 <span>{tableNumber}</span>
                 <Edit2 size={11} />
@@ -409,7 +464,10 @@ export default function CartOrdersSheet() {
                     </div>
                     <button
                       disabled={isPlacingOrder}
-                      onClick={() => handleFinalConfirmOrder()}
+                      onClick={() => {
+                        setSelectedTable(tableNumber || "A1");
+                        setShowConfirmModal(true);
+                      }}
                       className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                     >
                       {isPlacingOrder ? (
@@ -425,7 +483,7 @@ export default function CartOrdersSheet() {
                 ) : (
                   <button
                     onClick={() => {
-                      setSelectedTable(tableNumber || "Table 01");
+                      setSelectedTable(tableNumber || "A1");
                       setShowTableModal(true);
                     }}
                     className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
@@ -440,89 +498,149 @@ export default function CartOrdersSheet() {
         )}
 
         {/* Tab 2: My Placed Orders */}
-        {activeSheetTab === "orders" && (
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-6 flex flex-col gap-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-[#8C5E51] uppercase tracking-wider">
-                My Placed Orders ({placedOrders.length})
-              </span>
-              <button
-                onClick={async () => {
-                  await notifyAddingFood(true);
-                  setIsCartOpen(false);
-                }}
-                className="text-xs font-bold text-[#B73F1D] hover:underline inline-flex items-center gap-1 cursor-pointer"
-              >
-                <span>+ ADD MORE FOOD</span>
-              </button>
-            </div>
+        {activeSheetTab === "orders" && (() => {
+          const sortedOrders = [...placedOrders]
+            .filter((o) => o.status !== "CANCELLED" && o.paymentStatus !== "PAID")
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-            {placedOrders.length === 0 ? (
-              <div className="py-16 text-center flex flex-col items-center">
-                <div className="w-16 h-16 rounded-full bg-[#EBDAD0]/50 flex items-center justify-center text-[#B73F1D] mb-3">
-                  <Utensils size={28} />
-                </div>
-                <h3 className="font-heading font-bold text-base text-[#4A2117]">
-                  No orders placed yet
-                </h3>
-                <p className="text-xs text-[#8C5E51] mt-1 max-w-xs">
-                  Your placed orders for {tableNumber} will appear here with live kitchen status updates.
-                </p>
+          const acceptedOrders = sortedOrders.filter(
+            (o) =>
+              o.status === "PREPARING" ||
+              o.status === "READY" ||
+              o.status === "COMPLETED" ||
+              (o.notes || "").includes("[KOT_CONFIRMED")
+          );
+          const pendingOrders = sortedOrders.filter(
+            (o) =>
+              o.status === "PENDING" && !(o.notes || "").includes("[KOT_CONFIRMED")
+          );
+
+          const acceptedTotal = acceptedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+          const pendingTotal = pendingOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+          const combinedVisitTotal = acceptedTotal + pendingTotal;
+
+          return (
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-6 flex flex-col gap-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-bold text-[#8C5E51] uppercase tracking-wider">
+                  Dining Orders ({sortedOrders.length})
+                </span>
                 <button
-                  onClick={() => setActiveSheetTab("cart")}
-                  className="mt-5 px-5 py-2 bg-[#B73F1D] text-cream font-heading font-bold text-xs rounded-full shadow-sm"
+                  onClick={async () => {
+                    await notifyAddingFood(true);
+                    setIsCartOpen(false);
+                  }}
+                  className="text-xs font-bold text-[#B73F1D] hover:underline inline-flex items-center gap-1 cursor-pointer"
                 >
-                  View Basket
+                  <span>+ ADD MORE FOOD</span>
                 </button>
               </div>
-            ) : (
-              placedOrders.map((order) => {
-                const isPending = order.status === "PENDING";
-                const isPreparing = order.status === "PREPARING";
-                const isReady = order.status === "READY";
-                const isCompleted = order.status === "COMPLETED";
 
-                const timeFormatted = new Date(order.createdAt).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-
-                return (
-                  <div
-                    key={order.id}
-                    className="p-4 bg-white rounded-3xl border border-[#EBDAD0] shadow-sm flex flex-col gap-3.5"
-                  >
-                    {/* Header line */}
-                    <div className="flex items-start justify-between border-b border-[#EBDAD0]/70 pb-2.5">
-                      <div>
-                        <div className="text-[10px] text-[#8C5E51] font-bold uppercase tracking-wider">
-                          ORDER TICKET
-                        </div>
-                        <h4 className="font-heading font-extrabold text-base text-[#4A2117]">
-                          #{order.orderNumber}
-                        </h4>
-                        <div className="text-[11px] text-[#8C5E51] font-medium flex items-center gap-2 mt-0.5">
-                          <span>{order.tableNumber}</span>
-                          <span>•</span>
-                          <span>{timeFormatted}</span>
-                        </div>
+              {sortedOrders.length > 0 && (
+                <div className="p-4 bg-white rounded-3xl border border-[#EBDAD0] shadow-sm flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-bold text-[#8C5E51] uppercase tracking-wider">
+                      {acceptedTotal > 0 ? `CURRENT TABLE BILL (${tableNumber})` : `PENDING ORDER (${tableNumber})`}
+                    </div>
+                    <div className="text-[11px] text-[#8C5E51] font-medium">
+                      {acceptedTotal > 0 && pendingTotal > 0 ? (
+                        <span>
+                          Accepted: ₹{acceptedTotal} • Pending: ₹{pendingTotal}
+                        </span>
+                      ) : acceptedTotal > 0 ? (
+                        "All accepted orders combined"
+                      ) : (
+                        "Awaiting counter KOT approval"
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-heading font-extrabold text-2xl text-[#B73F1D]">
+                      ₹{acceptedTotal > 0 ? acceptedTotal : pendingTotal}
+                    </div>
+                    {acceptedTotal > 0 && pendingTotal > 0 && (
+                      <div className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full mt-0.5 inline-block">
+                        +₹{pendingTotal} pending
                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {sortedOrders.length === 0 ? (
+                <div className="py-16 text-center flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-full bg-[#EBDAD0]/50 flex items-center justify-center text-[#B73F1D] mb-3">
+                    <Utensils size={28} />
+                  </div>
+                  <h3 className="font-heading font-bold text-base text-[#4A2117]">
+                    No orders placed yet
+                  </h3>
+                  <p className="text-xs text-[#8C5E51] mt-1 max-w-xs">
+                    Your placed orders for {tableNumber} will appear here with live kitchen status updates.
+                  </p>
+                  <button
+                    onClick={() => setActiveSheetTab("cart")}
+                    className="mt-5 px-5 py-2 bg-[#B73F1D] text-cream font-heading font-bold text-xs rounded-full shadow-sm"
+                  >
+                    View Basket
+                  </button>
+                </div>
+              ) : (
+                sortedOrders.map((order) => {
+                  const isPending = order.status === "PENDING";
+                  const isPreparing = order.status === "PREPARING";
+                  const isReady = order.status === "READY";
+                  const isCompleted = order.status === "COMPLETED";
+                  const isKotSent =
+                    isPreparing ||
+                    isReady ||
+                    isCompleted ||
+                    (order.notes || "").includes("[KOT_CONFIRMED");
+
+                  const timeFormatted = new Date(order.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+
+                  return (
+                    <div
+                      key={order.id}
+                      className="p-4 bg-white rounded-3xl border border-[#EBDAD0] shadow-sm flex flex-col gap-3.5"
+                    >
+                      {/* Header line */}
+                      <div className="flex items-start justify-between border-b border-[#EBDAD0]/70 pb-2.5">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5">
+                            {isKotSent || isCompleted ? (
+                              <span className="text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-full">
+                                ACCEPTED & COOKING
+                              </span>
+                            ) : (
+                              <span className="text-amber-800 font-extrabold bg-amber-50 px-2 py-0.5 rounded-full">
+                                SAVED IN CLOUD (AWAITING REVIEW)
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-heading font-extrabold text-base text-[#4A2117] mt-1">
+                            #{order.orderNumber}
+                          </h4>
+                          <div className="text-[11px] text-[#8C5E51] font-medium flex items-center gap-2 mt-0.5">
+                            <span>{order.tableNumber}</span>
+                            <span>•</span>
+                            <span>{timeFormatted}</span>
+                          </div>
+                        </div>
 
                       {/* Status Badge */}
                       <div>
-                        {isPending && (
-                          <span className="px-3 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-xs font-extrabold flex items-center gap-1">
-                            <Clock size={12} /> {order.items.some(i => (i.round || 1) > 1) ? "ADD-ON PENDING" : "PENDING"}
+                        {!isKotSent && !isCompleted && order.status !== "CANCELLED" && (
+                          <span className="px-3 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-xs font-extrabold flex items-center gap-1 shadow-xs">
+                            <Clock size={12} /> {order.items.some(i => (i.round || 1) > 1) ? "ADD-ON PENDING" : "SAVED — AWAITING REVIEW"}
                           </span>
                         )}
-                        {isPreparing && (
-                          <span className="px-3 py-1 bg-blue-100 text-blue-800 border border-blue-300 rounded-full text-xs font-extrabold flex items-center gap-1 animate-pulse">
-                            <Flame size={12} /> IN THE KITCHEN
-                          </span>
-                        )}
-                        {isReady && (
+                        {isKotSent && !isCompleted && order.status !== "CANCELLED" && (
                           <span className="px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-extrabold flex items-center gap-1 shadow-sm">
-                            <Sparkles size={12} /> READY FOR DINE-IN
+                            <Flame size={12} /> ACCEPTED & COOKING
                           </span>
                         )}
                         {isCompleted && (
@@ -615,69 +733,46 @@ export default function CartOrdersSheet() {
                         Live Order Progress
                       </div>
 
-                      <div className="flex flex-col gap-3 relative pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-emerald-500">
-                        {/* State 1 */}
+                      <div className={`flex flex-col gap-3.5 relative pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 ${
+                        isKotSent ? "before:bg-emerald-500" : "before:bg-[#EBDAD0]"
+                      }`}>
+                        {/* State 1: Order Received (always green tick) */}
                         <div className="relative">
-                          <div
-                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs ${
-                              isPending || isPreparing || isReady || isCompleted
-                                ? "bg-emerald-600 text-white"
-                                : "bg-[#E2C7BA] text-[#4A2117]"
-                            }`}
-                          >
+                          <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs bg-emerald-600 text-white">
                             ✓
                           </div>
                           <div className="font-heading font-bold text-xs text-emerald-950">
-                            ORDER RECEIVED
+                            ORDER SAVED IN CLOUD
                           </div>
                           <p className="text-[11px] text-[#8C5E51]">
-                            Sent to the kitchen, waiting to prepare.
+                            {isKotSent
+                              ? "Order received & approved by counter team."
+                              : "Order securely saved in cloud. Awaiting counter review & kitchen dispatch."}
                           </p>
                         </div>
 
-                        {/* State 2 */}
+                        {/* State 2: Started to Cooking (Ticked when admin accepts order & sends KOT!) */}
                         <div className="relative">
                           <div
-                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs ${
-                              isPreparing || isReady || isCompleted
-                                ? "bg-emerald-600 text-white"
+                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs transition-colors ${
+                              isKotSent
+                                ? "bg-emerald-600 text-white shadow-emerald-200"
                                 : "bg-[#EBDAD0] text-[#8C5E51]"
                             }`}
                           >
-                            {isPreparing ? "…" : isReady || isCompleted ? "✓" : "2"}
+                            {isKotSent ? "✓" : "2"}
                           </div>
                           <div
                             className={`font-heading font-bold text-xs ${
-                              isPreparing ? "text-emerald-700" : isReady || isCompleted ? "text-emerald-950" : "text-[#4A2117]"
+                              isKotSent ? "text-emerald-800 font-extrabold" : "text-[#4A2117]"
                             }`}
                           >
-                            IN THE KITCHEN
+                            ACCEPTED & COOKING
                           </div>
                           <p className="text-[11px] text-[#8C5E51]">
-                            Chef is preparing your fresh meal.
-                          </p>
-                        </div>
-
-                        {/* State 3 */}
-                        <div className="relative">
-                          <div
-                            className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs ${
-                              isReady || isCompleted
-                                ? "bg-emerald-600 text-white"
-                                : "bg-[#EBDAD0] text-[#8C5E51]"
-                            }`}
-                          >
-                            {isReady || isCompleted ? "★" : "3"}
-                          </div>
-                          <div
-                            className={`font-heading font-bold text-xs ${
-                              isReady || isCompleted ? "text-emerald-700 font-extrabold" : "text-[#4A2117]"
-                            }`}
-                          >
-                            READY FOR DINE-IN
-                          </div>
-                          <p className="text-[11px] text-[#8C5E51]">
-                            Your order is ready. Please enjoy your meal!
+                            {isKotSent
+                              ? "KOT printed in kitchen. Chef has started preparing your order!"
+                              : "Order will enter kitchen queue once confirmed by counter."}
                           </p>
                         </div>
                       </div>
@@ -794,45 +889,21 @@ export default function CartOrdersSheet() {
                         </div>
                       )}
 
-                      {/* State 4A: UNPAID & Food Still Preparing (Payment locked until food is Ready) */}
-                      {order.status !== "CANCELLED" && order.paymentStatus !== "PAID" && !isReady && !isCompleted && (
-                        <div className="p-3.5 bg-[#FFF9F5] border border-[#EBDAD0] rounded-2xl flex flex-col gap-2 shadow-2xs">
+                      {/* State 4: UNPAID -> Payment options directly accessible */}
+                      {order.status !== "CANCELLED" && order.paymentStatus !== "PAID" && order.paymentStatus !== "PENDING_CASH" && (
+                        <div className="p-3.5 bg-gradient-to-br from-[#FFF9F5] to-white border border-[#EBDAD0] rounded-2xl flex flex-col gap-2.5 shadow-sm">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5 text-[#4A2117] font-heading font-extrabold text-xs">
-                              <Utensils size={14} className="text-[#B73F1D]" />
-                              <span>PAYMENT OPENS WHEN FOOD IS READY</span>
+                              <CreditCard size={14} className="text-[#B73F1D]" />
+                              <span>CHOOSE PAYMENT METHOD</span>
                             </div>
                             <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300/70 rounded-full text-[10px] font-extrabold uppercase tracking-wider">
                               DINE-IN
                             </span>
                           </div>
 
-                          <p className="text-[11px] text-[#8C5E51] leading-relaxed">
-                            Your food is being freshly prepared in the kitchen. Payment options (Online UPI / Cards or Cash) will unlock automatically as soon as your order is <strong className="text-[#B73F1D]">Ready for Dine-In</strong>.
-                          </p>
-
-                          <div className="flex items-center justify-between pt-2 border-t border-[#EBDAD0]/60 text-[11px]">
-                            <span className="text-[#8C5E51] font-semibold">Bill Amount:</span>
-                            <span className="font-heading font-black text-sm text-[#B73F1D]">₹{order.grandTotal}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* State 4B: UNPAID & Food IS READY FOR DINE-IN -> Payment options unlocked */}
-                      {order.status !== "CANCELLED" && order.paymentStatus !== "PAID" && order.paymentStatus !== "PENDING_CASH" && (isReady || isCompleted) && (
-                        <div className="p-3.5 bg-gradient-to-br from-[#FFF9F5] to-white border-2 border-emerald-500/40 rounded-2xl flex flex-col gap-2.5 shadow-md animate-in fade-in-50 duration-300">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 text-emerald-950 font-heading font-extrabold text-xs">
-                              <Sparkles size={14} className="text-emerald-600" />
-                              <span>FOOD IS READY • CHOOSE PAYMENT METHOD</span>
-                            </div>
-                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-[10px] font-extrabold uppercase tracking-wider">
-                              PAY NOW
-                            </span>
-                          </div>
-
                           <p className="text-[11px] text-[#8C5E51]">
-                            Your order is ready! Select how you would like to pay for Ticket #{order.orderNumber}:
+                            Select how you would like to settle Ticket #{order.orderNumber}:
                           </p>
 
                           <div className="grid grid-cols-2 gap-2 mt-0.5">
@@ -844,7 +915,7 @@ export default function CartOrdersSheet() {
                               {payingOrderId === order.id ? (
                                 <>
                                   <Loader2 size={14} className="animate-spin" />
-                                  <span>OPENING RAZORPAY...</span>
+                                  <span>OPENING...</span>
                                 </>
                               ) : (
                                 <>
@@ -860,7 +931,7 @@ export default function CartOrdersSheet() {
                               className="py-2.5 px-3 bg-white text-[#4A2117] border border-[#EBDAD0] hover:bg-[#F7ECE4] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-60"
                             >
                               <Banknote size={14} />
-                              <span>PAY CASH</span>
+                              <span>PAY AT COUNTER</span>
                             </button>
                           </div>
 
@@ -872,10 +943,11 @@ export default function CartOrdersSheet() {
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
-        )}
+                })
+              )}
+            </div>
+          );
+        })()}
       </motion.div>
 
       {/* 1-15 Table Selection Modal */}
@@ -900,7 +972,7 @@ export default function CartOrdersSheet() {
                       CHOOSE YOUR TABLE
                     </h3>
                     <p className="text-[11px] text-[#8C5E51] font-medium">
-                      Select table number (1 - 15) to confirm order
+                      Select your floor table to confirm order
                     </p>
                   </div>
                 </div>
@@ -913,51 +985,57 @@ export default function CartOrdersSheet() {
                 </button>
               </div>
 
-              {/* 15 Table Grid with Occupied/Lock Indicators */}
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 my-4 overflow-y-auto max-h-[50vh] p-1">
-                {TABLES.map((t) => {
+              {/* Floor Tables Grid with 5-Color System */}
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 my-4 overflow-y-auto max-h-[46vh] p-1">
+                {availableTables.map((t) => {
                   const isSelected = (selectedTable || tableNumber) === t;
-                  const num = t.replace("Table ", "");
-                  const info = tablesStatus.find((ts) => ts.tableNumber === t);
-                  const isOccupiedByOther =
-                    info?.isLocked && info?.customerSessionId !== customerSessionId;
-                  const isMyActiveTable =
-                    info?.isLocked && info?.customerSessionId === customerSessionId;
+                  const item = overviewTables.find((o) => o.tableNumber === t);
+                  const color = item?.color || "WHITE";
+
+                  const isOccupied = color === "RED" || color === "YELLOW" || color === "GREEN";
+                  const isReservedOther = color === "BLUE" && !isSelected && tableReservation?.tableNumber !== t;
+                  const isMyReservation = (color === "BLUE" && (isSelected || tableReservation?.tableNumber === t)) || (isSelected && !isOccupied);
 
                   return (
                     <button
                       key={t}
-                      disabled={isOccupiedByOther}
+                      disabled={isOccupied || isReservedOther}
                       onClick={() => handleSelectTable(t)}
                       className={`py-3 px-2 rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer border active:scale-95 ${
-                        isOccupiedByOther
-                          ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60"
-                          : isSelected
-                          ? "bg-[#B73F1D] text-cream border-[#9D3E22] shadow-md ring-2 ring-[#B73F1D]/30"
+                        isOccupied
+                          ? color === "RED"
+                            ? "bg-red-50 text-red-800 border-red-200 cursor-not-allowed opacity-75"
+                            : color === "YELLOW"
+                            ? "bg-amber-50 text-amber-800 border-amber-200 cursor-not-allowed opacity-75"
+                            : "bg-emerald-50 text-emerald-800 border-emerald-200 cursor-not-allowed opacity-75"
+                          : isReservedOther
+                          ? "bg-blue-50 text-blue-700 border-blue-200 cursor-not-allowed opacity-75"
+                          : isMyReservation
+                          ? "bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-400/40"
                           : "bg-white text-[#4A2117] border-[#EBDAD0] hover:border-[#B73F1D] hover:bg-[#FFF8F3]"
                       }`}
                     >
                       <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
                         Table
                       </span>
-                      <span className="font-heading font-extrabold text-lg leading-tight mt-0.5">
-                        {num}
+                      <span className="font-heading font-extrabold text-lg sm:text-xl leading-tight mt-0.5">
+                        {t}
                       </span>
-                      {isOccupiedByOther ? (
-                        <span className="text-[9px] font-bold bg-zinc-200 text-zinc-600 px-1.5 py-0.2 rounded-full mt-1 flex items-center gap-0.5">
-                          🔒 Occupied
+                      {isOccupied ? (
+                        <span className="text-[9px] font-bold bg-white/70 px-1.5 py-0.2 rounded-full mt-1 flex items-center gap-0.5">
+                          {color === "RED" ? "🔴 New Order" : color === "YELLOW" ? "🟡 Kitchen" : "🟢 Dining"}
                         </span>
-                      ) : isMyActiveTable ? (
-                        <span className="text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded-full mt-1">
-                          ✓ Your Table
+                      ) : isReservedOther ? (
+                        <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full mt-1">
+                          🔵 Reserved
                         </span>
-                      ) : isSelected ? (
-                        <span className="text-[9px] font-bold bg-white/20 px-1.5 py-0.2 rounded-full mt-1">
-                          Active
+                      ) : isMyReservation ? (
+                        <span className="text-[9px] font-bold bg-white/20 text-white px-1.5 py-0.2 rounded-full mt-1">
+                          🔵 Your Table
                         </span>
                       ) : (
                         <span className="text-[9px] text-emerald-700 font-bold mt-1">
-                          Available
+                          ⚪ Available
                         </span>
                       )}
                     </button>
@@ -965,11 +1043,37 @@ export default function CartOrdersSheet() {
                 })}
               </div>
 
+              {/* 5-Color System Legend & Counter Warning */}
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-3 pb-1 border-t border-[#EBDAD0] text-[11px] font-bold text-[#8C5E51]">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-white border border-gray-400 shadow-xs inline-block"></span>
+                  <span>⚪ Available</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-xs inline-block"></span>
+                  <span>🔵 Reserved</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-xs inline-block"></span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-xs -ml-1 inline-block"></span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs -ml-1 inline-block"></span>
+                  <span>🔴🟡🟢 Occupied</span>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-center text-amber-900 bg-amber-50 rounded-xl p-2 border border-amber-200 font-semibold my-2">
+                ⚠️ If your table shows occupied, please contact the counter.
+              </div>
+
               {/* Footer */}
               <div className="pt-2.5 border-t border-[#EBDAD0] flex items-center justify-between text-xs text-[#8C5E51]">
                 <span>
                   Currently selected:{" "}
-                  <strong className="text-[#B73F1D]">{selectedTable || tableNumber}</strong>
+                  <strong className="text-[#B73F1D]">
+                    {(selectedTable || tableNumber || "A1").startsWith("Table ")
+                      ? (selectedTable || tableNumber || "A1")
+                      : `Table ${selectedTable || tableNumber || "A1"}`}
+                  </strong>
                 </span>
                 <button
                   onClick={() => setShowTableModal(false)}
@@ -998,14 +1102,14 @@ export default function CartOrdersSheet() {
               <div className="flex items-center justify-between pb-3 border-b border-[#EBDAD0]">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-2xl bg-[#B73F1D]/10 text-[#B73F1D] flex items-center justify-center shrink-0">
-                    <ShoppingBag size={18} />
+                    <Utensils size={18} />
                   </div>
                   <div>
                     <h3 className="font-heading font-extrabold text-base text-[#4A2117]">
-                      CONFIRM DINE-IN ORDER
+                      CONFIRM YOUR TABLE
                     </h3>
                     <p className="text-[11px] text-[#8C5E51] font-medium">
-                      Review your order before sending to kitchen
+                      You selected Table {(selectedTable || tableNumber || "A1").replace("Table ", "")}. Are you currently sitting at {(selectedTable || tableNumber || "A1").replace("Table ", "")}?
                     </p>
                   </div>
                 </div>
@@ -1128,17 +1232,20 @@ export default function CartOrdersSheet() {
                     </>
                   ) : (
                     <>
-                      <span>CONFIRM &amp; PLACE ORDER • ₹{grandTotal}</span>
+                      <span>Yes, Confirm {(selectedTable || tableNumber || "A1").replace("Table ", "")} • ₹{grandTotal}</span>
                       <ArrowRight size={16} />
                     </>
                   )}
                 </button>
 
                 <button
-                  onClick={() => setShowConfirmModal(false)}
-                  className="w-full py-2 text-center text-xs font-bold text-[#8C5E51] hover:text-[#4A2117] transition-colors cursor-pointer"
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setShowTableModal(true);
+                  }}
+                  className="w-full py-2.5 text-center text-xs font-bold text-[#8C5E51] hover:text-[#4A2117] bg-white border border-[#EBDAD0] hover:bg-[#FFF8F3] rounded-xl transition-colors cursor-pointer"
                 >
-                  Back to Basket
+                  No, Change Table
                 </button>
               </div>
             </motion.div>

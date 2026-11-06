@@ -1,23 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminSession } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  const role = req.cookies.get("spiral_admin_role")?.value;
-  const user = req.cookies.get("spiral_admin_user")?.value;
+  const session = await verifyAdminSession(req);
 
-  if (role) {
+  if (session.authenticated && session.role) {
     return NextResponse.json({
       authenticated: true,
-      role,
-      user: user || "Administrator",
-    });
-  }
-
-  // Fallback for local development if cookie was not persisted
-  if (process.env.NODE_ENV !== "production") {
-    return NextResponse.json({
-      authenticated: true,
-      role: "ADMIN",
-      user: "Admin",
+      role: session.role,
+      user: session.user || "Administrator",
     });
   }
 
@@ -26,6 +17,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST() {
   const response = NextResponse.json({ success: true, message: "Logged out" });
+  response.cookies.delete("spiral_admin_token");
   response.cookies.delete("spiral_admin_role");
   response.cookies.delete("spiral_admin_user");
   return response;

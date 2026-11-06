@@ -21,6 +21,36 @@ export interface CartItem {
   notes?: string;
 }
 
+export interface PersistentCartState {
+  tableId: string;
+  visitId: string;
+  visitorId: string;
+  items: CartItem[];
+  updatedAt: string;
+  expiresAt: string;
+}
+
+const CART_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes expiry for unsubmitted draft carts
+
+function cleanClientTableCode(raw: string): string {
+  if (!raw) return "A1";
+  const clean = raw.trim();
+  const match = clean.match(/^Table[\s\-_]*([A-Za-z0-9\-_]+)$/i);
+  if (match) {
+    const code = match[1].trim();
+    if (/^\d+$/.test(code)) return `A${parseInt(code, 10)}`;
+    return code.toUpperCase();
+  }
+  const letterMatch = clean.match(/^([A-Za-z]+[\-_\s]*\d+.*)$/);
+  if (letterMatch) {
+    return clean.replace(/[\s\-_]+/g, "").toUpperCase();
+  }
+  if (/^\d+$/.test(clean)) {
+    return `A${parseInt(clean, 10)}`;
+  }
+  return clean.toUpperCase();
+}
+
 export type OrderStatus = "PENDING" | "PREPARING" | "READY" | "COMPLETED" | "CANCELLED";
 export type PaymentStatus = "UNPAID" | "PENDING_CASH" | "PAID";
 export type PaymentMethod = "UNSELECTED" | "CASH" | "ONLINE";
@@ -66,11 +96,35 @@ export interface PlacedOrder {
   cookingRounds?: number[];
 }
 
+export type FoodPreference = "VEG_ONLY" | "ALL";
+
+export interface CustomerProfile {
+  maskedPhone: string;
+  foodPreference: FoodPreference;
+  lastVisited: string;
+  expiresAt: string;
+}
+
+export interface TableReservationState {
+  tableNumber: string;
+  remainingSeconds: number;
+  expiresAt: string;
+  isReserved: boolean;
+  isExpired: boolean;
+}
+
 interface CartContextType {
   cart: CartItem[];
   tableNumber: string;
   setTableNumber: (table: string) => void;
   customerSessionId: string;
+  foodPreference: FoodPreference;
+  setFoodPreference: (pref: FoodPreference) => void;
+  customerProfile: CustomerProfile | null;
+  setCustomerProfile: (profile: CustomerProfile | null) => void;
+  tableReservation: TableReservationState | null;
+  refreshTableReservation: () => Promise<void>;
+  transferTableReservation: (newTable: string) => Promise<{ success: boolean; error?: string }>;
   totalItems: number;
   subtotal: number;
   taxPercentage: number;
@@ -110,19 +164,274 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [tableNumber, setTableNumberState] = useState<string>("Table 01");
+  const [tableNumber, setTableNumberState] = useState<string>("A1");
   const [customerSessionId, setCustomerSessionId] = useState<string>("");
+  const [visitorId, setVisitorId] = useState<string>("");
+  const [activeVisitId, setActiveVisitId] = useState<string>("");
   const [taxPercentage, setTaxPercentage] = useState<number>(5);
   const [packagingFee, setPackagingFee] = useState<number>(0);
   const [placedOrders, setPlacedOrders] = useState<PlacedOrder[]>([]);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [activeSheetTab, setActiveSheetTab] = useState<"cart" | "orders">("cart");
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
+  const [foodPreference, setFoodPreferenceState] = useState<FoodPreference>("ALL");
+  const [customerProfile, setCustomerProfileState] = useState<CustomerProfile | null>(null);
+  const [tableReservation, setTableReservation] = useState<TableReservationState | null>(null);
+
+  // Restore 30-day customer profile & food preference on client mount
+  useEffect(() => {
+    try {
+      const savedProfile = localStorage.getItem("spiral_customer_profile");
+      if (savedProfile) {
+        const parsed: CustomerProfile = JSON.parse(savedProfile);
+        const isExpired = parsed.expiresAt
+          ? Date.now() > new Date(parsed.expiresAt).getTime()
+          : false;
+
+        if (!isExpired && parsed.foodPreference) {
+          setFoodPreferenceState(parsed.foodPreference);
+          setCustomerProfileState(parsed);
+        } else if (isExpired) {
+          localStorage.removeItem("spiral_customer_profile");
+          localStorage.removeItem("spiral_customer_phone");
+        }
+      }
+    } catch {}
+  }, []);
+
+  const setFoodPreference = useCallback((pref: FoodPreference) => {
+    setFoodPreferenceState(pref);
+    try {
+      const existing = localStorage.getItem("spiral_customer_profile");
+      let profile: CustomerProfile;
+      if (existing) {
+        profile = JSON.parse(existing);
+        profile.foodPreference = pref;
+        profile.lastVisited = new Date().toISOString();
+      } else {
+        profile = {
+          maskedPhone: "",
+          foodPreference: pref,
+          lastVisited: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+      }
+      localStorage.setItem("spiral_customer_profile", JSON.stringify(profile));
+      setCustomerProfileState(profile);
+
+      // Background preference update to server
+      const phone = localStorage.getItem("spiral_customer_phone");
+      if (phone) {
+        fetch("/api/customers/preference", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phoneNumber: phone, foodPreference: pref }),
+        }).catch(() => {});
+      }
+    } catch {}
+  }, []);
+
+  const setCustomerProfile = useCallback((profile: CustomerProfile | null) => {
+    setCustomerProfileState(profile);
+    if (profile) {
+      setFoodPreferenceState(profile.foodPreference);
+      try {
+        localStorage.setItem("spiral_customer_profile", JSON.stringify(profile));
+      } catch {}
+    } else {
+      try {
+        localStorage.removeItem("spiral_customer_profile");
+        localStorage.removeItem("spiral_customer_phone");
+      } catch {}
+    }
+  }, []);
 
   const realtimeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const checkoutIdRef = useRef<string | null>(null);
+
+  // Validate and sync active table session & restore unsubmitted cart if valid
+  const syncTableSessionAndCart = useCallback(
+    async (tableCode: string, currentVisitor: string) => {
+      try {
+        const res = await fetch(
+          `/api/tables/session?table=${encodeURIComponent(tableCode)}&visitorId=${encodeURIComponent(currentVisitor)}`
+        );
+        const data = await res.json();
+        const serverVisitId =
+          data.success && data.visitId ? data.visitId : `VISIT-${tableCode}-IDLE`;
+        setActiveVisitId(serverVisitId);
+
+        // Reservation status check
+        if (data.success && data.status === "RESERVED" && data.isMyReservation) {
+          setTableReservation({
+            tableNumber: data.tableNumber,
+            remainingSeconds: data.remainingSeconds ?? 600,
+            expiresAt: data.expiresAt ?? new Date(Date.now() + 600000).toISOString(),
+            isReserved: true,
+            isExpired: (data.remainingSeconds ?? 600) <= 0,
+          });
+        } else if (data.status === "OCCUPIED") {
+          setTableReservation(null);
+        }
+
+        // Check unsubmitted cart in browser localStorage
+        const storageKey = `spiral_cart_${tableCode}`;
+        const rawSaved = localStorage.getItem(storageKey);
+        if (rawSaved) {
+          try {
+            const parsed: PersistentCartState = JSON.parse(rawSaved);
+            const isTableMatch = parsed.tableId === tableCode;
+            const isVisitorMatch = !parsed.visitorId || parsed.visitorId === currentVisitor;
+            const isVisitMatch = !parsed.visitId || parsed.visitId === serverVisitId;
+            const isNotExpired = parsed.expiresAt
+              ? Date.now() <= new Date(parsed.expiresAt).getTime()
+              : false;
+
+            if (
+              isTableMatch &&
+              isVisitorMatch &&
+              isVisitMatch &&
+              isNotExpired &&
+              Array.isArray(parsed.items) &&
+              parsed.items.length > 0
+            ) {
+              // Valid draft cart restored!
+              setCart(parsed.items);
+              return;
+            } else {
+              // Visit changed (e.g. previous customer paid and table closed) or cart expired
+              localStorage.removeItem(storageKey);
+              setCart([]);
+            }
+          } catch {
+            localStorage.removeItem(storageKey);
+            setCart([]);
+          }
+        } else {
+          setCart([]);
+        }
+      } catch (err) {
+        console.warn("Table visit sync warning:", err);
+      }
+    },
+    []
+  );
+
+  const refreshTableReservation = useCallback(async () => {
+    if (!tableNumber) return;
+    try {
+      const res = await fetch(
+        `/api/tables/session?table=${encodeURIComponent(tableNumber)}&visitorId=${encodeURIComponent(visitorId)}&sessionId=${encodeURIComponent(customerSessionId)}`
+      );
+      const data = await res.json();
+      if (data.success && data.status === "RESERVED" && data.isMyReservation) {
+        setTableReservation({
+          tableNumber: data.tableNumber,
+          remainingSeconds: data.remainingSeconds ?? 600,
+          expiresAt: data.expiresAt ?? new Date(Date.now() + 600000).toISOString(),
+          isReserved: true,
+          isExpired: (data.remainingSeconds ?? 600) <= 0,
+        });
+      } else {
+        setTableReservation(null);
+      }
+    } catch {
+      // ignore
+    }
+  }, [tableNumber, visitorId, customerSessionId]);
+
+  const transferTableReservation = useCallback(
+    async (newTable: string) => {
+      const cleanTo = cleanClientTableCode(newTable);
+      try {
+        if (tableReservation && tableReservation.isReserved && !tableReservation.isExpired) {
+          const res = await fetch("/api/tables/transfer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fromTable: tableNumber,
+              toTable: cleanTo,
+              customerSessionId,
+            }),
+          });
+          const d = await res.json();
+          if (d.success) {
+            setTableNumberState(cleanTo);
+            try {
+              localStorage.setItem("spiral_table_session", cleanTo);
+            } catch {}
+            if (visitorId) {
+              await syncTableSessionAndCart(cleanTo, visitorId);
+            }
+            return { success: true };
+          } else {
+            return { success: false, error: d.error || "Failed to switch table reservation." };
+          }
+        } else {
+          // Reserve directly
+          const customerPhone =
+            typeof window !== "undefined"
+              ? localStorage.getItem("spiral_customer_phone") || ""
+              : "";
+          const res = await fetch("/api/tables/reserve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tableNumber: cleanTo,
+              customerSessionId,
+              customerPhone,
+            }),
+          });
+          const d = await res.json();
+          if (d.success) {
+            setTableNumberState(cleanTo);
+            try {
+              localStorage.setItem("spiral_table_session", cleanTo);
+            } catch {}
+            if (visitorId) {
+              await syncTableSessionAndCart(cleanTo, visitorId);
+            }
+            return { success: true };
+          } else {
+            return { success: false, error: d.error || "Failed to reserve table." };
+          }
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message || "Failed to transfer table." };
+      }
+    },
+    [tableReservation, tableNumber, customerSessionId, visitorId, syncTableSessionAndCart]
+  );
+
+  // Countdown timer for 10-minute temporary reservation
+  useEffect(() => {
+    if (!tableReservation || !tableReservation.isReserved || tableReservation.isExpired) return;
+    const interval = setInterval(() => {
+      setTableReservation((prev) => {
+        if (!prev || !prev.isReserved) return null;
+        const nextRem = prev.remainingSeconds - 1;
+        if (nextRem <= 0) {
+          return {
+            ...prev,
+            remainingSeconds: 0,
+            isExpired: true,
+          };
+        }
+        return {
+          ...prev,
+          remainingSeconds: nextRem,
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [tableReservation?.isReserved, tableReservation?.isExpired]);
 
   // Initialize Session ID & Table from URL / localStorage
   useEffect(() => {
+    let initialTable = "A1";
+    let currentVisitor = "";
+
     try {
       // 1. Customer Session ID
       let storedSession = localStorage.getItem("spiral_customer_session_id");
@@ -132,30 +441,41 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       setCustomerSessionId(storedSession);
 
-      // 2. Table number from URL query or localStorage
+      // 2. Browser-specific Visitor ID (scoped to this browser instance)
+      let storedVisitor = localStorage.getItem("spiral_visitor_id");
+      if (!storedVisitor) {
+        storedVisitor = `VISITOR-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`.toUpperCase();
+        localStorage.setItem("spiral_visitor_id", storedVisitor);
+      }
+      currentVisitor = storedVisitor;
+      setVisitorId(storedVisitor);
+
+      // 3. Table number from URL query or localStorage
       const urlParams = new URLSearchParams(window.location.search);
       const urlTable = urlParams.get("table");
       if (urlTable) {
-        let clean = urlTable.trim();
-        if (/^\d+$/.test(clean)) clean = `Table ${clean.padStart(2, "0")}`;
-        else if (!clean.toLowerCase().startsWith("table")) clean = `Table ${clean}`;
+        const clean = cleanClientTableCode(urlTable);
+        initialTable = clean;
         setTableNumberState(clean);
         localStorage.setItem("spiral_table_session", clean);
       } else {
         const storedTable = localStorage.getItem("spiral_table_session");
-        if (storedTable) setTableNumberState(storedTable);
-      }
-
-      // 3. Cart persistence
-      const savedCart = localStorage.getItem("spiral_cart_v1");
-      if (savedCart) {
-        setCart(JSON.parse(savedCart));
+        if (storedTable) {
+          const clean = cleanClientTableCode(storedTable);
+          initialTable = clean;
+          setTableNumberState(clean);
+        }
       }
     } catch (e) {
       console.error("Initialization error:", e);
     }
 
-    // 4. Fetch Cafe Config (Taxes & Fees)
+    // 4. Validate Table Session & Restore unsubmitted cart (10-min expiry + visit matching)
+    if (currentVisitor) {
+      syncTableSessionAndCart(initialTable, currentVisitor);
+    }
+
+    // 5. Fetch Cafe Config (Taxes & Fees)
     fetch("/api/config")
       .then((r) => r.json())
       .then((data) => {
@@ -165,39 +485,93 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [syncTableSessionAndCart]);
 
-  // Save Cart on updates
+  // Persist unsubmitted cart items scoped by table, visitId, and visitorId with 10-minute expiry
   useEffect(() => {
-    try {
-      localStorage.setItem("spiral_cart_v1", JSON.stringify(cart));
-    } catch {}
-  }, [cart]);
+    if (!tableNumber || !visitorId) return;
+    const storageKey = `spiral_cart_${tableNumber}`;
 
-  // Set table helper
-  const setTableNumber = useCallback((table: string) => {
-    let clean = table.trim();
-    if (/^\d+$/.test(clean)) clean = `Table ${clean.padStart(2, "0")}`;
-    else if (!clean.toLowerCase().startsWith("table")) clean = `Table ${clean}`;
-    setTableNumberState(clean);
-    try {
-      localStorage.setItem("spiral_table_session", clean);
-    } catch {}
-  }, []);
+    if (cart.length === 0) {
+      try {
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem("spiral_cart_v1"); // cleanup legacy key
+      } catch {}
+      return;
+    }
 
-  // Fetch orders placed by this customer session
+    const now = Date.now();
+    const payload: PersistentCartState = {
+      tableId: tableNumber,
+      visitId: activeVisitId || `VISIT-${tableNumber}-OPEN`,
+      visitorId,
+      items: cart,
+      updatedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + CART_EXPIRY_MS).toISOString(),
+    };
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch {}
+  }, [cart, tableNumber, activeVisitId, visitorId]);
+
+  // Set table helper: switches table scope and revalidates cart for new table
+  const setTableNumber = useCallback(
+    (table: string) => {
+      const clean = cleanClientTableCode(table);
+      setTableNumberState(clean);
+      try {
+        localStorage.setItem("spiral_table_session", clean);
+      } catch {}
+      if (visitorId) {
+        syncTableSessionAndCart(clean, visitorId);
+      }
+    },
+    [visitorId, syncTableSessionAndCart]
+  );
+
+  // Fetch orders placed by this customer session scoped to current table visit
   const fetchSessionOrders = useCallback(async () => {
     if (!customerSessionId) return;
     try {
-      const res = await fetch(`/api/orders?sessionId=${encodeURIComponent(customerSessionId)}`);
+      const activeTable = tableNumber || "";
+      const query = new URLSearchParams({
+        sessionId: customerSessionId,
+      });
+      if (activeTable) {
+        query.set("table", activeTable);
+      }
+      if (activeVisitId && !activeVisitId.endsWith("-IDLE") && !activeVisitId.endsWith("-OPEN")) {
+        query.set("visitId", activeVisitId);
+      }
+
+      const res = await fetch(`/api/orders?${query.toString()}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
-        setPlacedOrders(data.orders);
+        // Double check all orders belong to the current table
+        const matchingOrders = activeTable
+          ? data.orders.filter(
+              (o: PlacedOrder) =>
+                o.tableNumber?.toUpperCase() === activeTable.toUpperCase() &&
+                o.paymentStatus !== "PAID" &&
+                o.status !== "CANCELLED"
+            )
+          : data.orders;
+
+        setPlacedOrders(matchingOrders);
+        if (
+          data.visitId &&
+          (!activeVisitId || activeVisitId.endsWith("-IDLE") || activeVisitId.endsWith("-OPEN"))
+        ) {
+          setActiveVisitId(data.visitId);
+        }
+      } else {
+        setPlacedOrders([]);
       }
     } catch (err) {
       console.error("Failed to fetch session orders:", err);
     }
-  }, [customerSessionId]);
+  }, [customerSessionId, tableNumber, activeVisitId]);
 
   // Real-time synchronization via Supabase Realtime with fallback safety polling
   useEffect(() => {
@@ -300,10 +674,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = useCallback(() => {
     setCart([]);
-    try {
-      localStorage.removeItem("spiral_cart_v1");
-    } catch {}
-  }, []);
+    if (tableNumber) {
+      try {
+        localStorage.removeItem(`spiral_cart_${tableNumber}`);
+        localStorage.removeItem("spiral_cart_v1");
+      } catch {}
+    }
+  }, [tableNumber]);
 
   // Pricing math
   const totalItems = cart.reduce((sum, it) => sum + it.quantity, 0);
@@ -311,7 +688,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const tax = Math.round((subtotal * taxPercentage) / 100);
   const grandTotal = subtotal + tax + packagingFee;
 
-  // Place Order
+  // Place Order with Idempotency Key & Safe Unsubmitted Cart Clearing
   const placeOrder = useCallback(
     async (notes?: string, overrideTable?: string) => {
       if (cart.length === 0) {
@@ -321,13 +698,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: "Missing session." };
       }
 
-      const activeTable = (overrideTable || tableNumber || "Table 01").trim();
+      const activeTable = cleanClientTableCode(overrideTable || tableNumber || "A1");
       if (overrideTable && overrideTable.trim()) {
         setTableNumberState(activeTable);
         try {
           localStorage.setItem("spiral_table_session", activeTable);
         } catch (e) {}
       }
+
+      // Generate or reuse active checkoutId for idempotency
+      if (!checkoutIdRef.current) {
+        checkoutIdRef.current = `CHK-${customerSessionId.slice(-6)}-${Date.now()}`;
+      }
+      const checkoutId = checkoutIdRef.current;
 
       setIsPlacingOrder(true);
       try {
@@ -339,6 +722,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const payload = {
           tableNumber: activeTable,
           customerSessionId,
+          checkoutId,
           customerPhone,
           items: cart.map((it) => ({
             productId: it.id,
@@ -359,15 +743,36 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
         const data = await res.json();
         if (data.success && data.order) {
+          // Success confirmed by server:
+          // 1. Reset checkoutId for future add-on orders
+          checkoutIdRef.current = null;
+
+          // 2. Clear submitted items from localStorage & draft cart state
           clearCart();
+          setTableReservation(null);
+
+          // 3. Keep confirmed order in session orders and backend database (newest first)
           setPlacedOrders((prev) => [data.order, ...prev.filter((o) => o.id !== data.order.id)]);
+
+          // 4. Update active visit ID
+          if (data.visitId) {
+            setActiveVisitId(data.visitId);
+          } else if (data.order.id) {
+            setActiveVisitId(`VISIT-${activeTable}-${data.order.id.slice(0, 8).toUpperCase()}`);
+          }
+
+          // 5. Open orders tab to track live KOT / preparation status
           setActiveSheetTab("orders");
           return { success: true, order: data.order };
         } else {
           return { success: false, error: data.error || "Failed to place order." };
         }
       } catch (err: any) {
-        return { success: false, error: err.message || "Network error while placing order." };
+        // Network error: DO NOT clear cart! Keep draft intact for retry with same checkoutId
+        return {
+          success: false,
+          error: err.message || "Network error while placing order. Your basket is saved.",
+        };
       } finally {
         setIsPlacingOrder(false);
       }
@@ -473,7 +878,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const notifyAddingFood = useCallback(
     async (isAdding = true) => {
       try {
-        const activeTable = tableNumber || "Table 01";
+        const activeTable = tableNumber || "A1";
         const currentActive = placedOrders.find(
           (o) => o.paymentStatus !== "PAID" && o.status !== "CANCELLED"
         );
@@ -510,6 +915,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         tableNumber,
         setTableNumber,
         customerSessionId,
+        foodPreference,
+        setFoodPreference,
+        customerProfile,
+        setCustomerProfile,
+        tableReservation,
+        refreshTableReservation,
+        transferTableReservation,
         totalItems,
         subtotal,
         taxPercentage,
