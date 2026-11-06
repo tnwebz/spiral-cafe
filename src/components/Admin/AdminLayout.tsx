@@ -76,7 +76,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         // In case of temporary network blip, do not aggressively kick user if token exists in storage
         if (typeof window !== "undefined" && localStorage.getItem("spiral_admin_token")) {
           setAdminUser(localStorage.getItem("spiral_admin_user") || "Admin");
-          setAdminRole((localStorage.getItem("spiral_admin_role") as AdminRole) || "ADMIN");
+          setAdminRole(localStorage.getItem("spiral_admin_role") || "ADMIN");
         }
       });
   }, [pathname, router]);
