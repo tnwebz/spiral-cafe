@@ -86,3 +86,4 @@ This document provides a comprehensive inventory and production-readiness audit 
 | 41 | `/api/tables/transfer` | GET, POST | Mixed | Session / Admin Cookie | `table_transfers`, `tables` | Guest table switch request and approval |
 | 42 | `/api/tables/[tableId]` | GET, PATCH | Admin | HMAC Cookie | `tables`, `orders` | Single table details and manual override |
 | 43 | `/api/upload` | POST | Admin | HMAC Cookie | Supabase Storage (`spiral-cafe`) | Image upload for menu products |
+
