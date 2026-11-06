@@ -271,9 +271,9 @@ export async function POST(req: NextRequest) {
       inFlightCheckouts.delete(lockKey);
     }
   } catch (err: any) {
-    console.error("Order creation error:", err);
+    console.error("Order creation error:", err?.message || err);
     return NextResponse.json(
-      { success: false, error: "Failed to process order. Please try again." },
+      { success: false, error: err?.message || "Failed to process order. Please try again." },
       { status: 500 }
     );
   }

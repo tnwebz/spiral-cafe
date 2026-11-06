@@ -10,24 +10,19 @@ function getAdminCredentials() {
     process.env.SUPABASE_URL ||
     "https://funsnqahpzsucbtxbvpo.supabase.co";
 
-  // Check all common server-side service key variables in order of precedence:
-  // 1. SUPABASE_SECRET_KEY (configured in .env.local)
-  // 2. SUPABASE_SERVICE_ROLE_KEY (standard Supabase service role key)
-  // 3. SUPABASE_KEY (generic backend key)
-  // 4. NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY (fallback)
+  // Check privileged server-side service keys ONLY:
+  // Never fall back to publishable/anon keys which are subject to RLS and lack admin rights.
   const supabaseKey =
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     "";
 
   return { supabaseUrl, supabaseKey };
 }
 
 /**
- * Lazily initialize and return the trusted backend Supabase client.
+ * Lazily initialize and return the trusted backend Supabase admin client.
  * Does not initialize during module loading / Cloudflare Worker startup.
  */
 export function getSupabaseAdminClient(): SupabaseClient<Database> {
@@ -39,7 +34,7 @@ export function getSupabaseAdminClient(): SupabaseClient<Database> {
 
   if (!supabaseUrl || !supabaseKey) {
     throw new Error(
-      "Supabase key is required. Set SUPABASE_SECRET_KEY, SUPABASE_SERVICE_ROLE_KEY, or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in your environment."
+      "Server database access error: SUPABASE_SECRET_KEY is required for backend operations but is missing. Anonymous or publishable keys cannot perform privileged order processing."
     );
   }
 

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
 import { CartProvider } from "@/context/CartContext";
@@ -7,17 +6,6 @@ import FloatingCartBar from "@/components/Menu/FloatingCartBar";
 import CartOrdersSheet from "@/components/Menu/CartOrdersSheet";
 import CustomerPhoneModal from "@/components/Menu/CustomerPhoneModal";
 import CustomerSessionProtection from "@/components/Menu/CustomerSessionProtection";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
-
-const poppins = Poppins({
-  variable: "--font-poppins",
-  weight: ["400", "500", "600", "700", "800"],
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Spiral Cafe - Rooftop Dining & Digital Menu",
@@ -41,11 +29,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      suppressHydrationWarning
-      className={`${inter.variable} ${poppins.variable} h-full antialiased`}
+      className="h-full antialiased font-sans"
     >
       <body
-        suppressHydrationWarning
         className="min-h-full flex flex-col font-sans bg-background text-foreground selection:bg-primary/20"
       >
         <CartProvider>
