@@ -169,8 +169,127 @@ async function runSecurityStabilityTests() {
   const rateLimitResult = checkRateLimit("customer_ip:127.0.0.1", 100, 60000);
   assert(isPriceIntact && rateLimitResult.allowed, "Test 13: Customer ordering price enforcement and rate limiting intact");
 
+  // -------------------------------------------------------------------------
+  // TEST 14: Regression — URL-encoded cookie with "Admin Manager" via standard Request
+  // -------------------------------------------------------------------------
+  const adminManagerToken = await signAdminTokenAsync("Admin Manager", "ADMIN");
+  const urlEncodedToken = encodeURIComponent(adminManagerToken);
+  const stdReq = new Request("http://localhost:3000/api/auth/admin/me", {
+    headers: {
+      cookie: `spiral_admin_token=${urlEncodedToken}`,
+    },
+  });
+  const stdSession = await verifyAdminSession(stdReq);
+  assert(
+    stdSession.authenticated && stdSession.role === "ADMIN" && stdSession.user === "Admin Manager",
+    "Test 14: URL-encoded 'Admin Manager' session cookie via standard Request verifies successfully as ADMIN"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 15: Regression — URL-encoded cookie with "Admin Manager" via NextRequest
+  // -------------------------------------------------------------------------
+  const nextReqWithEncodedCookie = new NextRequest("http://localhost:3000/api/auth/admin/me", {
+    headers: {
+      cookie: `spiral_admin_token=${urlEncodedToken}`,
+    },
+  });
+  const nextSession = await verifyAdminSession(nextReqWithEncodedCookie);
+  assert(
+    nextSession.authenticated && nextSession.role === "ADMIN" && nextSession.user === "Admin Manager",
+    "Test 15: URL-encoded 'Admin Manager' session cookie via NextRequest verifies successfully as ADMIN"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 16: Regression — Tampered URL-encoded token safely rejected
+  // -------------------------------------------------------------------------
+  const tamperedEncodedToken = encodeURIComponent(
+    `${adminManagerToken.split(".")[0]}.badsignature1234567890abcdef`
+  );
+  const tamperedReq = new Request("http://localhost:3000/api/auth/admin/me", {
+    headers: {
+      cookie: `spiral_admin_token=${tamperedEncodedToken}`,
+    },
+  });
+  const tamperedReqSession = await verifyAdminSession(tamperedReq);
+  assert(
+    !tamperedReqSession.authenticated,
+    "Test 16: Tampered URL-encoded session token safely rejected"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 17: Regression — Expired URL-encoded token safely rejected
+  // -------------------------------------------------------------------------
+  const expiredPayload = `Admin Manager:ADMIN:${Date.now() - 10000}`;
+  const expiredSecret = getAuthSecret();
+  const encoder = new TextEncoder();
+  const expiredKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(expiredSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const expiredSigBuf = await crypto.subtle.sign("HMAC", expiredKey, encoder.encode(expiredPayload));
+  const expiredSigHex = Array.from(new Uint8Array(expiredSigBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const expiredToken = `${expiredPayload}.${expiredSigHex}`;
+  const expiredReq = new Request("http://localhost:3000/api/auth/admin/me", {
+    headers: {
+      cookie: `spiral_admin_token=${encodeURIComponent(expiredToken)}`,
+    },
+  });
+  const expiredReqSession = await verifyAdminSession(expiredReq);
+  assert(
+    !expiredReqSession.authenticated,
+    "Test 17: Expired URL-encoded session token safely rejected"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 18: Regression — Malformed percent-encoding handled without crashing
+  // -------------------------------------------------------------------------
+  const malformedReq = new Request("http://localhost:3000/api/auth/admin/me", {
+    headers: {
+      cookie: `spiral_admin_token=Admin%ZZManager%3AADMIN`,
+    },
+  });
+  let didCrash = false;
+  let malformedSession;
+  try {
+    malformedSession = await verifyAdminSession(malformedReq);
+  } catch {
+    didCrash = true;
+  }
+  assert(
+    !didCrash && malformedSession !== undefined && !malformedSession.authenticated,
+    "Test 18: Malformed percent-encoding in cookie does not crash and safely returns unauthenticated"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 19: Regression — Login signing and verification use the exact same ADMIN_SESSION_SECRET
+  // -------------------------------------------------------------------------
+  const loginSecret = getAuthSecret();
+  const testPayload = `Admin Manager:ADMIN:${Date.now() + 60000}`;
+  const testKey = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(loginSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const testSigBuf = await crypto.subtle.sign("HMAC", testKey, encoder.encode(testPayload));
+  const testSigHex = Array.from(new Uint8Array(testSigBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const manualToken = `${testPayload}.${testSigHex}`;
+  const verifyResult = await verifyAdminTokenAsync(manualToken);
+  assert(
+    verifyResult.authenticated && verifyResult.user === "Admin Manager" && loginSecret === process.env.ADMIN_SESSION_SECRET,
+    "Test 19: Login signing and session verification strictly use the same ADMIN_SESSION_SECRET"
+  );
+
   console.log("\n==============================================================================");
-  console.log(`  RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL 13 SCENARIOS)`);
+  console.log(`  RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL 19 SCENARIOS)`);
   console.log("==============================================================================\n");
 
   if (failed > 0) {

@@ -36,6 +36,42 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 /**
+ * Safely decodes a token or cookie string if it contains URL percent-encoded characters.
+ * Handles malformed percent encoding without crashing.
+ */
+export function safeDecodeToken(rawToken: string): string {
+  try {
+    if (rawToken.includes("%")) {
+      return decodeURIComponent(rawToken);
+    }
+    return rawToken;
+  } catch {
+    return rawToken;
+  }
+}
+
+/**
+ * Safely parses cookie header into key-value pairs and strips enclosing quotes.
+ */
+export function parseCookieHeader(cookieHeader: string | null): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+
+  const pairs = cookieHeader.split(";");
+  for (const pair of pairs) {
+    const eqIdx = pair.indexOf("=");
+    if (eqIdx === -1) continue;
+    const name = pair.slice(0, eqIdx).trim();
+    let val = pair.slice(eqIdx + 1).trim();
+    if (val.startsWith('"') && val.endsWith('"') && val.length >= 2) {
+      val = val.slice(1, -1);
+    }
+    cookies[name] = val;
+  }
+  return cookies;
+}
+
+/**
  * Sign an admin payload with HMAC-SHA256 (Web Crypto API)
  */
 export async function signAdminTokenAsync(user: string, role: string): Promise<string> {
@@ -59,14 +95,16 @@ export async function signAdminTokenAsync(user: string, role: string): Promise<s
 }
 
 /**
- * Verify and decode an HMAC-SHA256 admin token (Web Crypto API)
+ * Verify and decode an HMAC-SHA256 admin token (Web Crypto API).
+ * Safely decodes percent-encoded tokens exactly once.
  */
 export async function verifyAdminTokenAsync(token: string | null | undefined): Promise<AdminSession> {
   if (!token || typeof token !== "string") {
     return { authenticated: false };
   }
 
-  const parts = token.split(".");
+  const cleanToken = safeDecodeToken(token.trim());
+  const parts = cleanToken.split(".");
   if (parts.length !== 2) {
     return { authenticated: false };
   }
@@ -120,25 +158,34 @@ export async function verifyAdminTokenAsync(token: string | null | undefined): P
 }
 
 /**
- * Extract and verify admin session from NextRequest (Cookies or Authorization header)
+ * Extract and verify admin session from NextRequest or standard Request (Cookies or Authorization header).
+ * Prefers framework cookie parser where available and safely parses/decodes raw cookie headers.
  */
 export async function verifyAdminSession(req: NextRequest | Request): Promise<AdminSession> {
   let token: string | undefined;
 
-  // 1. Check cookies
+  // 1. Prefer framework's cookie parser where available (e.g. NextRequest)
   if ("cookies" in req && typeof (req as any).cookies?.get === "function") {
-    token = (req as NextRequest).cookies.get("spiral_admin_token")?.value;
-  } else if (req.headers.get("cookie")) {
-    const cookieHeader = req.headers.get("cookie") || "";
-    const match = cookieHeader.match(/spiral_admin_token=([^;]+)/);
-    if (match) token = match[1];
+    const cookieObj = (req as NextRequest).cookies.get("spiral_admin_token");
+    if (cookieObj?.value) {
+      token = safeDecodeToken(cookieObj.value);
+    }
   }
 
-  // 2. Check Authorization Bearer header
+  // 2. For standard Request objects or fallback, safely parse and decode the cookie value
+  if (!token && req.headers.get("cookie")) {
+    const cookies = parseCookieHeader(req.headers.get("cookie"));
+    const rawVal = cookies["spiral_admin_token"];
+    if (rawVal) {
+      token = safeDecodeToken(rawVal);
+    }
+  }
+
+  // 3. Check Authorization Bearer header
   if (!token) {
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
     if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.substring(7).trim();
+      token = safeDecodeToken(authHeader.substring(7).trim());
     }
   }
 
