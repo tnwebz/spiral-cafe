@@ -61,3 +61,8 @@ export const config = {
   matcher: ["/admin/:path*", "/api/admin/:path*"],
 };
 
+export { middleware as proxy };
+export default middleware;
+
+
+
