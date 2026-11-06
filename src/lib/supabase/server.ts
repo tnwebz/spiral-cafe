@@ -5,9 +5,19 @@ import { Database } from "./types";
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
 
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    "https://funsnqahpzsucbtxbvpo.supabase.co";
+
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    "";
+
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    url,
+    key,
     {
       cookies: {
         get(name: string) {
