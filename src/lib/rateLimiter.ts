@@ -4,20 +4,34 @@ interface RateLimitRecord {
 }
 
 const rateLimitStore = new Map<string, RateLimitRecord>();
+let lastCleanupAt = 0;
+const CLEANUP_INTERVAL_MS = 60000;
+const MAX_STORE_SIZE = 5000;
 
-// Periodic sweep to keep memory minimal
-const sweepTimer = setInterval(() => {
-  const now = Date.now();
+/**
+ * Request-triggered periodic sweep.
+ * Safely removes expired entries without background timers,
+ * complying with Cloudflare Workers' strict global-scope rules.
+ */
+function cleanupExpiredRecords(now: number) {
+  if (now - lastCleanupAt < CLEANUP_INTERVAL_MS && rateLimitStore.size < MAX_STORE_SIZE) {
+    return;
+  }
+  lastCleanupAt = now;
+
   for (const [key, record] of rateLimitStore.entries()) {
     if (now > record.resetAt) {
       rateLimitStore.delete(key);
     }
   }
-}, 60000);
 
-// Do not block Node event loop from exiting
-if (typeof sweepTimer.unref === "function") {
-  sweepTimer.unref();
+  // Safety valve: prevent unbounded growth under high load
+  if (rateLimitStore.size > MAX_STORE_SIZE) {
+    const keysToDelete = Array.from(rateLimitStore.keys()).slice(0, 1000);
+    for (const k of keysToDelete) {
+      rateLimitStore.delete(k);
+    }
+  }
 }
 
 export interface RateLimitResult {
@@ -38,6 +52,8 @@ export function checkRateLimit(
   windowMs = 60000
 ): RateLimitResult {
   const now = Date.now();
+  cleanupExpiredRecords(now);
+
   const record = rateLimitStore.get(key);
 
   if (!record || now > record.resetAt) {
