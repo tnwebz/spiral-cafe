@@ -44,10 +44,12 @@ export async function POST(req: NextRequest) {
       token,
     });
 
+    const isSecure = req.url.startsWith("https") || process.env.NODE_ENV === "production";
+
     // 1. Secure HTTP-Only session token cookie
     response.cookies.set("spiral_admin_token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24, // 24 hours
@@ -56,16 +58,16 @@ export async function POST(req: NextRequest) {
     // 2. Client-readable role cookie for UI layout
     response.cookies.set("spiral_admin_role", result.role, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24,
     });
 
     // 3. Client-readable user cookie for UI layout
-    response.cookies.set("spiral_admin_user", adminUser, {
+    response.cookies.set("spiral_admin_user", encodeURIComponent(adminUser), {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24,

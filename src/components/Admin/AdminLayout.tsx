@@ -50,10 +50,22 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     if (pathname === "/admin/login") return;
 
-    fetch("/api/auth/admin/me")
+    const token = typeof window !== "undefined" ? localStorage.getItem("spiral_admin_token") : null;
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    fetch("/api/auth/admin/me", { headers })
       .then((res) => res.json())
       .then((data) => {
         if (!data.authenticated) {
+          // If neither cookie nor bearer token succeeded, clear and redirect to login
+          try {
+            localStorage.removeItem("spiral_admin_token");
+            localStorage.removeItem("spiral_admin_role");
+            localStorage.removeItem("spiral_admin_user");
+          } catch {}
           router.replace("/admin/login");
         } else {
           setAdminUser(data.user || "Admin");
@@ -61,7 +73,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         }
       })
       .catch(() => {
-        // In case of network blip, do not aggressively kick user
+        // In case of temporary network blip, do not aggressively kick user if token exists in storage
+        if (typeof window !== "undefined" && localStorage.getItem("spiral_admin_token")) {
+          setAdminUser(localStorage.getItem("spiral_admin_user") || "Admin");
+          setAdminRole((localStorage.getItem("spiral_admin_role") as AdminRole) || "ADMIN");
+        }
       });
   }, [pathname, router]);
 
@@ -94,6 +110,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem("spiral_admin_token");
+      localStorage.removeItem("spiral_admin_role");
+      localStorage.removeItem("spiral_admin_user");
+      document.cookie = "spiral_admin_token=; path=/; max-age=0";
+      document.cookie = "spiral_admin_role=; path=/; max-age=0";
+      document.cookie = "spiral_admin_user=; path=/; max-age=0";
       await fetch("/api/auth/admin/me", { method: "POST" });
     } catch {}
     router.replace("/admin/login");

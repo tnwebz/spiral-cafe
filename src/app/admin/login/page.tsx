@@ -20,8 +20,37 @@ export default function AdminLoginPage() {
   const [pwdError, setPwdError] = useState("");
   const [pwdLoading, setPwdLoading] = useState(false);
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [loginSuccess, setLoginSuccess] = useState(false);
+
+  const saveAuthAndRedirect = (data: any) => {
+    setLoginSuccess(true);
+    if (data.token && typeof window !== "undefined") {
+      try {
+        localStorage.setItem("spiral_admin_token", data.token);
+        localStorage.setItem("spiral_admin_role", data.role || "ADMIN");
+        localStorage.setItem("spiral_admin_user", data.user || "Admin");
+        const secureFlag = window.location.protocol === "https:" ? "; Secure" : "";
+        document.cookie = `spiral_admin_token=${data.token}; path=/; max-age=86400; SameSite=Lax${secureFlag}`;
+        document.cookie = `spiral_admin_role=${data.role || "ADMIN"}; path=/; max-age=86400; SameSite=Lax${secureFlag}`;
+        document.cookie = `spiral_admin_user=${encodeURIComponent(data.user || "Admin")}; path=/; max-age=86400; SameSite=Lax${secureFlag}`;
+      } catch (err) {
+        console.warn("Storage warning:", err);
+      }
+    }
+
+    // Full document navigation ensures all cookies are committed and attached
+    if (typeof window !== "undefined") {
+      window.location.href = "/admin";
+    } else {
+      router.push("/admin");
+    }
+  };
+
+  const handlePinSubmit = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
+
     if (!pin.trim()) {
       setPinError("Please enter your PIN");
       return;
@@ -39,7 +68,7 @@ export default function AdminLoginPage() {
 
       const data = await res.json();
       if (data.success) {
-        router.push("/admin");
+        saveAuthAndRedirect(data);
       } else {
         setPinError(data.error || "Invalid PIN. Default Admin PIN is 1234.");
       }
@@ -50,8 +79,11 @@ export default function AdminLoginPage() {
     }
   };
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePasswordSubmit = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
+
     if (!username || !password) {
       setPwdError("Both username and password are required.");
       return;
@@ -69,7 +101,7 @@ export default function AdminLoginPage() {
 
       const data = await res.json();
       if (data.success) {
-        router.push("/admin");
+        saveAuthAndRedirect(data);
       } else {
         setPwdError(data.error || "Invalid username or password.");
       }
@@ -96,6 +128,13 @@ export default function AdminLoginPage() {
             Restaurant Operations &amp; Administration
           </p>
         </div>
+
+        {loginSuccess && (
+          <div className="mb-4 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800">
+            <CheckCircle2 size={16} className="text-emerald-600" />
+            <span>Authenticated! Redirecting to Dashboard...</span>
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div className="flex bg-[#FFF9F5] p-1 rounded-2xl border border-[#CA340A]/15 mb-6">
@@ -157,10 +196,11 @@ export default function AdminLoginPage() {
 
             <button
               type="submit"
-              disabled={pinLoading}
+              onClick={() => handlePinSubmit()}
+              disabled={pinLoading || loginSuccess}
               className="w-full py-3.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>{pinLoading ? "Verifying..." : "ACCESS ADMIN DASHBOARD"}</span>
+              <span>{pinLoading ? "Verifying..." : loginSuccess ? "Opening Dashboard..." : "ACCESS ADMIN DASHBOARD"}</span>
               <ArrowRight size={16} />
             </button>
 
@@ -206,10 +246,11 @@ export default function AdminLoginPage() {
 
             <button
               type="submit"
-              disabled={pwdLoading}
+              onClick={() => handlePasswordSubmit()}
+              disabled={pwdLoading || loginSuccess}
               className="w-full py-3.5 bg-[#CA340A] hover:bg-[#A82806] text-white font-heading font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>{pwdLoading ? "Authenticating..." : "SIGN IN"}</span>
+              <span>{pwdLoading ? "Authenticating..." : loginSuccess ? "Opening Dashboard..." : "SIGN IN"}</span>
               <ArrowRight size={16} />
             </button>
 
