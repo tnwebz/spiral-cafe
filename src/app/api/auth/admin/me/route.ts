@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST() {
   const response = NextResponse.json({ success: true, message: "Logged out" });
-  response.cookies.delete("spiral_admin_token");
-  response.cookies.delete("spiral_admin_role");
-  response.cookies.delete("spiral_admin_user");
+  response.cookies.set("spiral_admin_token", "", { path: "/", maxAge: 0, httpOnly: true });
+  response.cookies.set("spiral_admin_role", "", { path: "/", maxAge: 0 });
+  response.cookies.set("spiral_admin_user", "", { path: "/", maxAge: 0 });
   return response;
 }

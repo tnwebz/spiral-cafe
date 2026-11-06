@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
       success: true,
       role: result.role,
       user: adminUser,
-      token,
     });
 
     const isSecure = req.url.startsWith("https") || process.env.NODE_ENV === "production";

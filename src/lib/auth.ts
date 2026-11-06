@@ -7,10 +7,15 @@ export interface AdminSession {
 }
 
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
-const FALLBACK_SECRET = "spiral_cafe_hmac_secret_2026_super_secure_key";
 
 export function getAuthSecret(): string {
-  return process.env.SUPABASE_SECRET_KEY || process.env.ADMIN_SESSION_SECRET || FALLBACK_SECRET;
+  const secret = process.env.ADMIN_SESSION_SECRET;
+
+  if (!secret) {
+    throw new Error("ADMIN_SESSION_SECRET is not configured");
+  }
+
+  return secret;
 }
 
 // Convert ArrayBuffer to Hex string
@@ -67,10 +72,11 @@ export async function verifyAdminTokenAsync(token: string | null | undefined): P
   }
 
   const [payload, signatureHex] = parts;
-  const secret = getAuthSecret();
-  const encoder = new TextEncoder();
 
   try {
+    const secret = getAuthSecret();
+    const encoder = new TextEncoder();
+
     const key = await crypto.subtle.importKey(
       "raw",
       encoder.encode(secret),
@@ -92,6 +98,12 @@ export async function verifyAdminTokenAsync(token: string | null | undefined): P
     }
 
     const [user, role, expiryStr] = payloadParts;
+
+    // Validate role against known roles
+    if (role !== "ADMIN" && role !== "CASHIER" && role !== "KITCHEN") {
+      return { authenticated: false };
+    }
+
     const expiry = parseInt(expiryStr, 10);
     if (isNaN(expiry) || Date.now() > expiry) {
       return { authenticated: false }; // Expired
@@ -139,7 +151,7 @@ export async function verifyAdminSession(req: NextRequest | Request): Promise<Ad
  */
 export async function requireAdminAuth(
   req: NextRequest | Request,
-  requiredRole?: "ADMIN" | "CASHIER"
+  requiredRole?: "ADMIN" | "CASHIER" | "KITCHEN"
 ): Promise<NextResponse | null> {
   const session = await verifyAdminSession(req);
 

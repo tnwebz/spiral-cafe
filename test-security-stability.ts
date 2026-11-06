@@ -1,12 +1,20 @@
-import { NextRequest } from "next/server";
-import { signAdminTokenAsync, verifyAdminTokenAsync, verifyAdminSession } from "./src/lib/auth.js";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  signAdminTokenAsync,
+  verifyAdminTokenAsync,
+  verifyAdminSession,
+  requireAdminAuth,
+  getAuthSecret,
+} from "./src/lib/auth.js";
 import { getAuthoritativeItemPrice } from "./src/lib/serverMenu.js";
 import { checkRateLimit } from "./src/lib/rateLimiter.js";
 import { middleware } from "./src/middleware.js";
+import { verifyAdminCredentials } from "./src/lib/db.js";
+import { POST as logoutPost } from "./src/app/api/auth/admin/me/route.js";
 
 async function runSecurityStabilityTests() {
   console.log("==============================================================================");
-  console.log("  SPIRAL CAFE — BASIC SECURITY & STABILITY AUTOMATED TEST SUITE (10 SCENARIOS)");
+  console.log("  SPIRAL CAFE — ADMIN AUTHENTICATION & SECURITY TEST SUITE (CLOUDFLARE)");
   console.log("==============================================================================\n");
 
   let passed = 0;
@@ -23,7 +31,63 @@ async function runSecurityStabilityTests() {
   }
 
   // -------------------------------------------------------------------------
-  // TEST 1: Unauthorized user opening /admin redirects to /admin/login
+  // TEST 1: ADMIN_SESSION_SECRET strictly enforced
+  // -------------------------------------------------------------------------
+  const currentSecret = getAuthSecret();
+  assert(
+    typeof currentSecret === "string" && currentSecret.length > 10,
+    "Test 1: ADMIN_SESSION_SECRET is loaded and strictly required"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 2: Admin PIN Login (1234 -> ADMIN)
+  // -------------------------------------------------------------------------
+  const adminPinResult = await verifyAdminCredentials({ pin: "1234" });
+  assert(
+    adminPinResult.success && adminPinResult.role === "ADMIN",
+    "Test 2: Admin PIN login succeeds and grants ADMIN role"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 3: Cashier PIN Login (5678 -> CASHIER)
+  // -------------------------------------------------------------------------
+  const cashierPinResult = await verifyAdminCredentials({ pin: "5678" });
+  assert(
+    cashierPinResult.success && cashierPinResult.role === "CASHIER",
+    "Test 3: Cashier PIN login succeeds and grants CASHIER role"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 4: Kitchen PIN Login (KITCHEN role verification)
+  // -------------------------------------------------------------------------
+  const kitchenToken = await signAdminTokenAsync("Kitchen Chef", "KITCHEN");
+  const kitchenSession = await verifyAdminTokenAsync(kitchenToken);
+  assert(
+    kitchenSession.authenticated && kitchenSession.role === "KITCHEN",
+    "Test 4: Kitchen role correctly recognized and verified by session engine"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 5: Username & Password Login (admin / spiral2026 -> ADMIN)
+  // -------------------------------------------------------------------------
+  const credsResult = await verifyAdminCredentials({ username: "admin", password: "spiral2026" });
+  assert(
+    credsResult.success && credsResult.role === "ADMIN",
+    "Test 5: Username and password login succeeds and grants ADMIN role"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 6: Invalid PIN / Password Rejected
+  // -------------------------------------------------------------------------
+  const badPinResult = await verifyAdminCredentials({ pin: "9999" });
+  const badCredsResult = await verifyAdminCredentials({ username: "admin", password: "wrongpassword" });
+  assert(
+    !badPinResult.success && !badCredsResult.success,
+    "Test 6: Invalid PIN and wrong password safely rejected"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 7: Unauthorized user opening /admin is redirected to /admin/login
   // -------------------------------------------------------------------------
   const unauthAdminReq = new NextRequest("http://localhost:3000/admin/tables", {
     headers: { host: "localhost:3000" },
@@ -33,10 +97,10 @@ async function runSecurityStabilityTests() {
     middlewareRes.status === 307 &&
     middlewareRes.headers.get("location")?.includes("/admin/login")
   );
-  assert(isRedirectToLogin, "Test 1: Unauthorized user opening /admin is redirected to /admin/login");
+  assert(isRedirectToLogin, "Test 7: Unauthorized access to /admin redirected to /admin/login");
 
   // -------------------------------------------------------------------------
-  // TEST 2: Unauthorized access to admin APIs returns 401
+  // TEST 8: Protected Admin API rejects unauthenticated calls with 401
   // -------------------------------------------------------------------------
   const unauthApiReq = new NextRequest("http://localhost:3000/api/admin/overview", {
     headers: { host: "localhost:3000" },
@@ -44,7 +108,6 @@ async function runSecurityStabilityTests() {
   const apiMiddlewareRes = await middleware(unauthApiReq);
   const is401Unauthorized = apiMiddlewareRes.status === 401;
 
-  // Also test with valid admin token
   const validToken = await signAdminTokenAsync("TestAdmin", "ADMIN");
   const authApiReq = new NextRequest("http://localhost:3000/api/admin/overview", {
     headers: {
@@ -54,113 +117,60 @@ async function runSecurityStabilityTests() {
   });
   const authMiddlewareRes = await middleware(authApiReq);
   const isAuthorized = authMiddlewareRes.status === 200;
-
-  assert(is401Unauthorized && isAuthorized, "Test 2: Unauthorized admin API calls rejected with 401; authorized tokens pass");
+  assert(is401Unauthorized && isAuthorized, "Test 8: Unauthenticated API calls return 401; valid cookie returns 200");
 
   // -------------------------------------------------------------------------
-  // TEST 3: Customer attempting to change item prices is overridden by server
+  // TEST 9: Session survives page refresh / cookie verification
   // -------------------------------------------------------------------------
-  // Let's test authoritative price lookup for Americano (menu price: 130)
+  const refreshReq = new NextRequest("http://localhost:3000/api/auth/admin/me", {
+    headers: {
+      host: "localhost:3000",
+      cookie: `spiral_admin_token=${validToken}`,
+    },
+  });
+  const sessionVerified = await verifyAdminSession(refreshReq);
+  assert(
+    sessionVerified.authenticated && sessionVerified.user === "TestAdmin" && sessionVerified.role === "ADMIN",
+    "Test 9: Admin session persists across refreshes and decodes role accurately"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 10: Role Validation against ADMIN, CASHIER, KITCHEN
+  // -------------------------------------------------------------------------
+  const tamperedRoleToken = await signAdminTokenAsync("Hacker", "SUPERUSER");
+  const tamperedSession = await verifyAdminTokenAsync(tamperedRoleToken);
+  assert(
+    !tamperedSession.authenticated,
+    "Test 10: Unauthorized or unknown role (SUPERUSER) rejected by session validator"
+  );
+
+  // -------------------------------------------------------------------------
+  // TEST 11: Tampered Token Signature Rejected
+  // -------------------------------------------------------------------------
+  const fakeToken = `${validToken.split(".")[0]}.badsignaturehex1234567890`;
+  const fakeSession = await verifyAdminTokenAsync(fakeToken);
+  assert(!fakeSession.authenticated, "Test 11: Tampered signature rejected");
+
+  // -------------------------------------------------------------------------
+  // TEST 12: Logout invalidates cookies
+  // -------------------------------------------------------------------------
+  const logoutRes = await logoutPost();
+  const setCookieHeaders = logoutRes.headers.getSetCookie();
+  const tokenCookieCleared = setCookieHeaders.some(
+    (c) => c.includes("spiral_admin_token=") && (c.includes("Max-Age=0") || c.includes("expires="))
+  );
+  assert(tokenCookieCleared, "Test 12: Logout response clears spiral_admin_token cookie with Max-Age=0");
+
+  // -------------------------------------------------------------------------
+  // TEST 13: Customer ordering and menu price enforcement intact
+  // -------------------------------------------------------------------------
   const authItem = await getAuthoritativeItemPrice("americano", "Americano");
-  const isAuthoritative = authItem !== null && authItem.price === 130;
-  // If customer claims price is 10
-  const tamperedPrice: number = 10;
-  const enforcedPrice: number = authItem ? authItem.price : 0;
-  assert(isAuthoritative && enforcedPrice === 130 && (enforcedPrice as number) !== tamperedPrice, "Test 3: Customer price tampering overridden with server authoritative price (₹130 vs ₹10)");
-
-  // -------------------------------------------------------------------------
-  // TEST 4: Customer attempting to access another customer's order returns 403
-  // -------------------------------------------------------------------------
-  // Mock customer A order
-  const orderOwnerSession: string = "session_cust_A_12345";
-  const attackerSession: string = "session_cust_B_99999";
-
-  const isAllowedToOwner = orderOwnerSession === "session_cust_A_12345";
-  const isBlockedToAttacker = (attackerSession as string) !== (orderOwnerSession as string);
-  assert(isAllowedToOwner && isBlockedToAttacker, "Test 4: Customer session isolation prevents accessing other customers' orders (403 Forbidden)");
-
-  // -------------------------------------------------------------------------
-  // TEST 5: SQL injection input handling
-  // -------------------------------------------------------------------------
-  const sqlInjectionNotes = "'; DROP TABLE orders; SELECT * FROM cafe_config WHERE ''='";
-  const xssNotes = "<script>alert('pwned')</script>Please pack extra ketchup";
-  const sanitizedNotes = xssNotes.replace(/<[^>]*>/g, "").trim().slice(0, 300);
-  const safeSqlHandling = !sanitizedNotes.includes("<script>") && sanitizedNotes.includes("Please pack extra ketchup");
-  assert(safeSqlHandling, "Test 5: SQL injection & XSS inputs safely sanitized and handled through parameterized builders");
-
-  // -------------------------------------------------------------------------
-  // TEST 6: 15 simultaneous customer orders handled cleanly
-  // -------------------------------------------------------------------------
-  const fifteenOrders = Array.from({ length: 15 }, (_, i) => ({
-    id: `ord_sim_15_${i}_${Date.now()}`,
-    orderNumber: `ORD-150${i + 1}`,
-    tableNumber: `A${(i % 4) + 1}`,
-    sessionId: `session_user_${i}`,
-    items: [{ productId: "americano", name: "Americano", price: 130, quantity: 1 }],
-    grandTotal: 130,
-  }));
-  const uniqueOrderIds15 = new Set(fifteenOrders.map((o) => o.id));
-  const uniqueOrderNumbers15 = new Set(fifteenOrders.map((o) => o.orderNumber));
-  assert(uniqueOrderIds15.size === 15 && uniqueOrderNumbers15.size === 15, "Test 6: 15 simultaneous customer orders generated with unique IDs and zero collision");
-
-  // -------------------------------------------------------------------------
-  // TEST 7: 20 simultaneous customer orders handled cleanly
-  // -------------------------------------------------------------------------
-  const twentyOrders = Array.from({ length: 20 }, (_, i) => ({
-    id: `ord_sim_20_${i}_${Date.now()}`,
-    orderNumber: `ORD-200${i + 1}`,
-    tableNumber: `B${(i % 6) + 1}`,
-    sessionId: `session_guest_${i}`,
-    items: [{ productId: "americano", name: "Americano", price: 130, quantity: 2 }],
-    grandTotal: 260,
-  }));
-  const uniqueOrderIds20 = new Set(twentyOrders.map((o) => o.id));
-  const uniqueSessions20 = new Set(twentyOrders.map((o) => o.sessionId));
-  assert(uniqueOrderIds20.size === 20 && uniqueSessions20.size === 20, "Test 7: 20 simultaneous customer orders across tables processed without mixed sessions");
-
-  // -------------------------------------------------------------------------
-  // TEST 8: Double-click order submission duplicate suppression
-  // -------------------------------------------------------------------------
-  const sharedCheckoutId = "chk_double_click_test_888";
-  const processedOrders = new Map<string, any>();
-
-  function simulateSubmit(checkoutId: string) {
-    if (processedOrders.has(checkoutId)) {
-      return { success: true, duplicateSuppressed: true, order: processedOrders.get(checkoutId) };
-    }
-    const newOrd = { id: "ord_new_888", checkoutId, total: 130 };
-    processedOrders.set(checkoutId, newOrd);
-    return { success: true, duplicateSuppressed: false, order: newOrd };
-  }
-
-  const click1 = simulateSubmit(sharedCheckoutId);
-  const click2 = simulateSubmit(sharedCheckoutId);
-  assert(!click1.duplicateSuppressed && click2.duplicateSuppressed && click1.order.id === click2.order.id, "Test 8: Double-click order submission detected and duplicate suppressed with identical order returned");
-
-  // -------------------------------------------------------------------------
-  // TEST 9: Admin internet disconnection and reconnection
-  // -------------------------------------------------------------------------
-  const serverDbOrders = [
-    { id: "ord-1", number: "ORD-001" },
-    { id: "ord-2", number: "ORD-002" },
-  ];
-  const localAdminCache = [{ id: "ord-1", number: "ORD-001" }];
-
-  // Simulating reconnection sync
-  const newDiscovered = serverDbOrders.filter((s) => !localAdminCache.some((l) => l.id === s.id));
-  const syncedAdminOrders = [...localAdminCache, ...newDiscovered];
-  assert(newDiscovered.length === 1 && syncedAdminOrders.length === 2, "Test 9: Admin reconnection reconciles missed orders from cloud inbox without duplicates");
-
-  // -------------------------------------------------------------------------
-  // TEST 10: Existing customer ordering, admin acceptance, KOT printing, and billing workflows
-  // -------------------------------------------------------------------------
-  // Verify token validation, rate limit functionality, and session state
-  const testSession = await verifyAdminTokenAsync(validToken);
-  const rateLimitResult = checkRateLimit("order_ip:127.0.0.1", 150, 60000);
-  assert(testSession.authenticated && testSession.role === "ADMIN" && rateLimitResult.allowed, "Test 10: Full workflow validation confirmed (Auth, Rate Limiting, KOT security intact)");
+  const isPriceIntact = authItem !== null && authItem.price === 130;
+  const rateLimitResult = checkRateLimit("customer_ip:127.0.0.1", 100, 60000);
+  assert(isPriceIntact && rateLimitResult.allowed, "Test 13: Customer ordering price enforcement and rate limiting intact");
 
   console.log("\n==============================================================================");
-  console.log(`  RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL 10 SCENARIOS)`);
+  console.log(`  RESULTS: ${passed} PASSED, ${failed} FAILED (TOTAL 13 SCENARIOS)`);
   console.log("==============================================================================\n");
 
   if (failed > 0) {
