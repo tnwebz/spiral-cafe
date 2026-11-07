@@ -3,9 +3,13 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Phone,
   ArrowRight,
+  ArrowLeftRight,
+  X,
+  Utensils,
   ShieldCheck,
   CheckCircle2,
   Sparkles,
@@ -50,6 +54,7 @@ export default function CustomerPhoneModal({
   const [selectedTable, setSelectedTable] = useState(tableNumber || currentTable || "A1");
   const [loadingTables, setLoadingTables] = useState(false);
   const [conflictVisitTable, setConflictVisitTable] = useState<string | null>(null);
+  const [showCounterTransferModal, setShowCounterTransferModal] = useState(false);
 
   // Fetch live tables overview with 5 colors & check active visit immediately
   const fetchTablesList = async () => {
@@ -67,7 +72,18 @@ export default function CustomerPhoneModal({
         setTablesList(d.tables);
       }
       if (d.activeCustomerVisit && d.activeCustomerVisit.hasActiveVisit && d.activeCustomerVisit.tableNumber) {
-        setConflictVisitTable(d.activeCustomerVisit.tableNumber);
+        const rawT = String(d.activeCustomerVisit.tableNumber);
+        const cleanT = rawT.replace(/^table[\s\-_]*/i, "").trim().toUpperCase();
+        const legacyMap: Record<string, string> = {
+          "1": "A1", "01": "A1", "2": "A2", "02": "A2",
+          "3": "B1", "03": "B1", "4": "B2", "04": "B2",
+          "5": "B3", "05": "B3", "6": "B4", "06": "B4",
+          "7": "B5", "07": "B5", "8": "B6", "08": "B6",
+          "9": "C1", "09": "C1", "10": "C2",
+          "11": "C3", "12": "F1", "13": "F2", "14": "F3", "15": "F4"
+        };
+        const normalized = legacyMap[cleanT] || cleanT;
+        setConflictVisitTable(normalized);
       }
     } catch {}
     finally {
@@ -631,33 +647,27 @@ export default function CustomerPhoneModal({
             {conflictVisitTable && (
               <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-xs space-y-2">
                 <div className="font-heading font-extrabold text-amber-950 text-center">
-                  📍 Active Visit at {conflictVisitTable}
+                  📍 Active Visit at Table {conflictVisitTable}
                 </div>
                 <p className="text-[11px] text-amber-800 text-center">
-                  You already have an active dining session. Would you like to continue at {conflictVisitTable}?
+                  You already have an active dining session. Would you like to continue at Table {conflictVisitTable}?
                 </p>
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => {
-                      const cleanTable = conflictVisitTable.replace("Table ", "");
-                      setTableNumber(cleanTable);
-                      setSelectedTable(cleanTable);
+                      setTableNumber(conflictVisitTable);
+                      setSelectedTable(conflictVisitTable);
                       setIsOpen(false);
                       router.push("/menu");
                     }}
                     className="flex-1 py-2 bg-[#CA340A] text-white rounded-xl text-xs font-heading font-bold shadow-xs hover:bg-[#B73F1D] cursor-pointer"
                   >
-                    Continue at {conflictVisitTable}
+                    Continue at Table {conflictVisitTable}
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsOpen(false);
-                      if (typeof window !== "undefined") {
-                        window.dispatchEvent(new CustomEvent("open-table-transfer"));
-                      }
-                    }}
+                    onClick={() => setShowCounterTransferModal(true)}
                     className="flex-1 py-2 bg-white border border-[#CA340A] text-[#CA340A] rounded-xl text-xs font-heading font-bold hover:bg-amber-50 cursor-pointer"
                   >
                     Change Table
@@ -694,9 +704,9 @@ export default function CustomerPhoneModal({
                     ]
                 ).map((t: any) => {
                   const cleanActive = conflictVisitTable?.replace(/^Table\s*/i, "").trim().toUpperCase();
-                  const isMyTable =
-                    Boolean(t.isMyActiveTable) ||
-                    (cleanActive && t.tableNumber.toUpperCase() === cleanActive);
+                  const isMyTable = cleanActive
+                    ? t.tableNumber.toUpperCase() === cleanActive
+                    : Boolean(t.isMyActiveTable);
 
                   const isSelected = selectedTable === t.tableNumber;
                   const isAvailable =
@@ -800,6 +810,64 @@ export default function CustomerPhoneModal({
           </div>
         )}
       </div>
+
+      {/* Professional Pop-up Modal for Table Transfer Request */}
+      <AnimatePresence>
+        {showCounterTransferModal && (
+          <div className="fixed inset-0 z-70 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ type: "spring", damping: 26, stiffness: 360 }}
+              className="w-full max-w-sm bg-[#FFF8F3] rounded-3xl p-5 border border-[#EBDAD0] shadow-2xl space-y-4"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-[#EBDAD0]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-amber-500/10 text-amber-700 flex items-center justify-center">
+                    <ArrowLeftRight size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-extrabold text-sm text-[#4A2117]">
+                      Table Transfer Notice
+                    </h3>
+                    <p className="text-[11px] text-[#8C5E51]">
+                      Assigned to Table {conflictVisitTable || "C2"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCounterTransferModal(false)}
+                  className="w-7 h-7 rounded-full bg-[#EBDAD0]/60 hover:bg-[#EBDAD0] text-[#4A2117] flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* Informative Content */}
+              <div className="p-3.5 bg-white rounded-2xl border border-[#EBDAD0] space-y-2 text-xs text-[#6B5E55] leading-relaxed">
+                <p className="font-semibold text-[#4A2117]">
+                  To change your table from Table {conflictVisitTable || "C2"}, please inform the café counter staff.
+                </p>
+                <p className="text-[11px] text-[#8C5E51]">
+                  Our team will check available floor tables and transfer your dining session immediately. All your ordered items and session details will be preserved with zero data loss.
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <button
+                type="button"
+                onClick={() => setShowCounterTransferModal(false)}
+                className="w-full py-3 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Got It • Return to Session
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

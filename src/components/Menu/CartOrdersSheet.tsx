@@ -66,6 +66,7 @@ export default function CartOrdersSheet() {
   const [orderNotes, setOrderNotes] = useState("");
   const [showTableModal, setShowTableModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showContactCounterModal, setShowContactCounterModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState(tableNumber || "A1");
   const [availableTables, setAvailableTables] = useState<string[]>(DEFAULT_FLOOR_TABLES);
   const [overviewTables, setOverviewTables] = useState<
@@ -483,12 +484,13 @@ export default function CartOrdersSheet() {
                 ) : (
                   <button
                     onClick={() => {
-                      setSelectedTable(tableNumber || "A1");
-                      setShowTableModal(true);
+                      const activeT = (tableNumber || selectedTable || "A1").replace(/^Table\s*/i, "");
+                      setSelectedTable(activeT);
+                      setShowConfirmModal(true);
                     }}
                     className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
                   >
-                    <span>CHOOSE TABLE &amp; PLACE ORDER • ₹{grandTotal}</span>
+                    <span>PLACE ORDER AT TABLE {(tableNumber || selectedTable || "A1").replace(/^Table\s*/i, "")} • ₹{grandTotal}</span>
                     <ArrowRight size={16} />
                   </button>
                 )}
@@ -1109,7 +1111,7 @@ export default function CartOrdersSheet() {
                       CONFIRM YOUR TABLE
                     </h3>
                     <p className="text-[11px] text-[#8C5E51] font-medium">
-                      You selected Table {(selectedTable || tableNumber || "A1").replace("Table ", "")}. Are you currently sitting at {(selectedTable || tableNumber || "A1").replace("Table ", "")}?
+                      You are at Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}. Place order at Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}?
                     </p>
                   </div>
                 </div>
@@ -1125,26 +1127,23 @@ export default function CartOrdersSheet() {
               {/* Selected Table Card */}
               <div className="my-3 p-3 bg-white rounded-2xl border border-[#EBDAD0] flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#B73F1D] text-cream flex items-center justify-center font-heading font-extrabold text-base shadow-sm">
-                    {(selectedTable || tableNumber).replace("Table ", "")}
+                  <div className="w-10 h-10 rounded-xl bg-[#B73F1D] text-white flex items-center justify-center font-heading font-extrabold text-base shadow-sm">
+                    {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}
                   </div>
                   <div>
                     <div className="text-[10px] font-bold text-[#8C5E51] uppercase tracking-wider">
-                      Dine-in Table
+                      Your Floor Table
                     </div>
                     <div className="font-heading font-extrabold text-sm text-[#4A2117]">
-                      {selectedTable || tableNumber}
+                      Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}
                     </div>
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setShowTableModal(true);
-                  }}
+                  onClick={() => setShowContactCounterModal(true)}
                   className="text-xs font-bold text-[#B73F1D] hover:underline px-2.5 py-1.5 rounded-xl hover:bg-[#FFF8F3] border border-[#B73F1D]/20 cursor-pointer"
                 >
-                  Change Table
+                  Change Table?
                 </button>
               </div>
 
@@ -1232,22 +1231,68 @@ export default function CartOrdersSheet() {
                     </>
                   ) : (
                     <>
-                      <span>Yes, Confirm {(selectedTable || tableNumber || "A1").replace("Table ", "")} • ₹{grandTotal}</span>
+                      <span>Place Order at Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")} • ₹{grandTotal}</span>
                       <ArrowRight size={16} />
                     </>
                   )}
                 </button>
 
                 <button
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setShowTableModal(true);
-                  }}
+                  type="button"
+                  onClick={() => setShowContactCounterModal(true)}
                   className="w-full py-2.5 text-center text-xs font-bold text-[#8C5E51] hover:text-[#4A2117] bg-white border border-[#EBDAD0] hover:bg-[#FFF8F3] rounded-xl transition-colors cursor-pointer"
                 >
-                  No, Change Table
+                  Want to Change Table? Contact Counter
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Contact Counter Notice Modal */}
+      <AnimatePresence>
+        {showContactCounterModal && (
+          <div className="fixed inset-0 z-70 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="w-full max-w-sm bg-[#FFF8F3] rounded-3xl p-5 border border-[#EBDAD0] shadow-2xl space-y-4 text-center"
+            >
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 text-amber-700 flex items-center justify-center">
+                <Utensils size={24} />
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="font-heading font-extrabold text-base text-[#4A2117]">
+                  Want to Change Your Table?
+                </h3>
+                <p className="text-xs text-[#8C5E51]">
+                  You are currently assigned to{" "}
+                  <strong className="text-[#CA340A]">
+                    Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}
+                  </strong>
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-white rounded-2xl border border-[#EBDAD0] text-xs text-[#6B5E55] leading-relaxed text-left space-y-2">
+                <p className="font-semibold text-[#4A2117]">
+                  Please reach out to the café counter staff.
+                </p>
+                <p className="text-[11px] text-[#8C5E51]">
+                  Our team will check live table availability and transfer your table session directly from our counter system. All your food selections, orders, and table details will be preserved seamlessly!
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowContactCounterModal(false)}
+                className="w-full py-3 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Got It • Return to Order
+              </button>
             </motion.div>
           </div>
         )}

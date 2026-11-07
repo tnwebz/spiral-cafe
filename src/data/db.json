@@ -3,7 +3,7 @@
     {
       "id": "ord_1790438509256_dju0k",
       "orderNumber": "ORD-151687",
-      "tableNumber": "Table 08",
+      "tableNumber": "B6",
       "customerSessionId": "sess_test_table08",
       "items": [
         {
@@ -43,7 +43,7 @@
     {
       "id": "ord_1790438509293_1nhb0",
       "orderNumber": "ORD-312823",
-      "tableNumber": "Table 12",
+      "tableNumber": "F1",
       "customerSessionId": "sess_test_table12",
       "items": [
         {
@@ -82,7 +82,7 @@
     {
       "id": "ord_1790439216046_32c59",
       "orderNumber": "ORD-749376",
-      "tableNumber": "Table 01",
+      "tableNumber": "A1",
       "customerSessionId": "sess_1790439195177_ulvduvd",
       "items": [
         {
@@ -111,7 +111,7 @@
     {
       "id": "ord_1790439415300_bjxfd",
       "orderNumber": "ORD-101679",
-      "tableNumber": "Table 01",
+      "tableNumber": "A1",
       "customerSessionId": "sess_1790439195177_ulvduvd",
       "items": [
         {
@@ -144,7 +144,7 @@
     {
       "id": "ord_1790448512382_u25uj",
       "orderNumber": "ORD-958219",
-      "tableNumber": "Table 08",
+      "tableNumber": "B6",
       "customerSessionId": "sess_test_101",
       "customerPhone": "9876543210",
       "items": [
@@ -183,7 +183,7 @@
     {
       "id": "ord_1790448556574_fx0py",
       "orderNumber": "ORD-356827",
-      "tableNumber": "Table 08",
+      "tableNumber": "B6",
       "customerSessionId": "sess_test_101",
       "customerPhone": "9876543210",
       "items": [
@@ -229,7 +229,7 @@
     {
       "id": "ord_1790448952901_5ld5q",
       "orderNumber": "ORD-915128",
-      "tableNumber": "Table 02",
+      "tableNumber": "A2",
       "customerSessionId": "sess_1790439195177_ulvduvd",
       "items": [
         {
@@ -258,7 +258,7 @@
     {
       "id": "ord_1790451657707_uwxwx",
       "orderNumber": "ORD-164816",
-      "tableNumber": "Table 15",
+      "tableNumber": "F4",
       "customerSessionId": "sess_1790439195177_ulvduvd",
       "customerPhone": "8608113558",
       "items": [
@@ -339,7 +339,7 @@
     {
       "id": "sess_test_101",
       "customerPhone": "9876543210",
-      "tableNumber": "Table 08",
+      "tableNumber": "B6",
       "sessionToken": "0902a3da995d6c41c8f7805e7043fb7c",
       "startedAt": "2026-09-26T18:49:16.550Z",
       "lastActiveAt": "2026-09-26T18:49:16.550Z"
@@ -347,7 +347,7 @@
     {
       "id": "sess_1790448940555_rtaoe",
       "customerPhone": "8608113558",
-      "tableNumber": "Table 01",
+      "tableNumber": "A1",
       "sessionToken": "02601ae616f941d8b34d61b72066be98",
       "startedAt": "2026-09-26T18:55:40.574Z",
       "lastActiveAt": "2026-09-26T18:55:40.574Z"
@@ -359,7 +359,7 @@
       "invoiceNumber": "INV-2026-000001",
       "orderId": "ord_1790448556574_fx0py",
       "orderNumber": "ORD-356827",
-      "tableNumber": "Table 08",
+      "tableNumber": "B6",
       "customerPhone": "9876543210",
       "items": [
         {
@@ -393,7 +393,7 @@
       "invoiceNumber": "INV-2026-000002",
       "orderId": "ord_1790439415300_bjxfd",
       "orderNumber": "ORD-101679",
-      "tableNumber": "Table 01",
+      "tableNumber": "A1",
       "items": [
         {
           "name": "Southside Chick",

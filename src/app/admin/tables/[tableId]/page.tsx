@@ -8,7 +8,7 @@ import AdminLayout from "@/components/Admin/AdminLayout";
 import PrinterStatusModal from "@/components/Admin/PrinterStatusModal";
 import ReceivePaymentModal from "@/components/Admin/ReceivePaymentModal";
 import { Order, OrderItem } from "@/lib/db";
-import { KotData, KotReceiptEngine } from "@/lib/kot";
+import { KotData, KotReceiptEngine, buildKotData } from "@/lib/kot";
 import type { PrinterSettings, KotStatus } from "@/lib/tables";
 import { PrinterClient, PrinterState, CustomerBillPayload } from "@/services/printerClient";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
@@ -144,16 +144,17 @@ export default function TableDetailPage() {
 
   // Real-time printer status hook (direct TCP socket to CN811-UEWB port 9100)
   const printer = usePrinterStatus(6000);
-  const [isSendingKot, setIsSendingKot] = useState(false);
-  const [kotWarningMessage, setKotWarningMessage] = useState<string | null>(null);
-  const [printSuccessNotice, setPrintSuccessNotice] = useState<string | null>(null);
-  const [reconciliationNotice, setReconciliationNotice] = useState<{
-    orderId: string;
-    orderNumber: string;
-    round: number;
-    kotId: string;
-    message: string;
-  } | null>(null);
+  const [sendingKotOrderId, setSendingKotOrderId] = useState<string | null>(null);
+  const [markingManualOrderId, setMarkingManualOrderId] = useState<string | null>(null);
+  const [orderNotices, setOrderNotices] = useState<
+    Record<
+      string,
+      | { type: "SUCCESS"; message: string }
+      | { type: "WARNING"; message: string }
+      | { type: "RECONCILE"; round: number; kotId: string; message: string }
+    >
+  >({});
+  const [expandedSlipOrderId, setExpandedSlipOrderId] = useState<string | null>(null);
   const [isReconciling, setIsReconciling] = useState(false);
 
   // Modals
@@ -201,20 +202,22 @@ export default function TableDetailPage() {
       });
       const d = await res.json();
       if (d.success) {
-        // Automatically dispatch kitchen table transfer notice
-        const activeVisitId =
-          (orders[0] as any)?.visit_id ||
-          orders[0]?.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
-          `VISIT-${tableId}`;
+        // Automatically dispatch kitchen table transfer notice if orders exist
+        if (orders.length > 0) {
+          const activeVisitId =
+            (orders[0] as any)?.visit_id ||
+            orders[0]?.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
+            `VISIT-${tableId}`;
 
-        PrinterClient.printTableTransferNotice({
-          visitId: activeVisitId,
-          fromTable: tableId as string,
-          toTable: targetFloorTable,
-          orderCount: orders.length,
-          totalBill: displayTotalVisitValue,
-          adminUser: "Cashier Staff",
-        }).catch(() => {});
+          PrinterClient.printTableTransferNotice({
+            visitId: activeVisitId,
+            fromTable: tableId as string,
+            toTable: targetFloorTable,
+            orderCount: orders.length,
+            totalBill: displayTotalVisitValue,
+            adminUser: "Cashier Staff",
+          }).catch(() => {});
+        }
 
         router.push(`/admin/tables/${targetFloorTable}`);
       } else {
@@ -354,25 +357,6 @@ export default function TableDetailPage() {
     }
   };
 
-  // Mark table as exited without KOT when admin leaves without sending KOT
-  const markExitedWithoutKot = useCallback(() => {
-    if (order?.id && kotState.kotStatus === "NOT_SENT") {
-      fetch(`/api/tables/${encodeURIComponent(tableId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id, exitedWithoutKot: true }),
-        keepalive: true,
-      }).catch(() => {});
-    }
-  }, [order?.id, kotState.kotStatus, tableId]);
-
-  useEffect(() => {
-    return () => {
-      // If unmounting while order is pending KOT, mark exited
-      markExitedWithoutKot();
-    };
-  }, [markExitedWithoutKot]);
-
   useEffect(() => {
     fetchTableData();
 
@@ -394,18 +378,18 @@ export default function TableDetailPage() {
     };
   }, [fetchTableData, tableId]);
 
-  // Handler: SEND KOT TO CN811-UEWB VIA DIRECT TCP PRINT CONNECTOR
-  const handleSendKot = async (specificOrderId?: string, forceReprint = false) => {
-    const target = specificOrderId
-      ? orders.find((o) => o.id === specificOrderId) || order
-      : order || orders[0];
+  // Handler: SEND KOT TO CN811-UEWB VIA DIRECT TCP PRINT CONNECTOR (Order-Isolated)
+  const handleSendKot = async (specificOrderId: string, forceReprint = false) => {
+    if (!specificOrderId || sendingKotOrderId) return;
+    const target = orders.find((o) => o.id === specificOrderId);
+    if (!target) return;
 
-    if (!target || isSendingKot) return;
-
-    setIsSendingKot(true);
-    setKotWarningMessage(null);
-    setPrintSuccessNotice(null);
-    setReconciliationNotice(null);
+    setSendingKotOrderId(target.id);
+    setOrderNotices((prev) => {
+      const copy = { ...prev };
+      delete copy[target.id];
+      return copy;
+    });
 
     const targetKotState = extractKotStateFromOrder(target);
     const targetRound = targetKotState.hasUnconfirmedAddons ? targetKotState.highestRound : 1;
@@ -419,37 +403,57 @@ export default function TableDetailPage() {
       );
 
       if (printResult.success && printResult.outcome === "CONFIRMED") {
-        setPrintSuccessNotice(
-          `KOT Ticket #${printResult.kotId} for Order #${target.orderNumber} successfully transmitted to kitchen printer (TCP delivered). Kitchen notified.`
-        );
-        fetchTableData();
+        setOrderNotices((prev) => ({
+          ...prev,
+          [target.id]: {
+            type: "SUCCESS",
+            message: `KOT Ticket #${printResult.kotId} for Order #${target.orderNumber} successfully transmitted to kitchen printer (TCP delivered). Kitchen notified.`,
+          },
+        }));
+        await fetchTableData();
       } else if (printResult.outcome === "RECONCILIATION_REQUIRED") {
-        setReconciliationNotice({
-          orderId: target.id,
-          orderNumber: target.orderNumber,
-          round: targetRound,
-          kotId: printResult.kotId,
-          message: printResult.message,
-        });
-        fetchTableData();
+        setOrderNotices((prev) => ({
+          ...prev,
+          [target.id]: {
+            type: "RECONCILE",
+            round: targetRound,
+            kotId: printResult.kotId,
+            message: printResult.message,
+          },
+        }));
+        await fetchTableData();
       } else if (printResult.outcome === "UNKNOWN") {
-        setKotWarningMessage(
-          "Print connection was interrupted during transmission. Please check with kitchen before resending to avoid duplicate tickets."
-        );
-        fetchTableData();
+        setOrderNotices((prev) => ({
+          ...prev,
+          [target.id]: {
+            type: "WARNING",
+            message:
+              "Print connection was interrupted during transmission. Please check with kitchen before resending to avoid duplicate tickets.",
+          },
+        }));
+        await fetchTableData();
       } else {
-        setKotWarningMessage(
-          printResult.message ||
-            "Kitchen printer is unavailable or disconnected. The KOT was not transmitted. The order is saved and can be delivered manually."
-        );
-        fetchTableData();
+        setOrderNotices((prev) => ({
+          ...prev,
+          [target.id]: {
+            type: "WARNING",
+            message:
+              printResult.message ||
+              "Kitchen printer is unavailable or disconnected. The KOT was not transmitted. Order is saved and can be delivered manually.",
+          },
+        }));
+        await fetchTableData();
       }
     } catch (err: any) {
-      setKotWarningMessage(
-        err.message || "Failed to communicate with kitchen printer."
-      );
+      setOrderNotices((prev) => ({
+        ...prev,
+        [target.id]: {
+          type: "WARNING",
+          message: err.message || "Failed to communicate with kitchen printer.",
+        },
+      }));
     } finally {
-      setIsSendingKot(false);
+      setSendingKotOrderId(null);
     }
   };
 
@@ -464,9 +468,14 @@ export default function TableDetailPage() {
         printerSettings.terminalName || "Counter Admin"
       );
       if (res.success) {
-        setReconciliationNotice(null);
-        setPrintSuccessNotice(`Order status reconciled in database. Kitchen preparation confirmed.`);
-        fetchTableData();
+        setOrderNotices((prev) => ({
+          ...prev,
+          [orderId]: {
+            type: "SUCCESS",
+            message: "Order status reconciled in database. Kitchen preparation confirmed.",
+          },
+        }));
+        await fetchTableData();
       } else {
         alert(`Failed to reconcile database state: ${res.error || "Unknown error"}`);
       }
@@ -478,18 +487,26 @@ export default function TableDetailPage() {
   };
 
   // Handler: MARK MANUALLY DELIVERED (Supports targeting specific order)
-  const handleMarkManual = async (specificOrderId?: string) => {
-    const target = specificOrderId
-      ? orders.find((o) => o.id === specificOrderId) || order
-      : order || orders[0];
+  const handleMarkManual = async (specificOrderId: string) => {
+    if (!specificOrderId || markingManualOrderId) return;
+    const target = orders.find((o) => o.id === specificOrderId);
     if (!target) return;
+
+    setMarkingManualOrderId(target.id);
     try {
       await PrinterClient.recordManualHandoff(target.id, 1, "Admin Staff (Manual Paper)");
-      setKotWarningMessage(null);
-      setPrintSuccessNotice(`Order #${target.orderNumber} recorded as manually handed over to the kitchen.`);
-      fetchTableData();
+      setOrderNotices((prev) => ({
+        ...prev,
+        [target.id]: {
+          type: "SUCCESS",
+          message: `Order #${target.orderNumber} recorded as manually handed over to the kitchen.`,
+        },
+      }));
+      await fetchTableData();
     } catch {
       alert("Failed to update status.");
+    } finally {
+      setMarkingManualOrderId(null);
     }
   };
 
@@ -552,7 +569,6 @@ export default function TableDetailPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/admin/tables"
-              onClick={markExitedWithoutKot}
               className="p-2.5 rounded-2xl bg-white border border-black/10 text-zinc-700 hover:bg-zinc-100 transition-colors shadow-xs"
               title="Back to Floor Tables"
             >
@@ -607,27 +623,27 @@ export default function TableDetailPage() {
 
           {/* Top Right: Actions & Printer Status */}
           <div className="flex items-center gap-2">
-            {hasActiveOrder && (
-              <>
-                <button
-                  onClick={openManualTransferModal}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-white hover:bg-amber-50 text-amber-900 border border-amber-200 shadow-xs transition-all cursor-pointer"
-                  title="Counter Staff: Transfer active dining session to another table"
-                >
-                  <ArrowLeftRight size={14} className="text-amber-700" />
-                  <span>Transfer Table</span>
-                </button>
+            {(hasActiveOrder || isReserved) && (
+              <button
+                onClick={openManualTransferModal}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-white hover:bg-amber-50 text-amber-900 border border-amber-200 shadow-xs transition-all cursor-pointer"
+                title="Counter Staff: Transfer active dining session or seat reservation to another table"
+              >
+                <ArrowLeftRight size={14} className="text-amber-700" />
+                <span>Transfer Table</span>
+              </button>
+            )}
 
-                <button
-                  onClick={handlePrintTransferNoticeDirect}
-                  disabled={isPrintingTransferNotice}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 shadow-xs transition-all cursor-pointer"
-                  title="Print physical table transfer notice to kitchen"
-                >
-                  <Printer size={14} className={isPrintingTransferNotice ? "animate-pulse" : ""} />
-                  <span>{isPrintingTransferNotice ? "Printing..." : "Transfer Slip"}</span>
-                </button>
-              </>
+            {hasActiveOrder && (
+              <button
+                onClick={handlePrintTransferNoticeDirect}
+                disabled={isPrintingTransferNotice}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 shadow-xs transition-all cursor-pointer"
+                title="Print physical table transfer notice to kitchen"
+              >
+                <Printer size={14} className={isPrintingTransferNotice ? "animate-pulse" : ""} />
+                <span>{isPrintingTransferNotice ? "Printing..." : "Transfer Slip"}</span>
+              </button>
             )}
 
             {isReserved && (
@@ -790,7 +806,12 @@ export default function TableDetailPage() {
               {orders.map((ord, oIdx) => {
                 const isOrderPending =
                   ord.status === "PENDING" && !(ord.notes || "").includes("[KOT_CONFIRMED");
+                const isManuallyHandedOver = (ord.notes || "").includes("[KOT_MANUALLY_DELIVERED]");
                 const isLatest = oIdx === 0;
+                const notice = orderNotices[ord.id];
+                const isSlipExpanded = expandedSlipOrderId === ord.id;
+                const ordKotData = buildKotData(ord, 1, printerSettings.terminalName);
+                const ordPlainSlip = KotReceiptEngine.formatPlainSlip(ordKotData);
 
                 return (
                   <div
@@ -808,15 +829,25 @@ export default function TableDetailPage() {
                             className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 ${
                               isOrderPending
                                 ? "bg-red-100 text-red-800 border border-red-300 animate-pulse"
+                                : isManuallyHandedOver
+                                ? "bg-amber-100 text-amber-800 border border-amber-300"
                                 : "bg-emerald-100 text-emerald-800 border border-emerald-300"
                             }`}
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
-                                isOrderPending ? "bg-red-600" : "bg-emerald-600"
+                                isOrderPending
+                                  ? "bg-red-600"
+                                  : isManuallyHandedOver
+                                  ? "bg-amber-600"
+                                  : "bg-emerald-600"
                               }`}
                             />
-                            {isOrderPending ? "NEW ORDER (PENDING KOT)" : "KOT SENT & COOKING"}
+                            {isOrderPending
+                              ? "NEW ORDER (PENDING KOT)"
+                              : isManuallyHandedOver
+                              ? "PAPER HANDOFF (COOKING)"
+                              : "KOT SENT & COOKING"}
                           </span>
                           {isLatest && orders.length > 1 && (
                             <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
@@ -909,24 +940,82 @@ export default function TableDetailPage() {
                       })}
                     </div>
 
+                    {/* 80mm ESC/POS Thermal Slip Preview Toggle for THIS ORDER */}
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedSlipOrderId(isSlipExpanded ? null : ord.id)
+                        }
+                        className="text-[11px] font-bold text-zinc-600 hover:text-[#CA340A] flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <FileText size={13} />
+                        <span>{isSlipExpanded ? "Hide Kitchen Ticket Preview" : "View 80mm Kitchen Slip Format"}</span>
+                      </button>
+
+                      {isSlipExpanded && (
+                        <div className="mt-2.5 p-4 bg-zinc-950 text-emerald-400 rounded-2xl border border-emerald-950/60 shadow-inner">
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 border-b border-zinc-800 pb-2 mb-2 font-mono">
+                            <span>80mm Thermal KOT Slip — #{ord.orderNumber}</span>
+                            <span>CN811-UEWB</span>
+                          </div>
+                          <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto whitespace-pre select-all">
+                            {ordPlainSlip}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Order-Specific Notice Banners */}
+                    {notice && notice.type === "SUCCESS" && (
+                      <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl text-xs flex items-center gap-2 border border-emerald-200 shadow-xs">
+                        <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                        <span>{notice.message}</span>
+                      </div>
+                    )}
+
+                    {notice && notice.type === "RECONCILE" && (
+                      <div className="p-3.5 bg-sky-50 text-sky-950 rounded-2xl text-xs flex items-start gap-2 border border-sky-300 shadow-xs">
+                        <CheckCircle2 size={16} className="text-sky-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-sky-950">
+                            ℹ Print Delivered — Database Sync Required
+                          </p>
+                          <p className="text-[11px] text-sky-800 mt-0.5">{notice.message}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {notice && notice.type === "WARNING" && (
+                      <div className="p-3.5 bg-amber-50 text-amber-900 rounded-2xl text-xs flex items-start gap-2 border border-amber-300 shadow-xs">
+                        <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-amber-950">
+                            ⚠ Kitchen Printer Notice
+                          </p>
+                          <p className="text-[11px] text-amber-800 mt-0.5">{notice.message}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Dedicated Order Action Footer */}
                     <div className="pt-3 border-t border-zinc-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                      {reconciliationNotice?.orderId === ord.id ? (
+                      {notice && notice.type === "RECONCILE" ? (
                         <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
                           <button
                             type="button"
-                            onClick={() => handleReconcileOrder(ord.id, reconciliationNotice.round)}
+                            onClick={() => handleReconcileOrder(ord.id, notice.round || 1)}
                             disabled={isReconciling}
                             className="py-2.5 px-4 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs shadow-md shadow-sky-700/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                           >
                             <CheckCircle2 size={14} />
-                            <span>Confirm in DB (Do Not Reprint)</span>
+                            <span>{isReconciling ? "Syncing..." : "Confirm in DB (Do Not Reprint)"}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSendKot(ord.id, true)}
-                            disabled={isSendingKot}
-                            className="py-2 px-3 rounded-xl border border-sky-300 text-sky-800 font-bold text-xs hover:bg-sky-50 transition-colors"
+                            disabled={sendingKotOrderId === ord.id}
+                            className="py-2 px-3 rounded-xl border border-sky-300 text-sky-800 font-bold text-xs hover:bg-sky-50 transition-colors disabled:opacity-50 cursor-pointer"
                           >
                             Force Reprint
                           </button>
@@ -934,14 +1023,20 @@ export default function TableDetailPage() {
                       ) : isOrderPending ? (
                         <>
                           <button
+                            type="button"
                             onClick={() => handleSendKot(ord.id)}
-                            disabled={isSendingKot}
-                            className="py-2.5 px-5 rounded-2xl bg-[#CA340A] text-white font-bold text-xs hover:bg-[#B73F1D] shadow-md shadow-[#CA340A]/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            disabled={sendingKotOrderId === ord.id}
+                            className="py-2.5 px-5 rounded-2xl bg-[#CA340A] text-white font-bold text-xs hover:bg-[#B73F1D] shadow-md shadow-[#CA340A]/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
                           >
-                            {isSendingKot ? (
+                            {sendingKotOrderId === ord.id ? (
                               <>
                                 <RefreshCw size={14} className="animate-spin" />
-                                <span>Printing KOT...</span>
+                                <span>Printing KOT for #{ord.orderNumber}...</span>
+                              </>
+                            ) : notice && notice.type === "WARNING" ? (
+                              <>
+                                <RotateCcw size={14} />
+                                <span>Resend KOT for #{ord.orderNumber}</span>
                               </>
                             ) : (
                               <>
@@ -952,40 +1047,40 @@ export default function TableDetailPage() {
                           </button>
 
                           <button
+                            type="button"
                             onClick={() => handleMarkManual(ord.id)}
-                            className="py-2 px-3 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5"
+                            disabled={markingManualOrderId === ord.id || sendingKotOrderId === ord.id}
+                            className="py-2 px-3 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                           >
-                            <HandHelping size={13} />
-                            <span>Deliver on Paper</span>
+                            <HandHelping size={13} className={markingManualOrderId === ord.id ? "animate-pulse" : ""} />
+                            <span>{markingManualOrderId === ord.id ? "Updating..." : "Deliver on Paper"}</span>
                           </button>
                         </>
                       ) : (
-                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200">
-                          <CheckCircle2 size={14} className="text-emerald-600" />
-                          <span>KOT SENT 🔒 (Locked against duplicate print)</span>
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200">
+                            <CheckCircle2 size={14} className="text-emerald-600" />
+                            <span>
+                              {isManuallyHandedOver
+                                ? "HANDED OVER (Paper)"
+                                : "KOT SENT 🔒 (Locked against duplicate print)"}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSendKot(ord.id, true)}
+                            disabled={sendingKotOrderId === ord.id}
+                            className="py-1.5 px-3 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                          >
+                            <Printer size={13} />
+                            <span>Reprint Ticket</span>
+                          </button>
                         </div>
                       )}
                     </div>
                   </div>
                 );
               })}
-
-              {/* Physical Receipt Slip Preview (Format matching Image 4) */}
-              {plainSlip && (
-                <div className="bg-white rounded-3xl p-5 border border-black/5 shadow-[0_10px_30px_rgba(0,0,0,0.02)] space-y-2">
-                  <div className="flex items-center justify-between text-xs text-zinc-500">
-                    <span className="font-bold flex items-center gap-1.5">
-                      <FileText size={14} /> 80mm ESC/POS Thermal Slip Format
-                    </span>
-                    <span className="text-[10px] font-mono bg-zinc-100 px-2 py-0.5 rounded-md">
-                      CN811-UEWB
-                    </span>
-                  </div>
-                  <pre className="p-4 bg-zinc-900 text-emerald-400 rounded-2xl text-[11px] font-mono leading-relaxed overflow-x-auto select-all">
-                    {plainSlip}
-                  </pre>
-                </div>
-              )}
 
               {/* Back to Floor Link */}
               <div className="pt-2">
@@ -1106,87 +1201,11 @@ export default function TableDetailPage() {
                   </div>
                 </div>
 
-                {/* Success Banner */}
-                {printSuccessNotice && (
-                  <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl text-xs flex items-center gap-2 border border-emerald-200">
-                    <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-                    <span>{printSuccessNotice}</span>
-                  </div>
-                )}
-
-                {/* Reconciliation Notice Banner (TCP delivery verified, DB state needs sync) */}
-                {reconciliationNotice && (
-                  <div className="p-4 bg-sky-50 text-sky-950 rounded-2xl text-xs space-y-2 border border-sky-300 shadow-xs">
-                    <div className="flex items-start gap-2">
-                      <CheckCircle2 size={17} className="text-sky-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-sky-950">
-                          ℹ Print Delivered — Database Sync Required
-                        </p>
-                        <p className="text-[11px] text-sky-800 mt-0.5">
-                          {reconciliationNotice.message}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleReconcileOrder(
-                            reconciliationNotice.orderId,
-                            reconciliationNotice.round
-                          )
-                        }
-                        disabled={isReconciling}
-                        className="flex-1 py-1.5 px-3 bg-sky-700 hover:bg-sky-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50"
-                      >
-                        {isReconciling ? "Syncing..." : "Confirm In Database (Do Not Reprint)"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSendKot(reconciliationNotice.orderId, true)}
-                        disabled={isSendingKot}
-                        className="py-1.5 px-3 bg-white border border-sky-300 hover:bg-sky-100 text-sky-900 rounded-xl text-xs font-bold transition-all"
-                      >
-                        Force Reprint KOT
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Warning / Disconnection Banner */}
-                {kotWarningMessage && (
-                  <div className="p-4 bg-amber-50 text-amber-900 rounded-2xl text-xs space-y-2 border border-amber-300 shadow-xs">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle size={17} className="text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-amber-950">
-                          ⚠ Kitchen Printer Notice
-                        </p>
-                        <p className="text-[11px] text-amber-800 mt-0.5">
-                          {kotWarningMessage}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => handleSendKot()}
-                        disabled={isSendingKot}
-                        className="flex-1 py-1.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-                      >
-                        {isSendingKot ? "Retrying..." : "Resend KOT"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMarkManual()}
-                        className="flex-1 py-1.5 px-3 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition-all"
-                      >
-                        Mark Manually Sent
-                      </button>
-                    </div>
+                {/* BILL PRINT DIRECT NOTICE */}
+                {billPrintDirectNotice && (
+                  <div className="p-3 bg-stone-100 text-stone-900 rounded-2xl text-xs flex items-center gap-2 border border-stone-200">
+                    <Receipt size={15} className="shrink-0 text-[#CA340A]" />
+                    <span>{billPrintDirectNotice}</span>
                   </div>
                 )}
 
@@ -1275,13 +1294,26 @@ export default function TableDetailPage() {
 
             <div className="p-3 bg-white rounded-2xl border border-[#EBDAD0] space-y-1 text-xs">
               <div className="flex justify-between text-[#8C5E51]">
-                <span>Active Orders:</span>
-                <span className="font-bold text-[#4A2117]">{orders.length} order(s)</span>
+                <span>Session Status:</span>
+                <span className="font-bold text-[#4A2117]">
+                  {hasActiveOrder && orders.length > 0
+                    ? `${orders.length} order(s) placed`
+                    : isReserved
+                    ? "Seat Reserved (Blue Stage)"
+                    : "Active Session"}
+                </span>
               </div>
-              <div className="flex justify-between text-[#8C5E51]">
-                <span>Current Grand Total:</span>
-                <span className="font-bold text-[#B73F1D]">₹{displayTotalVisitValue}</span>
-              </div>
+              {hasActiveOrder && orders.length > 0 ? (
+                <div className="flex justify-between text-[#8C5E51]">
+                  <span>Current Grand Total:</span>
+                  <span className="font-bold text-[#B73F1D]">₹{displayTotalVisitValue}</span>
+                </div>
+              ) : reservation?.customerPhone ? (
+                <div className="flex justify-between text-[#8C5E51]">
+                  <span>Customer Phone:</span>
+                  <span className="font-bold text-[#4A2117]">{reservation.customerPhone}</span>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">

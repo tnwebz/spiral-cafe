@@ -73,32 +73,72 @@ export const DEFAULT_CONFIG: CafeConfig = {
 // HELPER CONVERTERS (DB Snake_Case <-> App CamelCase)
 // ----------------------------------------------------
 
+export const VALID_FLOOR_TABLES = [
+  "A1", "A2",
+  "B1", "B2", "B3", "B4", "B5", "B6",
+  "C1", "C2", "C3",
+  "F1", "F2", "F3", "F4",
+] as const;
+
+export const LEGACY_TABLE_NUMBER_MAP: Record<number, string> = {
+  1: "A1",
+  2: "A2",
+  3: "B1",
+  4: "B2",
+  5: "B3",
+  6: "B4",
+  7: "B5",
+  8: "B6",
+  9: "C1",
+  10: "C2",
+  11: "C3",
+  12: "F1",
+  13: "F2",
+  14: "F3",
+  15: "F4",
+};
+
 export function normalizeTableNumber(table: string): string {
   let clean = (table || "").trim();
   if (!clean) return "A1";
 
-  // If table has letter code format like A1, A2, B3, F4, F4-A
-  const letterCodeMatch = clean.match(/^([A-Za-z]+[\-_\s]*\d+.*)$/);
-  if (letterCodeMatch) {
-    return clean.replace(/[\s\-_]+/g, "").toUpperCase();
+  // Check special non-floor designations first
+  const upper = clean.toUpperCase();
+  if (upper === "COUNTER" || upper === "GIVE ON COUNTER" || upper === "TAKEAWAY") {
+    return upper;
   }
 
-  // If table is "Table A1" or "Table 01"
-  const tablePrefixMatch = clean.match(/^Table[\s\-_]*([A-Za-z0-9\-_]+)$/i);
-  if (tablePrefixMatch) {
-    const code = tablePrefixMatch[1].trim();
-    const numOnly = code.match(/^\d+$/);
-    if (numOnly) {
-      return `A${parseInt(numOnly[0], 10)}`;
+  // Strip leading "Table", "table-", "Table " etc.
+  const stripped = clean.replace(/^table[\s\-_]*/i, "").trim();
+
+  // If already matches a valid floor table format like A1, A2, B1..B6, C1..C3, F1..F4
+  const canonicalMatch = stripped.match(/^([ABCF])[\s\-_]*([1-6])$/i);
+  if (canonicalMatch) {
+    const letter = canonicalMatch[1].toUpperCase();
+    const num = canonicalMatch[2];
+    const candidate = `${letter}${num}`;
+    if ((VALID_FLOOR_TABLES as readonly string[]).includes(candidate)) {
+      return candidate;
     }
-    return code.toUpperCase();
   }
 
-  const numMatch = clean.match(/\d+/);
-  if (numMatch) {
-    return `A${parseInt(numMatch[0], 10)}`;
+  // If it's a numeric legacy table like "1", "01", "10", "15"
+  const numOnlyMatch = stripped.match(/^\d+$/);
+  if (numOnlyMatch) {
+    const n = parseInt(numOnlyMatch[0], 10);
+    if (LEGACY_TABLE_NUMBER_MAP[n]) {
+      return LEGACY_TABLE_NUMBER_MAP[n];
+    }
+    return `A${n}`;
   }
-  return clean.toUpperCase();
+
+  // Fallback check against valid tables
+  const found = (VALID_FLOOR_TABLES as readonly string[]).find(
+    (t) => t.toUpperCase() === stripped.toUpperCase()
+  );
+  if (found) return found;
+
+  return stripped.toUpperCase() || "A1";
 }
 
 export function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
@@ -145,7 +185,7 @@ export function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
   return {
     id: row.id,
     orderNumber: row.order_number,
-    tableNumber: row.table_number,
+    tableNumber: isPrivate ? (row.table_number || "COUNTER") : normalizeTableNumber(row.table_number),
     orderType,
     privatePurpose,
     privateNote,
@@ -607,8 +647,11 @@ export async function getOrdersByVisitId(visitId: string): Promise<Order[]> {
   );
 }
 
+export const ACTIVE_DINEIN_MAX_AGE_MS = 16 * 60 * 60 * 1000; // 16 hours
+
 export async function getActiveOrderForTable(tableNumber: string): Promise<Order | null> {
   const cleanTable = normalizeTableNumber(tableNumber);
+  const cutoffIso = new Date(Date.now() - ACTIVE_DINEIN_MAX_AGE_MS).toISOString();
 
   const { data, error } = await supabaseAdmin
     .from("orders")
@@ -616,6 +659,7 @@ export async function getActiveOrderForTable(tableNumber: string): Promise<Order
     .eq("table_number", cleanTable)
     .neq("status", "CANCELLED")
     .neq("payment_status", "PAID")
+    .gte("created_at", cutoffIso)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

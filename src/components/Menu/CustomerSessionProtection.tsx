@@ -97,6 +97,26 @@ export default function CustomerSessionProtection() {
                 localStorage.setItem("spiral_table_session", data.pendingRequest.toTable);
               } catch {}
             }
+
+            // Sync if active dining visit or reservation moved to a new table via Counter Admin transfer
+            if (
+              data.activeVisit &&
+              data.activeVisit.hasActiveVisit &&
+              data.activeVisit.tableNumber
+            ) {
+              const cleanActiveT = data.activeVisit.tableNumber.replace(/^Table\s*/i, "").trim();
+              const cleanCurrT = (tableNumber || "").replace(/^Table\s*/i, "").trim();
+              if (cleanActiveT && cleanActiveT !== cleanCurrT) {
+                setTableNumber(cleanActiveT);
+                try {
+                  localStorage.setItem("spiral_table_session", cleanActiveT);
+                  sessionStorage.setItem(
+                    `spiral_table_confirmed_${cleanActiveT}_${customerSessionId}`,
+                    "true"
+                  );
+                } catch {}
+              }
+            }
           }
         }
       } catch (err) {

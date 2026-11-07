@@ -1,7 +1,14 @@
 import fs from "fs";
 import path from "path";
 import { supabaseAdmin } from "./supabase/admin";
-import { Order, getActiveOrderForTable, getAllOrders, mapDbOrderToOrder } from "./db";
+import {
+  Order,
+  getActiveOrderForTable,
+  getAllOrders,
+  mapDbOrderToOrder,
+  normalizeTableNumber,
+  VALID_FLOOR_TABLES,
+} from "./db";
 
 export type TableColor = "WHITE" | "BLUE" | "RED" | "YELLOW" | "GREEN";
 export type TableStatusLabel =
@@ -286,11 +293,13 @@ export async function getActiveCustomerVisit(
   let activeOrders: Order[] = [];
 
   try {
+    const activeCutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
     let query = supabaseAdmin
       .from("orders" as any)
       .select("*, order_items(*)")
       .neq("status", "CANCELLED")
-      .neq("payment_status", "PAID");
+      .neq("payment_status", "PAID")
+      .gte("created_at", activeCutoffIso);
 
     const cleanPhone = phone?.replace(/\D/g, "").slice(-10);
 
@@ -914,6 +923,10 @@ export async function rejectTransferRequest(
 
 /**
  * Admin Manual Table Transfer (Physical move initiated by counter staff)
+ * Supports transfers from:
+ * 1. Booking seat stage (Blue Stage: customer selected table, no order placed yet)
+ * 2. Active dining stage (Red/Yellow/Green: order placed, KOTs, item history)
+ * All details and ordered products are transferred to destination table with zero data loss.
  */
 export async function adminManualTransfer(params: {
   fromTable: string;
@@ -934,45 +947,139 @@ export async function adminManualTransfer(params: {
     throw new Error("Source and destination tables cannot be the same.");
   }
 
-  // Ensure destination is not occupied
+  // Ensure destination is not occupied by active dining orders
   const activeOrderTo = await getActiveOrderForTable(toNorm);
   if (activeOrderTo) {
     throw new Error(`Table ${toNorm} is already occupied by an active order.`);
   }
 
-  // Ensure source has active orders
+  // 1. Check if source table has active dining orders (Red / Yellow / Green stage)
   const activeOrderFrom = await getActiveOrderForTable(fromNorm);
-  if (!activeOrderFrom) {
-    throw new Error(`Table ${fromNorm} has no active dining visit to transfer.`);
+  if (activeOrderFrom) {
+    const visitId =
+      activeOrderFrom.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
+      (activeOrderFrom as any).visit_id ||
+      `VISIT-${fromNorm}-${activeOrderFrom.id.slice(0, 8).toUpperCase()}`;
+
+    // Synthesize a request record
+    const requestId = `MANUAL-TRF-${fromNorm}-${toNorm}-${Date.now().toString(36).toUpperCase()}`;
+    const now = new Date().toISOString();
+
+    const synthesizedRequest: TableTransferRequest = {
+      id: requestId,
+      visitId,
+      fromTable: fromNorm,
+      toTable: toNorm,
+      customerSessionId: activeOrderFrom.customerSessionId || "counter-manual",
+      customerPhone: activeOrderFrom.customerPhone || undefined,
+      ordersCount: 1,
+      currentBill: activeOrderFrom.grandTotal,
+      status: "PENDING",
+      requestedAt: now,
+    };
+
+    const transfers = readLocalTransfers();
+    transfers.unshift(synthesizedRequest);
+    writeLocalTransfers(transfers);
+
+    return approveTransferRequest(requestId, adminUser);
   }
 
-  const visitId =
-    activeOrderFrom.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
-    (activeOrderFrom as any).visit_id ||
-    `VISIT-${fromNorm}-${activeOrderFrom.id.slice(0, 8).toUpperCase()}`;
+  // 2. Check if source table is in BLUE STAGE (temporarily reserved / booking seat stage, no order yet)
+  const activeReservations = await getActiveReservations();
+  const reservationFrom = activeReservations.find(
+    (r) => r.tableNumber.toUpperCase() === fromNorm.toUpperCase() && r.status === "ACTIVE"
+  );
 
-  // Synthesize a request record
-  const requestId = `MANUAL-TRF-${fromNorm}-${toNorm}-${Date.now().toString(36).toUpperCase()}`;
-  const now = new Date().toISOString();
+  if (reservationFrom) {
+    // Destination table cannot have an active unexpired reservation
+    const existingToRes = activeReservations.find(
+      (r) => r.tableNumber.toUpperCase() === toNorm.toUpperCase() && r.status === "ACTIVE"
+    );
+    if (existingToRes) {
+      throw new Error(`Table ${toNorm} is already temporarily reserved by another customer.`);
+    }
 
-  const synthesizedRequest: TableTransferRequest = {
-    id: requestId,
-    visitId,
-    fromTable: fromNorm,
-    toTable: toNorm,
-    customerSessionId: activeOrderFrom.customerSessionId || "counter-manual",
-    customerPhone: activeOrderFrom.customerPhone || undefined,
-    ordersCount: 1,
-    currentBill: activeOrderFrom.grandTotal,
-    status: "PENDING",
-    requestedAt: now,
-  };
+    const now = new Date().toISOString();
 
-  const transfers = readLocalTransfers();
-  transfers.unshift(synthesizedRequest);
-  writeLocalTransfers(transfers);
+    // Release old table reservation so fromTable immediately becomes AVAILABLE (WHITE)
+    await releaseTableReservation(fromNorm, adminUser);
 
-  return approveTransferRequest(requestId, adminUser);
+    // Create new active reservation on toTable preserving customer's session & phone
+    const newReservation: TableReservation = {
+      id: `RES-${toNorm}-${Date.now().toString(36).toUpperCase()}`,
+      tableNumber: toNorm,
+      customerSessionId: reservationFrom.customerSessionId,
+      customerPhone: reservationFrom.customerPhone,
+      reservedAt: reservationFrom.reservedAt || now,
+      expiresAt: reservationFrom.expiresAt || new Date(Date.now() + 600000).toISOString(),
+      status: "ACTIVE",
+      visitId: reservationFrom.visitId || `VISIT-${toNorm}`,
+      notes: `Transferred from ${fromNorm} by ${adminUser}`,
+    };
+
+    const localRes = readLocalReservations().map((r) => {
+      if (r.tableNumber.toUpperCase() === fromNorm.toUpperCase() && r.status === "ACTIVE") {
+        return { ...r, status: "TRANSFERRED" as const };
+      }
+      return r;
+    });
+    localRes.push(newReservation);
+    writeLocalReservations(localRes);
+
+    try {
+      await supabaseAdmin.from("table_reservations" as any).insert({
+        id: newReservation.id,
+        table_number: toNorm,
+        customer_session_id: newReservation.customerSessionId,
+        customer_phone: newReservation.customerPhone,
+        reserved_at: newReservation.reservedAt,
+        expires_at: newReservation.expiresAt,
+        status: "ACTIVE",
+        visit_id: newReservation.visitId,
+        notes: newReservation.notes,
+        created_at: now,
+        updated_at: now,
+      });
+    } catch {}
+
+    // Update customer_sessions table if present
+    try {
+      await supabaseAdmin
+        .from("customer_sessions" as any)
+        .update({ table_number: toNorm, updated_at: now })
+        .eq("session_id", reservationFrom.customerSessionId);
+    } catch {}
+
+    // Record completed transfer record so customer polling synchronizes immediately
+    const manualBlueReq: TableTransferRequest = {
+      id: `MANUAL-RES-${fromNorm}-${toNorm}-${Date.now().toString(36).toUpperCase()}`,
+      visitId: newReservation.visitId || `VISIT-${toNorm}`,
+      fromTable: fromNorm,
+      toTable: toNorm,
+      customerSessionId: reservationFrom.customerSessionId,
+      customerPhone: reservationFrom.customerPhone,
+      ordersCount: 0,
+      currentBill: 0,
+      status: "APPROVED",
+      requestedAt: now,
+      reviewedAt: now,
+      reviewedBy: adminUser,
+    };
+    const transfers = readLocalTransfers();
+    transfers.unshift(manualBlueReq);
+    writeLocalTransfers(transfers);
+
+    return {
+      success: true,
+      fromTable: fromNorm,
+      toTable: toNorm,
+      visitId: newReservation.visitId || `VISIT-${toNorm}`,
+      updatedOrdersCount: 0,
+    };
+  }
+
+  throw new Error(`Table ${fromNorm} is currently available with no active session or reservation to transfer.`);
 }
 
 /**
@@ -1054,37 +1161,11 @@ export async function convertReservationToVisit(params: {
 }
 
 /**
- * Normalizes table number preserving letter-code formats like A1, A2, B3, F4, F4-A
+ * Normalizes table number preserving canonical floor table codes (A1, A2, B1..B6, C1..C3, F1..F4)
+ * and safely maps legacy numeric tables (1..15, TABLE10, etc.) to their canonical IDs.
  */
 export function normalizeTableLabel(table: string): string {
-  if (!table) return "A1";
-  const clean = table.trim();
-  // Strip leading "Table " or "table-" if followed by a code like A1 or 01
-  const tablePrefixMatch = clean.match(/^Table[\s\-_]*([A-Za-z0-9\-_]+)$/i);
-  if (tablePrefixMatch) {
-    const code = tablePrefixMatch[1].trim();
-    // If it's a number like "01" or "1", convert to A1, A2, etc. if desired or keep
-    const numOnly = code.match(/^\d+$/);
-    if (numOnly) {
-      const n = parseInt(numOnly[0], 10);
-      return `A${n}`;
-    }
-    return code.toUpperCase();
-  }
-
-  // If input is like "a1", "b2", "f4-a"
-  const letterCodeMatch = clean.match(/^([A-Za-z]+[\-_\s]*\d+.*)$/);
-  if (letterCodeMatch) {
-    return clean.replace(/[\s\-_]+/g, "").toUpperCase();
-  }
-
-  // If it's just a number: "1" -> "A1", "2" -> "A2"
-  const rawNum = clean.match(/^\d+$/);
-  if (rawNum) {
-    return `A${parseInt(rawNum[0], 10)}`;
-  }
-
-  return clean.toUpperCase();
+  return normalizeTableNumber(table);
 }
 
 /**
@@ -1240,13 +1321,26 @@ export async function getTablesOverview(
     activeReservationsByTable.set(r.tableNumber.toUpperCase(), r);
   }
 
-  // Fetch all active, unpaid orders
+  // Fetch active, unpaid orders from the active dining window (last 16 hours)
+  const activeCutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
   const { data: rawOrders } = await supabaseAdmin
     .from("orders" as any)
     .select("*, order_items(*)")
     .neq("status", "CANCELLED")
     .neq("payment_status", "PAID")
+    .gte("created_at", activeCutoffIso)
     .order("created_at", { ascending: false });
+
+  // Resolve customer's single active visit table to prevent multi-table attribution
+  let customerActiveTable: string | null = null;
+  if (visitorSessionId || customerPhone) {
+    try {
+      const activeVisit = await getActiveCustomerVisit(visitorSessionId || "", customerPhone);
+      if (activeVisit.hasActiveVisit && activeVisit.tableNumber) {
+        customerActiveTable = activeVisit.tableNumber.toUpperCase();
+      }
+    } catch {}
+  }
 
   const activeOrdersByTable = new Map<string, Order[]>();
 
@@ -1345,8 +1439,10 @@ export async function getTablesOverview(
             ),
           },
           isMyActiveTable: Boolean(
-            (visitorSessionId && activeRes.customerSessionId === visitorSessionId) ||
-            (customerPhone && activeRes.customerPhone && activeRes.customerPhone.slice(-10) === customerPhone.replace(/\D/g, "").slice(-10))
+            customerActiveTable
+              ? t.tableNumber.toUpperCase() === customerActiveTable
+              : (visitorSessionId && activeRes.customerSessionId === visitorSessionId) ||
+                (customerPhone && activeRes.customerPhone && activeRes.customerPhone.slice(-10) === customerPhone.replace(/\D/g, "").slice(-10))
           ),
         };
       }
@@ -1411,11 +1507,10 @@ export async function getTablesOverview(
       (activeOrder as any).visit_id ||
       `VISIT-${t.tableNumber}-${activeOrder.id.slice(0, 8).toUpperCase()}`;
 
-    const cleanPhone = customerPhone?.replace(/\D/g, "").slice(-10);
-    const isMyActiveTable = tableOrders.some(
-      (o) =>
-        (visitorSessionId && o.customerSessionId === visitorSessionId) ||
-        (cleanPhone && o.customerPhone && o.customerPhone.slice(-10) === cleanPhone)
+    const isMyActiveTable = Boolean(
+      customerActiveTable
+        ? t.tableNumber.toUpperCase() === customerActiveTable
+        : false
     );
 
     return {

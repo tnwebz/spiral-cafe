@@ -28,5 +28,16 @@
     "expiresAt": "2026-11-05T09:53:14.204Z",
     "status": "CONVERTED",
     "visitId": "VISIT-B4-MW3CY9AJ"
+  },
+  {
+    "id": "RES-B4-MW6SUJVU",
+    "tableNumber": "B4",
+    "customerSessionId": "sess_1790439195177_ulvduvd",
+    "customerPhone": "8608113558",
+    "reservedAt": "2026-11-07T19:31:36.069Z",
+    "expiresAt": "2026-11-07T20:31:36.618Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-C2-MW6RU8V0",
+    "notes": "Transferred from C2 by Cashier Staff"
   }
 ]

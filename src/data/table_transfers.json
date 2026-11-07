@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "id": "TRF-C2-B4-MW6SM9AJ",
+    "visitId": "VISIT-C2-MW6RU8V0",
+    "fromTable": "C2",
+    "toTable": "B4",
+    "customerSessionId": "sess_1790439195177_ulvduvd",
+    "customerPhone": "8608113558",
+    "ordersCount": 1,
+    "currentBill": 147,
+    "status": "APPROVED",
+    "requestedAt": "2026-11-07T19:25:09.643Z",
+    "reviewedAt": "2026-11-07T19:31:36.069Z",
+    "reviewedBy": "Cashier Staff"
+  }
+]
