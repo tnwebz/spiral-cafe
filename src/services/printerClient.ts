@@ -396,6 +396,13 @@ export class PrinterClient {
   }
 
   /**
+   * Alias for printTestCustomerBill
+   */
+  static async printTestBill(): Promise<{ success: boolean; message: string; durationMs?: number }> {
+    return this.printTestCustomerBill();
+  }
+
+  /**
    * Print test slip directly to CN811-UEWB
    */
   static async printTestReceipt(): Promise<{ success: boolean; message: string; durationMs?: number }> {
@@ -641,7 +648,7 @@ export class PrinterClient {
       const data = await res.json();
       return {
         online: true,
-        version: data.version || "1.1.0",
+        version: data.version || "1.2.0",
         uptimeSeconds: data.uptimeSeconds,
         host: data.host,
       };
@@ -900,6 +907,53 @@ export class PrinterClient {
       return await res.json();
     } catch (err: any) {
       return { success: false, mode, message: err.message || "Failed to switch target mode." };
+    }
+  }
+
+  /**
+   * Migrate Virtual Kitchen Printer to a new loopback IP to test automatic IP discovery and recovery
+   */
+  static async generateNewVirtualIp(): Promise<{
+    success: boolean;
+    oldIp: string;
+    newIp: string;
+    port: number;
+    message: string;
+  }> {
+    try {
+      const res = await fetch(`${CONNECTOR_BASE_URL}/virtual-printer/generate-new-ip`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer spiral_kot_sig_7f8a9b2c3d4e5f6018273645`,
+        },
+        signal: AbortSignal.timeout(4000),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return {
+        success: false,
+        oldIp: "",
+        newIp: "",
+        port: 9102,
+        message: err.message || "Failed to trigger loopback IP migration.",
+      };
+    }
+  }
+
+  /**
+   * Get Auto-Reconnect engine detailed status
+   */
+  static async getAutoReconnectStatus(): Promise<any> {
+    try {
+      const res = await fetch(`${CONNECTOR_BASE_URL}/printer/auto-reconnect-status`, {
+        method: "GET",
+        signal: AbortSignal.timeout(2500),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
     }
   }
 

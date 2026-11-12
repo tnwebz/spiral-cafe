@@ -39,5 +39,15 @@
     "status": "CONVERTED",
     "visitId": "VISIT-C2-MW6RU8V0",
     "notes": "Transferred from C2 by Cashier Staff"
+  },
+  {
+    "id": "RES-B3-MW7QVJGT",
+    "tableNumber": "B3",
+    "customerSessionId": "sess_1794136898412_f6d7a1a88d524e059bd8a3505534f877",
+    "customerPhone": "2345677812",
+    "reservedAt": "2026-11-08T11:24:09.169Z",
+    "expiresAt": "2026-11-08T11:34:09.169Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B3-MW7QW20O"
   }
 ]

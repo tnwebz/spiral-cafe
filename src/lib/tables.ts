@@ -303,12 +303,23 @@ export async function getActiveCustomerVisit(
 
     const cleanPhone = phone?.replace(/\D/g, "").slice(-10);
 
+    if (!sessionId) {
+      // Phone alone without valid unguessable session credential CANNOT claim active dining orders
+      return {
+        hasActiveVisit: false,
+        type: "NONE",
+        tableNumber: null,
+        visitId: null,
+        grandTotal: 0,
+        orders: [],
+      };
+    }
+
     if (cleanPhone && sessionId) {
-      query = query.or(`customer_session_id.eq.${sessionId},customer_phone.eq.${cleanPhone}`);
+      // Must match BOTH session credential AND customer phone to prevent cross-customer leakage
+      query = query.eq("customer_session_id", sessionId).eq("customer_phone", cleanPhone);
     } else if (sessionId) {
       query = query.eq("customer_session_id", sessionId);
-    } else if (cleanPhone) {
-      query = query.eq("customer_phone", cleanPhone);
     }
 
     const { data, error } = await query.order("created_at", { ascending: false });
@@ -355,11 +366,13 @@ export async function getActiveCustomerVisit(
   // 2. If no active orders, check active unexpired reservation
   const activeReservations = await getActiveReservations();
   const cleanPhone = phone?.replace(/\D/g, "").slice(-10);
-  const myRes = activeReservations.find(
-    (r) =>
-      (sessionId && r.customerSessionId === sessionId) ||
-      (cleanPhone && r.customerPhone && r.customerPhone.slice(-10) === cleanPhone)
-  );
+  const myRes = activeReservations.find((r) => {
+    if (!sessionId || r.customerSessionId !== sessionId) return false;
+    if (cleanPhone && r.customerPhone) {
+      return r.customerPhone.slice(-10) === cleanPhone;
+    }
+    return true;
+  });
 
   if (myRes) {
     return {
@@ -1277,12 +1290,16 @@ export function extractKotStateFromOrder(order: Order): {
 
   let kotStatus: KotStatus = "NOT_SENT";
 
-  if (confirmedRounds.includes(highestRound) || order.status === "PREPARING" || order.status === "READY") {
+  if (
+    confirmedRounds.includes(highestRound) ||
+    order.status === "PREPARING" ||
+    order.status === "READY" ||
+    order.status === "COMPLETED" ||
+    manuallyDelivered
+  ) {
     kotStatus = "PRINT_CONFIRMED";
   } else if (hasUnconfirmedAddons) {
     kotStatus = "NOT_SENT";
-  } else if (manuallyDelivered) {
-    kotStatus = "MANUALLY_DELIVERED";
   } else if (isFailed) {
     kotStatus = "FAILED";
   } else if (isUnknown) {
@@ -1458,21 +1475,57 @@ export async function getTablesOverview(
       };
     }
 
-    // Check all orders for this table to detect any pending new orders
-    const hasAnyPendingOrder = tableOrders.some(
-      (o) => o.status === "PENDING" && !(o.notes || "").includes("[KOT_CONFIRMED")
-    );
-    const hasAnyActionNeeded = tableOrders.some((o) => {
-      const s = extractKotStateFromOrder(o);
+    // Table has active unpaid orders.
+    // 5-Stage Process Indicator Logic:
+    // Check which orders are accepted (cooking in kitchen) vs unaccepted (pending dispatch)
+    const isOrderAccepted = (o: Order) => {
+      const n = o.notes || "";
+      const s = String(o.status || "").toUpperCase();
       return (
-        s.kotStatus === "VIEWED" ||
-        s.kotStatus === "FAILED" ||
-        s.kotStatus === "UNKNOWN" ||
-        s.manuallyDelivered
+        s === "PREPARING" ||
+        s === "READY" ||
+        s === "COMPLETED" ||
+        n.includes("[KOT_CONFIRMED") ||
+        n.includes("[KOT_MANUALLY_DELIVERED]")
       );
-    });
+    };
 
-    const { kotStatus, highestRound, hasUnconfirmedAddons, manuallyDelivered } =
+    const unacceptedOrders = tableOrders.filter((o) => !isOrderAccepted(o));
+
+    let color: TableColor = "WHITE";
+    let statusLabel: TableStatusLabel = "AVAILABLE";
+
+    if (unacceptedOrders.length === 0) {
+      // Stage 5: GREEN (KOT SENT / KOT accepted)
+      // All orders sent to kitchen (print confirmed or paper handoff); payment pending.
+      color = "GREEN";
+      statusLabel = "KOT SENT";
+    } else {
+      // At least one order is pending dispatch.
+      // Stage 4: YELLOW (ACTION NEEDED)
+      // Admin viewed table and exited without sending KOT, or printer error occurred.
+      const hasActionNeeded = unacceptedOrders.some((o) => {
+        const n = o.notes || "";
+        return (
+          n.includes("[KOT_VIEWED_EXITED]") ||
+          n.includes("[KOT_EXITED_WITHOUT_KOT]") ||
+          n.includes("[KOT_FAILED]") ||
+          n.includes("[KOT_UNKNOWN]")
+        );
+      });
+
+      if (hasActionNeeded) {
+        color = "YELLOW";
+        statusLabel = "ACTION NEEDED";
+      } else {
+        // Stage 3: RED (NEW ORDER)
+        // Customer placed order; admin action required (freshly placed, unviewed/un-exited).
+        color = "RED";
+        statusLabel = "NEW ORDER";
+      }
+    }
+
+    const { kotStatus, highestRound, hasUnconfirmedAddons } =
       extractKotStateFromOrder(activeOrder);
 
     // Compute elapsed minutes from the earliest order of this visit
@@ -1481,20 +1534,6 @@ export async function getTablesOverview(
       0,
       Math.floor((Date.now() - new Date(earliestOrder.createdAt).getTime()) / 60000)
     );
-
-    let color: TableColor = "WHITE";
-    let statusLabel: TableStatusLabel = "AVAILABLE";
-
-    if (hasAnyPendingOrder || hasUnconfirmedAddons) {
-      color = "RED";
-      statusLabel = "NEW ORDER";
-    } else if (hasAnyActionNeeded || manuallyDelivered) {
-      color = "YELLOW";
-      statusLabel = "ACTION NEEDED";
-    } else {
-      color = "GREEN";
-      statusLabel = "KOT SENT";
-    }
 
     const totalQty = tableOrders.reduce(
       (sum, ord) => sum + ord.items.reduce((acc, it) => acc + (it.quantity || 1), 0),
@@ -1556,9 +1595,10 @@ export async function markTableOrderExitedWithoutKot(orderId: string): Promise<v
   if (!order) return;
 
   const currentNotes = (order as any).notes || "";
-  // Only mark yellow if KOT was not already confirmed
+  // Only mark yellow if KOT was not already confirmed or accepted
   if (
     !currentNotes.includes("[KOT_CONFIRMED_ROUNDS") &&
+    !currentNotes.includes("[KOT_MANUALLY_DELIVERED]") &&
     (order as any).status !== "PREPARING" &&
     (order as any).status !== "READY" &&
     (order as any).status !== "COMPLETED"
@@ -1571,6 +1611,41 @@ export async function markTableOrderExitedWithoutKot(orderId: string): Promise<v
         .from("orders" as any)
         .update({ notes: updatedNotes, updated_at: now })
         .eq("id", orderId);
+    }
+  }
+}
+
+/**
+ * Mark any pending/unaccepted orders for this table as exited without KOT (triggers Yellow state)
+ */
+export async function markTableOrdersExitedWithoutKot(tableNumber: string): Promise<void> {
+  const cleanTable = normalizeTableLabel(tableNumber);
+  const cutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
+
+  const { data: orders } = await supabaseAdmin
+    .from("orders" as any)
+    .select("id, notes, status")
+    .eq("table_number", cleanTable)
+    .eq("status", "PENDING")
+    .neq("payment_status", "PAID")
+    .gte("created_at", cutoffIso);
+
+  if (Array.isArray(orders)) {
+    for (const ord of (orders as any[])) {
+      const notes = ord.notes || "";
+      if (
+        !notes.includes("[KOT_CONFIRMED") &&
+        !notes.includes("[KOT_MANUALLY_DELIVERED]") &&
+        !notes.includes("[KOT_VIEWED_EXITED]") &&
+        ord.status === "PENDING"
+      ) {
+        const now = new Date().toISOString();
+        const updatedNotes = `${notes} [KOT_VIEWED_EXITED] [KOT_VIEWED_AT:${now}]`.trim();
+        await supabaseAdmin
+          .from("orders" as any)
+          .update({ notes: updatedNotes, updated_at: now })
+          .eq("id", ord.id);
+      }
     }
   }
 }

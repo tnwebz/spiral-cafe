@@ -33,7 +33,7 @@ export interface PersistentCartState {
 const CART_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes expiry for unsubmitted draft carts
 
 function cleanClientTableCode(raw: string): string {
-  if (!raw) return "A1";
+  if (!raw) return "";
   const clean = raw.trim();
   const match = clean.match(/^Table[\s\-_]*([A-Za-z0-9\-_]+)$/i);
   if (match) {
@@ -155,6 +155,7 @@ interface CartContextType {
   selectCashPayment: (orderId: string) => Promise<boolean>;
   switchPaymentMethod: (orderId: string, method: "CASH" | "ONLINE") => Promise<boolean>;
   processOnlinePayment: (orderId: string) => Promise<{ success: boolean; error?: string }>;
+  resetCustomerSession: (newPhone?: string) => string;
   fetchSessionOrders: () => Promise<void>;
   openCart: () => void;
   openOrders: () => void;
@@ -164,7 +165,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [tableNumber, setTableNumberState] = useState<string>("A1");
+  const [tableNumber, setTableNumberState] = useState<string>("");
   const [customerSessionId, setCustomerSessionId] = useState<string>("");
   const [visitorId, setVisitorId] = useState<string>("");
   const [activeVisitId, setActiveVisitId] = useState<string>("");
@@ -429,7 +430,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize Session ID & Table from URL / localStorage
   useEffect(() => {
-    let initialTable = "A1";
+    let initialTable = "";
     let currentVisitor = "";
 
     try {
@@ -471,7 +472,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 4. Validate Table Session & Restore unsubmitted cart (10-min expiry + visit matching)
-    if (currentVisitor) {
+    if (currentVisitor && initialTable) {
       syncTableSessionAndCart(initialTable, currentVisitor);
     }
 
@@ -898,6 +899,53 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     [tableNumber, placedOrders]
   );
 
+  const resetCustomerSession = useCallback((newPhone?: string): string => {
+    let newSession = "";
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      newSession = `sess_${Date.now()}_${crypto.randomUUID().replace(/-/g, "")}`;
+    } else {
+      newSession = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
+    }
+    const newVisitor = `VISITOR-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`.toUpperCase();
+
+    try {
+      localStorage.setItem("spiral_customer_session_id", newSession);
+      localStorage.setItem("spiral_visitor_id", newVisitor);
+      localStorage.removeItem("spiral_table_session");
+      localStorage.removeItem("spiral_customer_profile");
+      localStorage.removeItem("spiral_placed_orders");
+
+      if (newPhone) {
+        localStorage.setItem("spiral_customer_phone", newPhone);
+      } else {
+        localStorage.removeItem("spiral_customer_phone");
+      }
+
+      // Remove any cart keys for any tables
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith("spiral_cart") || key.startsWith("cart_"))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn("Storage reset warning:", e);
+    }
+
+    setCustomerSessionId(newSession);
+    setVisitorId(newVisitor);
+    setTableNumberState("");
+    setCart([]);
+    setPlacedOrders([]);
+    setTableReservation(null);
+    setActiveVisitId("");
+    setCustomerProfileState(null);
+
+    return newSession;
+  }, []);
+
   const openCart = useCallback(() => {
     setActiveSheetTab("cart");
     setIsCartOpen(true);
@@ -915,6 +963,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         tableNumber,
         setTableNumber,
         customerSessionId,
+        resetCustomerSession,
         foodPreference,
         setFoodPreference,
         customerProfile,

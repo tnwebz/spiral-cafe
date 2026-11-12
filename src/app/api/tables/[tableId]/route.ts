@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { normalizeTableLabel, markTableOrderViewed, markTableOrderExitedWithoutKot, extractKotStateFromOrder, getActiveReservations } from "@/lib/tables";
+import {
+  normalizeTableLabel,
+  markTableOrderViewed,
+  markTableOrderExitedWithoutKot,
+  markTableOrdersExitedWithoutKot,
+  extractKotStateFromOrder,
+  getActiveReservations,
+} from "@/lib/tables";
 import { buildKotData, KotReceiptEngine } from "@/lib/kot";
 import { getPrinterSettings } from "@/lib/tables";
 import { Order, getActiveVisitOrdersForTable } from "@/lib/db";
@@ -121,18 +128,21 @@ export async function PATCH(
 ) {
   try {
     const { tableId } = await params;
+    const cleanTable = normalizeTableLabel(tableId);
     const body = await req.json().catch(() => ({}));
     const { orderId, exitedWithoutKot } = body;
 
-    if (orderId) {
-      if (exitedWithoutKot) {
+    if (exitedWithoutKot) {
+      if (orderId) {
         await markTableOrderExitedWithoutKot(orderId);
       } else {
-        await markTableOrderViewed(orderId);
+        await markTableOrdersExitedWithoutKot(cleanTable);
       }
+    } else if (orderId) {
+      await markTableOrderViewed(orderId);
     }
 
-    return NextResponse.json({ success: true, message: `Table ${tableId} updated.` });
+    return NextResponse.json({ success: true, message: `Table ${cleanTable} updated.` });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || "Failed to update table." },

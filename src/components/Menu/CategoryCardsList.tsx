@@ -61,21 +61,21 @@ export default function CategoryCardsList({
             <div
               key={category.id}
               onClick={() => onSelectCategory(category.id)}
-              className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white border border-[#ECDCD3]/90 shadow-[0_2px_12px_rgba(74,33,23,0.04)] hover:shadow-[0_8px_24px_rgba(74,33,23,0.1)] transition-all duration-300 flex items-stretch group cursor-pointer text-left active:scale-[0.99] h-24 sm:h-28 md:h-32 lg:h-36 xl:h-40"
+              className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white border border-[#ECDCD3]/90 shadow-[0_2px_12px_rgba(74,33,23,0.04)] hover:shadow-[0_8px_24px_rgba(74,33,23,0.1)] transition-all duration-300 flex items-stretch group cursor-pointer text-left active:scale-[0.99] h-26 sm:h-30 md:h-34 lg:h-38 xl:h-42"
             >
-              {/* Right Merged Image Section - Seamless mask & fade with ZERO middle line */}
+              {/* Right Merged Image Section - Wide photographic coverage with crisp contrast */}
               <div
-                className="absolute inset-y-0 right-0 w-[58%] sm:w-[50%] md:w-[48%] lg:w-[46%] overflow-hidden pointer-events-none [mask-image:linear-gradient(to_right,transparent_0%,black_35%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_35%,black_100%)]"
+                className="absolute inset-y-0 right-0 w-[64%] sm:w-[58%] md:w-[55%] lg:w-[52%] xl:w-[50%] overflow-hidden pointer-events-none [mask-image:linear-gradient(to_right,transparent_0%,rgba(0,0,0,0.5)_12%,black_24%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,rgba(0,0,0,0.5)_12%,black_24%,black_100%)]"
               >
                 <Image
                   src={displayImage}
                   alt={category.name}
                   fill
-                  sizes="(max-width: 640px) 240px, (max-width: 1024px) 450px, 600px"
+                  sizes="(max-width: 640px) 280px, (max-width: 1024px) 550px, 800px"
                   className="object-cover object-center group-hover:scale-105 transition-transform duration-700"
                 />
-                {/* Secondary gentle wash to guarantee flawless background blending */}
-                <div className="absolute inset-0 bg-gradient-to-r from-white via-white/40 via-30% to-transparent" />
+                {/* Ultra-soft edge-only transition blend */}
+                <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none" />
               </div>
 
               {/* Left Column: Icon Square + Title + Dishes Count */}
@@ -109,20 +109,20 @@ export default function CategoryCardsList({
         {showCombosOption && (
           <div
             onClick={() => router.push("/offers")}
-            className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white border border-[#ECDCD3]/90 shadow-[0_2px_12px_rgba(74,33,23,0.04)] hover:shadow-[0_8px_24px_rgba(74,33,23,0.1)] transition-all duration-300 flex items-stretch group cursor-pointer text-left active:scale-[0.99] h-24 sm:h-28 md:h-32 lg:h-36 xl:h-40"
+            className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white border border-[#ECDCD3]/90 shadow-[0_2px_12px_rgba(74,33,23,0.04)] hover:shadow-[0_8px_24px_rgba(74,33,23,0.1)] transition-all duration-300 flex items-stretch group cursor-pointer text-left active:scale-[0.99] h-26 sm:h-30 md:h-34 lg:h-38 xl:h-42"
           >
             {/* Right Merged Image Section */}
             <div
-              className="absolute inset-y-0 right-0 w-[58%] sm:w-[50%] md:w-[48%] lg:w-[46%] overflow-hidden pointer-events-none [mask-image:linear-gradient(to_right,transparent_0%,black_35%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_35%,black_100%)]"
+              className="absolute inset-y-0 right-0 w-[64%] sm:w-[58%] md:w-[55%] lg:w-[52%] xl:w-[50%] overflow-hidden pointer-events-none [mask-image:linear-gradient(to_right,transparent_0%,rgba(0,0,0,0.5)_12%,black_24%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,rgba(0,0,0,0.5)_12%,black_24%,black_100%)]"
             >
               <Image
                 src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop"
                 alt="Special Combos"
                 fill
-                sizes="(max-width: 640px) 240px, (max-width: 1024px) 450px, 600px"
+                sizes="(max-width: 640px) 280px, (max-width: 1024px) 550px, 800px"
                 className="object-cover object-center group-hover:scale-105 transition-transform duration-700"
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-white via-white/40 via-30% to-transparent" />
+              <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none" />
             </div>
 
             {/* Left Column: Icon Square + Title + Tag */}

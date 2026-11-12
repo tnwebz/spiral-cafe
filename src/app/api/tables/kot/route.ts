@@ -49,9 +49,11 @@ export async function POST(req: NextRequest) {
       // Clean old warning flags and append confirmed rounds
       let cleanNotes = currentNotes
         .replace(/\[KOT_CONFIRMED_ROUNDS:[0-9,]+\]/g, "")
-        .replace(/\[KOT_FAILED\]/g, "")
-        .replace(/\[KOT_UNKNOWN\]/g, "")
-        .replace(/\[KOT_VIEWED\]/g, "")
+        .replace(/\[KOT_FAILED[^\]]*\]/g, "")
+        .replace(/\[KOT_UNKNOWN[^\]]*\]/g, "")
+        .replace(/\[KOT_VIEWED[^\]]*\]/g, "")
+        .replace(/\[KOT_EXITED_WITHOUT_KOT[^\]]*\]/g, "")
+        .replace(/\s+/g, " ")
         .trim();
 
       cleanNotes = `${cleanNotes} [KOT_CONFIRMED_ROUNDS:${confirmedRounds.join(",")}] [KOT_CONFIRMED_AT:${now}]`.trim();
@@ -163,8 +165,13 @@ export async function POST(req: NextRequest) {
     // 4. MARK MANUALLY DELIVERED (Staff wrote order on notepad)
     if (action === "MARK_MANUAL" || action === "MARK_HANDOFF") {
       let cleanNotes = currentNotes
-        .replace(/\[KOT_FAILED\]/g, "")
-        .replace(/\[KOT_UNKNOWN\]/g, "")
+        .replace(/\[KOT_FAILED[^\]]*\]/g, "")
+        .replace(/\[KOT_UNKNOWN[^\]]*\]/g, "")
+        .replace(/\[KOT_VIEWED[^\]]*\]/g, "")
+        .replace(/\[KOT_EXITED_WITHOUT_KOT[^\]]*\]/g, "")
+        .replace(/\[KOT_MANUALLY_DELIVERED[^\]]*\]/g, "")
+        .replace(/\[KOT_MANUAL_[^\]]*\]/g, "")
+        .replace(/\s+/g, " ")
         .trim();
 
       cleanNotes = `${cleanNotes} [KOT_MANUALLY_DELIVERED] [KOT_MANUAL_BY:${adminUser}] [KOT_MANUAL_AT:${now}]`.trim();

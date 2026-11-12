@@ -1,0 +1,83 @@
+{
+  "name": "Spiral Cafe POS",
+  "short_name": "Spiral POS",
+  "description": "Spiral Cafe Point of Sale & Kitchen Management Terminal",
+  "id": "/admin/login",
+  "start_url": "/admin/login",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
+  "orientation": "any",
+  "background_color": "#FFFFFF",
+  "theme_color": "#CA340A",
+  "categories": ["business", "food", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "POS Tables Grid",
+      "short_name": "Tables",
+      "description": "Live floor tables management and order billing",
+      "url": "/admin",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Kitchen Display (KDS)",
+      "short_name": "Kitchen",
+      "description": "Live kitchen order tickets display",
+      "url": "/kitchen",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Printer Connectivity",
+      "short_name": "Printer",
+      "description": "Hardware printer diagnostics and connector setup",
+      "url": "/admin/printer",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
+}
+

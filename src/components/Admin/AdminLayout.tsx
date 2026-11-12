@@ -7,6 +7,7 @@ import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useOrderSync } from "@/hooks/useOrderSync";
 import AdminConnectivityBar from "@/components/Admin/AdminConnectivityBar";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 import {
   LayoutDashboard,
   Grid2X2,
@@ -27,6 +28,7 @@ import {
   ShieldCheck,
   Bell,
   Search,
+  Download,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -45,6 +47,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   // Authoritative Order Sync & Power-Cut Resilience Engine
   const orderSync = useOrderSync(12000);
+
+  // Progressive Web App (PWA) installation state
+  const { canInstall, isInstalled, installApp } = usePWAInstall();
 
   // Authenticate user session strictly via secure HTTP-only cookies
   useEffect(() => {
@@ -234,6 +239,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           })}
         </nav>
 
+        {/* Optional Install POS App (shown when installable & not yet in standalone mode) */}
+        {canInstall && !isInstalled && (
+          <div className="px-3 pb-3">
+            <button
+              type="button"
+              onClick={() => installApp()}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#CA340A] hover:bg-[#A82806] text-white text-xs font-bold shadow-md shadow-[#CA340A]/30 transition-all cursor-pointer active:scale-95"
+            >
+              <Download size={14} />
+              <span>Install POS Desktop App</span>
+            </button>
+          </div>
+        )}
+
         {/* Bottom User Bar */}
         <div className="p-4 border-t border-white/10 bg-[#2C1710]/80 flex items-center justify-between">
           <div className="flex items-center gap-2.5 overflow-hidden">
@@ -281,6 +300,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           <div className="flex items-center gap-4">
+            {canInstall && !isInstalled && (
+              <button
+                type="button"
+                onClick={() => installApp()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#CA340A]/30 bg-amber-50 text-[#CA340A] text-xs font-bold hover:bg-[#CA340A] hover:text-white transition-all shadow-xs cursor-pointer"
+                title="Install Spiral Cafe POS as a standalone desktop app"
+              >
+                <Download size={14} />
+                <span>Install POS App</span>
+              </button>
+            )}
+
             <Link
               href="/kitchen"
               target="_blank"

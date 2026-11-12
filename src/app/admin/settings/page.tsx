@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import AdminLayout from "@/components/Admin/AdminLayout";
+import PWAInstallCard from "@/components/Admin/PWAInstallCard";
 import {
   Building,
   Percent,
@@ -116,6 +117,9 @@ export default function AdminSettingsPage() {
             </button>
           </div>
         )}
+
+        {/* PWA Desktop App Installation Card */}
+        <PWAInstallCard />
 
         <form onSubmit={handleSaveConfig} className="space-y-6">
           {/* Cafe Profile */}

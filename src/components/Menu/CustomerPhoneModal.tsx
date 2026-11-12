@@ -36,6 +36,7 @@ export default function CustomerPhoneModal({
     tableNumber,
     setTableNumber,
     customerSessionId,
+    resetCustomerSession,
     foodPreference,
     setFoodPreference,
     customerProfile,
@@ -51,21 +52,24 @@ export default function CustomerPhoneModal({
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [tablesList, setTablesList] = useState<any[]>([]);
-  const [selectedTable, setSelectedTable] = useState(tableNumber || currentTable || "A1");
+  const [selectedTable, setSelectedTable] = useState(tableNumber || currentTable || "");
   const [loadingTables, setLoadingTables] = useState(false);
   const [conflictVisitTable, setConflictVisitTable] = useState<string | null>(null);
+  const [targetTransferTable, setTargetTransferTable] = useState<string>("");
   const [showCounterTransferModal, setShowCounterTransferModal] = useState(false);
 
   // Fetch live tables overview with 5 colors & check active visit immediately
-  const fetchTablesList = async () => {
+  const fetchTablesList = async (overrideSession?: string, overridePhone?: string) => {
     setLoadingTables(true);
     try {
       const savedPhone =
+        overridePhone ||
         phone.replace(/\D/g, "").slice(-10) ||
         (typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : "") ||
         "";
+      const sess = overrideSession || customerSessionId;
       const res = await fetch(
-        `/api/tables?visitorId=${encodeURIComponent(customerSessionId)}&phone=${encodeURIComponent(savedPhone || "")}`
+        `/api/tables?visitorId=${encodeURIComponent(sess)}&phone=${encodeURIComponent(savedPhone || "")}`
       );
       const d = await res.json();
       if (d.success && Array.isArray(d.tables)) {
@@ -84,6 +88,8 @@ export default function CustomerPhoneModal({
         };
         const normalized = legacyMap[cleanT] || cleanT;
         setConflictVisitTable(normalized);
+      } else {
+        setConflictVisitTable(null);
       }
     } catch {}
     finally {
@@ -203,6 +209,15 @@ export default function CustomerPhoneModal({
       return;
     }
 
+    const savedPhone =
+      typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : null;
+    if (savedPhone && savedPhone !== clean) {
+      // Different phone number detected! Isolate customer session completely
+      resetCustomerSession(clean);
+      setConflictVisitTable(null);
+      setSelectedTable("");
+    }
+
     setError("");
     setStep("preference");
   };
@@ -210,6 +225,16 @@ export default function CustomerPhoneModal({
   // Handler for Food Preference Selection (Saves 30-day session & closes modal)
   const handleSelectPreference = async (pref: FoodPreference) => {
     const clean = phone.replace(/\D/g, "").slice(-10);
+    const savedPhone =
+      typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : null;
+    let activeSession = customerSessionId;
+
+    if (!savedPhone || savedPhone !== clean) {
+      activeSession = resetCustomerSession(clean);
+      setConflictVisitTable(null);
+      setSelectedTable("");
+    }
+
     setSubmitting(true);
     setError("");
 
@@ -237,20 +262,20 @@ export default function CustomerPhoneModal({
         body: JSON.stringify({
           phoneNumber: clean,
           foodPreference: pref,
-          tableNumber: tableNumber || currentTable || "A1",
-          sessionId: customerSessionId,
+          tableNumber: selectedTable || tableNumber || currentTable || "",
+          sessionId: activeSession,
         }),
       });
 
       if (onPhoneSaved) {
-        onPhoneSaved(clean, tableNumber || currentTable || "A1");
+        onPhoneSaved(clean, selectedTable || tableNumber || currentTable || "");
       }
 
-      fetchTablesList();
+      await fetchTablesList(activeSession, clean);
       setStep("table_select");
     } catch (err) {
       console.error("Preference save error:", err);
-      fetchTablesList();
+      await fetchTablesList(activeSession, clean);
       setStep("table_select");
     } finally {
       setSubmitting(false);
@@ -338,12 +363,10 @@ export default function CustomerPhoneModal({
 
   // Handler for Returning Customer: "Not you? Change"
   const handleNotYouChange = () => {
-    // End remembered customer session and return to phone entry
-    setCustomerProfile(null);
-    try {
-      localStorage.removeItem("spiral_customer_profile");
-      localStorage.removeItem("spiral_customer_phone");
-    } catch {}
+    // End remembered customer session, clear storage, and return to phone entry
+    resetCustomerSession();
+    setConflictVisitTable(null);
+    setSelectedTable("");
     setPhone("");
     setError("");
     setStep("phone");
@@ -631,10 +654,12 @@ export default function CustomerPhoneModal({
                 Step 3 of 3
               </span>
               <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
-                SELECT YOUR TABLE
+                {conflictVisitTable ? "DINING TABLE" : "SELECT YOUR TABLE"}
               </h2>
               <p className="text-xs text-[#6B5E55] font-medium">
-                Choose your floor table to reserve it for 10 minutes.
+                {conflictVisitTable
+                  ? `You are currently seated at Table ${conflictVisitTable}.`
+                  : "Choose your floor table to reserve it for 10 minutes."}
               </p>
             </div>
 
@@ -655,19 +680,17 @@ export default function CustomerPhoneModal({
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => {
-                      setTableNumber(conflictVisitTable);
-                      setSelectedTable(conflictVisitTable);
-                      setIsOpen(false);
-                      router.push("/menu");
-                    }}
+                    onClick={() => handleContinueWithActiveTable(conflictVisitTable)}
                     className="flex-1 py-2 bg-[#CA340A] text-white rounded-xl text-xs font-heading font-bold shadow-xs hover:bg-[#B73F1D] cursor-pointer"
                   >
                     Continue at Table {conflictVisitTable}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowCounterTransferModal(true)}
+                    onClick={() => {
+                      setTargetTransferTable("");
+                      setShowCounterTransferModal(true);
+                    }}
                     className="flex-1 py-2 bg-white border border-[#CA340A] text-[#CA340A] rounded-xl text-xs font-heading font-bold hover:bg-amber-50 cursor-pointer"
                   >
                     Change Table
@@ -708,7 +731,7 @@ export default function CustomerPhoneModal({
                     ? t.tableNumber.toUpperCase() === cleanActive
                     : Boolean(t.isMyActiveTable);
 
-                  const isSelected = selectedTable === t.tableNumber;
+                  const isSelected = !cleanActive && selectedTable === t.tableNumber;
                   const isAvailable =
                     isMyTable ||
                     t.color === "WHITE" ||
@@ -721,22 +744,31 @@ export default function CustomerPhoneModal({
                     !isMyTable &&
                     (t.color === "RED" || t.color === "YELLOW" || t.color === "GREEN");
 
+                  const isDimmed = !isMyTable && !isAvailable;
+
                   return (
                     <button
                       key={t.tableNumber}
                       type="button"
-                      disabled={!isAvailable || submitting}
-                      onClick={() => handleReserveTable(t.tableNumber)}
-                      className={`p-3 rounded-2xl flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                      disabled={isDimmed || submitting}
+                      onClick={() => {
+                        if (isMyTable) {
+                          handleContinueWithActiveTable(t.tableNumber);
+                        } else if (cleanActive) {
+                          setTargetTransferTable(t.tableNumber);
+                          setShowCounterTransferModal(true);
+                        } else {
+                          handleReserveTable(t.tableNumber);
+                        }
+                      }}
+                      className={`p-3 rounded-2xl flex flex-col items-center justify-center border transition-all ${
                         isMyTable
-                          ? "bg-emerald-50 text-emerald-950 border-2 border-emerald-600 shadow-md ring-2 ring-emerald-500/30 scale-102"
+                          ? "bg-emerald-50 text-emerald-950 border-2 border-emerald-600 shadow-md ring-2 ring-emerald-500/30 scale-102 cursor-pointer"
                           : isSelected
-                          ? "bg-[#CA340A] text-white border-[#CA340A] shadow-md ring-2 ring-[#CA340A]/30 scale-102"
-                          : isBlueOther
-                          ? "bg-blue-50/70 text-blue-400 border-blue-200 cursor-not-allowed opacity-75"
-                          : isOccupiedOther
-                          ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60"
-                          : "bg-white text-[#2C1710] border-[#EBDAD0] hover:border-[#CA340A] hover:bg-amber-50/40"
+                          ? "bg-[#CA340A] text-white border-[#CA340A] shadow-md ring-2 ring-[#CA340A]/30 scale-102 cursor-pointer"
+                          : isDimmed
+                          ? "opacity-35 pointer-events-none select-none filter blur-[0.6px] bg-zinc-100/70 text-zinc-400 border-zinc-200 cursor-not-allowed"
+                          : "bg-white text-[#2C1710] border-[#EBDAD0] hover:border-[#CA340A] hover:bg-amber-50/40 shadow-xs hover:shadow-md cursor-pointer"
                       }`}
                     >
                       <span className="flex items-center gap-1.5 mb-0.5">
@@ -744,12 +776,12 @@ export default function CustomerPhoneModal({
                           className={`w-2 h-2 rounded-full ${
                             isMyTable
                               ? "bg-emerald-500 animate-pulse"
+                              : isSelected
+                              ? "bg-white"
                               : isAvailable
-                              ? isSelected
-                                ? "bg-white"
-                                : "bg-zinc-300"
+                              ? "bg-zinc-300"
                               : isBlueOther
-                              ? "bg-blue-500 animate-pulse"
+                              ? "bg-blue-500"
                               : t.color === "RED"
                               ? "bg-red-500"
                               : t.color === "YELLOW"
@@ -833,7 +865,7 @@ export default function CustomerPhoneModal({
                       Table Transfer Notice
                     </h3>
                     <p className="text-[11px] text-[#8C5E51]">
-                      Assigned to Table {conflictVisitTable || "C2"}
+                      Currently at Table {conflictVisitTable || "Your Table"}
                     </p>
                   </div>
                 </div>
@@ -841,6 +873,7 @@ export default function CustomerPhoneModal({
                   type="button"
                   onClick={() => setShowCounterTransferModal(false)}
                   className="w-7 h-7 rounded-full bg-[#EBDAD0]/60 hover:bg-[#EBDAD0] text-[#4A2117] flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Close"
                 >
                   <X size={15} />
                 </button>
@@ -849,10 +882,10 @@ export default function CustomerPhoneModal({
               {/* Informative Content */}
               <div className="p-3.5 bg-white rounded-2xl border border-[#EBDAD0] space-y-2 text-xs text-[#6B5E55] leading-relaxed">
                 <p className="font-semibold text-[#4A2117]">
-                  To change your table from Table {conflictVisitTable || "C2"}, please inform the café counter staff.
+                  To change your table from Table {conflictVisitTable || "your current table"}{targetTransferTable ? ` to Table ${targetTransferTable}` : ""}, please inform the café counter staff.
                 </p>
                 <p className="text-[11px] text-[#8C5E51]">
-                  Our team will check available floor tables and transfer your dining session immediately. All your ordered items and session details will be preserved with zero data loss.
+                  Our staff will immediately transfer your table from the counter using the <strong>Transfer Table</strong> option. All your ordered items and session details will be preserved with zero data loss.
                 </p>
               </div>
 
@@ -862,7 +895,7 @@ export default function CustomerPhoneModal({
                 onClick={() => setShowCounterTransferModal(false)}
                 className="w-full py-3 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer"
               >
-                Got It • Return to Session
+                Got It • Return
               </button>
             </motion.div>
           </div>

@@ -318,21 +318,27 @@ export async function GET(req: NextRequest) {
       const cleanTable = normalizeTableNumber(table);
       const activeVisit = await getActiveVisitOrdersForTable(cleanTable);
 
-      // If sessionId is provided, ensure orders belong to this session or phone
-      if (sessionId && activeVisit.orders.length > 0) {
-        const adminSession = await verifyAdminSession(req);
-        if (!adminSession.authenticated) {
-          const matchesSession = activeVisit.orders.some(
-            (o) => o.customerSessionId === sessionId
-          );
-          if (!matchesSession) {
-            return NextResponse.json({
-              success: true,
-              orders: [],
-              visitId: null,
-              tableOccupiedByOther: true,
-            });
-          }
+      // Verify authorization: non-admin callers MUST supply matching sessionId to see orders
+      const adminSession = await verifyAdminSession(req);
+      if (!adminSession.authenticated) {
+        if (!sessionId) {
+          return NextResponse.json({
+            success: true,
+            orders: [],
+            visitId: null,
+            tableOccupiedByOther: activeVisit.orders.length > 0,
+          });
+        }
+        const matchesSession = activeVisit.orders.some(
+          (o) => o.customerSessionId === sessionId
+        );
+        if (!matchesSession) {
+          return NextResponse.json({
+            success: true,
+            orders: [],
+            visitId: null,
+            tableOccupiedByOther: true,
+          });
         }
       }
 

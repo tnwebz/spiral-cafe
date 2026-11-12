@@ -1005,16 +1005,12 @@ export default function CartOrdersSheet() {
                       onClick={() => handleSelectTable(t)}
                       className={`py-3 px-2 rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer border active:scale-95 ${
                         isOccupied
-                          ? color === "RED"
-                            ? "bg-red-50 text-red-800 border-red-200 cursor-not-allowed opacity-75"
-                            : color === "YELLOW"
-                            ? "bg-amber-50 text-amber-800 border-amber-200 cursor-not-allowed opacity-75"
-                            : "bg-emerald-50 text-emerald-800 border-emerald-200 cursor-not-allowed opacity-75"
+                          ? "bg-zinc-100/80 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60 filter blur-[0.3px]"
                           : isReservedOther
-                          ? "bg-blue-50 text-blue-700 border-blue-200 cursor-not-allowed opacity-75"
+                          ? "bg-blue-50/70 text-blue-400 border-blue-200 cursor-not-allowed opacity-75"
                           : isMyReservation
-                          ? "bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-400/40"
-                          : "bg-white text-[#4A2117] border-[#EBDAD0] hover:border-[#B73F1D] hover:bg-[#FFF8F3]"
+                          ? "bg-emerald-600 text-white border-emerald-700 shadow-md ring-2 ring-emerald-400/40"
+                          : "bg-white text-[#4A2117] border-[#EBDAD0] hover:border-[#CA340A] hover:bg-amber-50/40 shadow-xs"
                       }`}
                     >
                       <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
@@ -1024,20 +1020,24 @@ export default function CartOrdersSheet() {
                         {t}
                       </span>
                       {isOccupied ? (
-                        <span className="text-[9px] font-bold bg-white/70 px-1.5 py-0.2 rounded-full mt-1 flex items-center gap-0.5">
-                          {color === "RED" ? "🔴 New Order" : color === "YELLOW" ? "🟡 Kitchen" : "🟢 Dining"}
+                        <span className="text-[9px] font-bold text-zinc-500 mt-1 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+                          Occupied
                         </span>
                       ) : isReservedOther ? (
-                        <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full mt-1">
-                          🔵 Reserved
+                        <span className="text-[9px] font-bold text-blue-700 mt-1 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          Reserved
                         </span>
                       ) : isMyReservation ? (
-                        <span className="text-[9px] font-bold bg-white/20 text-white px-1.5 py-0.2 rounded-full mt-1">
-                          🔵 Your Table
+                        <span className="text-[9px] font-bold text-white mt-1 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                          Your Table
                         </span>
                       ) : (
-                        <span className="text-[9px] text-emerald-700 font-bold mt-1">
-                          ⚪ Available
+                        <span className="text-[9px] text-zinc-600 font-bold mt-1 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-300" />
+                          Available
                         </span>
                       )}
                     </button>
@@ -1045,21 +1045,19 @@ export default function CartOrdersSheet() {
                 })}
               </div>
 
-              {/* 5-Color System Legend & Counter Warning */}
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-3 pb-1 border-t border-[#EBDAD0] text-[11px] font-bold text-[#8C5E51]">
+              {/* Legend & Counter Warning */}
+              <div className="flex flex-wrap items-center justify-center gap-4 pt-3 pb-1 border-t border-[#EBDAD0] text-[11px] font-bold text-[#8C5E51]">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-white border border-gray-400 shadow-xs inline-block"></span>
-                  <span>⚪ Available</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-300 border border-zinc-400"></span>
+                  <span>Available</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-xs inline-block"></span>
-                  <span>🔵 Reserved</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                  <span>Reserved</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-xs inline-block"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-xs -ml-1 inline-block"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs -ml-1 inline-block"></span>
-                  <span>🔴🟡🟢 Occupied</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-zinc-400"></span>
+                  <span>Occupied</span>
                 </div>
               </div>
 
@@ -1259,8 +1257,17 @@ export default function CartOrdersSheet() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="w-full max-w-sm bg-[#FFF8F3] rounded-3xl p-5 border border-[#EBDAD0] shadow-2xl space-y-4 text-center"
+              className="w-full max-w-sm bg-[#FFF8F3] rounded-3xl p-5 border border-[#EBDAD0] shadow-2xl space-y-4 text-center relative"
             >
+              <button
+                type="button"
+                onClick={() => setShowContactCounterModal(false)}
+                className="absolute right-4 top-4 w-7 h-7 rounded-full bg-[#EBDAD0]/60 hover:bg-[#EBDAD0] text-[#4A2117] flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={15} />
+              </button>
+
               <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 text-amber-700 flex items-center justify-center">
                 <Utensils size={24} />
               </div>

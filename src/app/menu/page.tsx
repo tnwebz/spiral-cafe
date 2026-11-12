@@ -479,7 +479,7 @@ function MenuContent() {
         ) : !currentCategory ? (
 
           /* CASE 2: CATEGORY SELECTION SCREEN (Exact Design Match with Reference Image, Seamlessly Merged) */
-          <div className="max-w-2xl lg:max-w-3xl mx-auto">
+          <div className="max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto w-full">
             <CategoryCardsList
               categories={categoriesToRender}
               onSelectCategory={handleSelectCategory}

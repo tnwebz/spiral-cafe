@@ -357,6 +357,30 @@ export default function TableDetailPage() {
     }
   };
 
+  // When admin returns to floor grid, check if any pending orders were left without sending KOT
+  const handleBackToGrid = useCallback(() => {
+    const hasUnsentOrders = orders.some(
+      (o) =>
+        o.status === "PENDING" &&
+        !(o.notes || "").includes("[KOT_CONFIRMED") &&
+        !(o.notes || "").includes("[KOT_MANUALLY_DELIVERED]")
+    );
+    if (hasUnsentOrders) {
+      fetch(`/api/tables/${encodeURIComponent(tableId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exitedWithoutKot: true }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+  }, [orders, tableId]);
+
+  useEffect(() => {
+    return () => {
+      handleBackToGrid();
+    };
+  }, [handleBackToGrid]);
+
   useEffect(() => {
     fetchTableData();
 
@@ -569,6 +593,7 @@ export default function TableDetailPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/admin/tables"
+              onClick={handleBackToGrid}
               className="p-2.5 rounded-2xl bg-white border border-black/10 text-zinc-700 hover:bg-zinc-100 transition-colors shadow-xs"
               title="Back to Floor Tables"
             >
@@ -1086,6 +1111,7 @@ export default function TableDetailPage() {
               <div className="pt-2">
                 <Link
                   href="/admin/tables"
+                  onClick={handleBackToGrid}
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-[#CA340A] hover:underline"
                 >
                   <ArrowLeft size={14} /> Back to Table Grid
