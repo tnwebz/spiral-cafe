@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { PrinterClient, PrinterState } from "@/services/printerClient";
 import type { PrinterSettings } from "@/lib/tables";
+import { CONNECTOR_RELEASE } from "@/lib/connectorDownloads";
 
 interface PrinterStatusModalProps {
   isOpen: boolean;
@@ -316,9 +317,10 @@ export default function PrinterStatusModal({
                     Install standalone connector on billing PC
                   </div>
                   <a
-                    href="/downloads/SpiralCafe-Printer-Setup.exe"
-                    download="SpiralCafe-Printer-Setup.exe"
-                    className="px-3 py-1.5 rounded-xl bg-[#CA340A] text-white font-bold text-xs hover:bg-[#B73F1D] flex items-center gap-1.5 shrink-0 shadow-xs"
+                    href={CONNECTOR_RELEASE.installer.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-[#CA340A] text-white font-bold text-xs hover:bg-[#B73F1D] flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
                   >
                     <Download size={13} />
                     <span>Download Setup</span>

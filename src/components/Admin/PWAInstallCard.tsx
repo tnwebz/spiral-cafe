@@ -16,6 +16,7 @@ import {
   Info,
 } from "lucide-react";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
+import { CONNECTOR_RELEASE } from "@/lib/connectorDownloads";
 
 export default function PWAInstallCard() {
   const { canInstall, isInstalled, isInstalling, platform, browserName, installApp } = usePWAInstall();
@@ -210,12 +211,13 @@ export default function PWAInstallCard() {
           </a>
           <span>•</span>
           <a
-            href="/downloads/SpiralCafe-Printer-Setup.exe"
-            download="SpiralCafe-Printer-Setup.exe"
+            href={CONNECTOR_RELEASE.installer.downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-zinc-700 hover:text-black font-semibold inline-flex items-center gap-1.5 cursor-pointer"
           >
             <Download size={13} />
-            <span>Print Connector Setup v1.2.0 (.exe)</span>
+            <span>Print Connector Setup v{CONNECTOR_RELEASE.version} (.exe)</span>
           </a>
           <span>•</span>
           <a

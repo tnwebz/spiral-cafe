@@ -9,6 +9,7 @@ import {
   DiscoveredPrinterCandidate,
 } from "@/services/printerClient";
 import type { PrinterSettings } from "@/lib/tables";
+import { CONNECTOR_RELEASE } from "@/lib/connectorDownloads";
 import {
   Printer,
   Wifi,
@@ -425,28 +426,40 @@ export default function AdminPrinterPage() {
                   <div className="flex items-center gap-4 text-[11px] text-zinc-500 pt-1">
                     <span>Installed: <strong className="text-rose-700">Offline / Not Detected</strong></span>
                     <span>•</span>
-                    <span>Installer Package: <strong className="text-zinc-900">v1.2.0 (Windows 10 / 11)</strong></span>
+                    <span>Installer Package: <strong className="text-zinc-900">v{CONNECTOR_RELEASE.version} (Windows 10 / 11)</strong></span>
+                    <span>•</span>
+                    <a
+                      href={CONNECTOR_RELEASE.releaseTagUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-700 hover:text-amber-800 underline inline-flex items-center gap-1 font-semibold"
+                    >
+                      <span>GitHub Release</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   </div>
                 </div>
 
                 <div className="shrink-0 flex flex-col items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
                   <a
-                    href="/downloads/SpiralCafe-Printer-Setup.exe"
-                    download="SpiralCafe-Printer-Setup.exe"
+                    href={CONNECTOR_RELEASE.installer.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="px-6 py-3.5 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-extrabold shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-2.5 transform hover:-translate-y-0.5 text-center cursor-pointer"
                   >
                     <Download className="h-4 w-4" />
                     <span>Download Windows Installer</span>
                   </a>
                   <a
-                    href="/downloads/SpiralCafePrintConnector.exe"
-                    download="SpiralCafePrintConnector.exe"
-                    className="px-4 py-2 rounded-xl bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5 text-center shadow-xs"
+                    href={CONNECTOR_RELEASE.standalone.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5 text-center shadow-xs cursor-pointer"
                   >
                     <span>Download Standalone Executable (.exe)</span>
                   </a>
                   <span className="text-[10px] text-zinc-500 font-medium text-center">
-                    Installer (22.2 MB) • Standalone (87.2 MB)
+                    Installer ({CONNECTOR_RELEASE.installer.sizeMb}) • Standalone ({CONNECTOR_RELEASE.standalone.sizeMb})
                   </span>
                 </div>
               </div>
@@ -461,7 +474,7 @@ export default function AdminPrinterPage() {
                   <div className="font-bold text-zinc-900 flex items-center gap-2">
                     <span>Print Connector Daemon Active</span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
-                      v{printer.version || "1.2.0"}
+                      v{printer.version || CONNECTOR_RELEASE.version}
                     </span>
                   </div>
                   <p className="text-zinc-500 text-[11px] mt-0.5">
@@ -471,19 +484,21 @@ export default function AdminPrinterPage() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] text-zinc-400 font-mono mr-1">Installer: v1.2.0</span>
+                <span className="text-[11px] text-zinc-400 font-mono mr-1">Installer: v{CONNECTOR_RELEASE.version}</span>
                 <a
-                  href="/downloads/SpiralCafe-Printer-Setup.exe"
-                  download="SpiralCafe-Printer-Setup.exe"
-                  className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-800 text-xs font-bold transition-all flex items-center gap-1.5"
+                  href={CONNECTOR_RELEASE.installer.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-800 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <Download className="h-3.5 w-3.5 text-zinc-600" />
                   <span>Download Setup.exe</span>
                 </a>
                 <a
-                  href="/downloads/SpiralCafePrintConnector.exe"
-                  download="SpiralCafePrintConnector.exe"
-                  className="px-2.5 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-600 text-xs font-semibold transition-all"
+                  href={CONNECTOR_RELEASE.standalone.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-600 text-xs font-semibold transition-all cursor-pointer"
                   title="Direct Standalone Executable"
                 >
                   <span>Standalone</span>
