@@ -58,9 +58,16 @@ export default function SalesAreaChart({
     const maxIdx = salesValues.indexOf(maxVal);
     const minIdx = salesValues.indexOf(minVal);
 
-    const first = salesValues[0] || 1;
+    const first = salesValues[0] || 0;
     const last = salesValues[salesValues.length - 1] || 0;
-    const change = first > 0 ? (((last - first) / first) * 100).toFixed(2) : "0.00";
+    let change = "0.00";
+    if (sum === 0) {
+      change = "0.00";
+    } else if (first > 0) {
+      change = (((last - first) / first) * 100).toFixed(1);
+    } else if (last > 0) {
+      change = "+100.0";
+    }
 
     const indices = new Set<number>();
     if (maxIdx >= 0) indices.add(maxIdx);

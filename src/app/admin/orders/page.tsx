@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import CollectCashModal from "@/components/Admin/CollectCashModal";
@@ -9,57 +9,60 @@ import { Order, Invoice } from "@/lib/db";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PrinterClient, CustomerBillPayload } from "@/services/printerClient";
 import {
-  ShoppingBag,
-  Search,
-  Filter,
-  Eye,
-  RefreshCw,
-  Banknote,
-  Receipt,
-  Printer,
   Calendar,
-  Phone,
-  MessageSquare,
+  Search,
+  Settings,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Printer,
+  Receipt,
   CheckCircle2,
-  Clock,
   AlertCircle,
-  Flame,
+  Clock,
+  Phone,
+  User,
+  ShoppingBag,
+  CreditCard,
+  Banknote,
+  RotateCcw,
+  X,
 } from "lucide-react";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Tab: COMPLETED (history of paid & completed orders) vs UNSETTLED (active / unpaid tickets) vs AWAITING_KITCHEN (unprinted KOTs)
-  const [orderTab, setOrderTab] = useState<"COMPLETED" | "UNSETTLED" | "AWAITING_KITCHEN">("COMPLETED");
+  // Selected order for Detail Inspector
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<"ORDERS" | "PAYMENT" | "CUSTOMER">("ORDERS");
 
-  // Filters
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [methodFilter, setMethodFilter] = useState("ALL");
-  const [dateFilter, setDateFilter] = useState("");
+  // Filters matching POS image reference
+  const [dateFilter, setDateFilter] = useState<string>("");
+  const [orderIdFilter, setOrderIdFilter] = useState<string>("");
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>("ALL");
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>("ALL");
+  const [contactFilter, setContactFilter] = useState<string>("");
 
-  // Modals
+  // Modals & Action states
   const [selectedOrderForCash, setSelectedOrderForCash] = useState<Order | null>(null);
   const [selectedInvoiceForPrint, setSelectedInvoiceForPrint] = useState<Invoice | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
-
-  // USB Receipt Printer Direct Action
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
   const [printFeedback, setPrintFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [copiedId, setCopiedId] = useState(false);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 15;
+  const pageSize = 35;
 
   const fetchOrders = useCallback(async () => {
     try {
       const res = await fetch("/api/orders");
       const data = await res.json();
-      if (data.success) {
-        setOrders(data.orders || []);
+      if (data.success && Array.isArray(data.orders)) {
+        setOrders(data.orders);
       }
     } catch (e) {
       console.error("Fetch orders error:", e);
@@ -76,37 +79,19 @@ export default function AdminOrdersPage() {
     const supabase = getSupabaseBrowserClient();
     const channel = supabase
       .channel("admin_orders_list_realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-        },
-        () => {
-          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-          realtimeTimerRef.current = setTimeout(() => {
-            fetchOrders();
-          }, 200);
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "invoices",
-        },
-        () => {
-          if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-          realtimeTimerRef.current = setTimeout(() => {
-            fetchOrders();
-          }, 200);
-        }
-      )
-      .subscribe((status, err) => {
-        if (err) console.warn("Supabase Realtime admin orders error:", err);
-      });
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+        if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+        realtimeTimerRef.current = setTimeout(() => {
+          fetchOrders();
+        }, 200);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, () => {
+        if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+        realtimeTimerRef.current = setTimeout(() => {
+          fetchOrders();
+        }, 200);
+      })
+      .subscribe();
 
     return () => {
       if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
@@ -114,6 +99,7 @@ export default function AdminOrdersPage() {
     };
   }, [fetchOrders]);
 
+  // Invoice handlers
   const handleGenerateInvoice = async (orderId: string) => {
     setGeneratingId(orderId);
     try {
@@ -150,6 +136,7 @@ export default function AdminOrdersPage() {
     }
   };
 
+  // Direct USB Bill Print
   const handleDirectPrintCustomerBill = async (order: Order, isReprint = true) => {
     setPrintingOrderId(order.id);
     setPrintFeedback(null);
@@ -204,198 +191,97 @@ export default function AdminOrdersPage() {
     }
   };
 
-  // Split into Completed Order History vs Unsettled / Active vs Awaiting Kitchen Action
-  const completedOrdersList = orders.filter(
-    (o) => (o.status === "COMPLETED" && o.paymentStatus === "PAID") || o.status === "CANCELLED"
-  );
-  const unsettledOrdersList = orders.filter(
-    (o) => !(o.status === "COMPLETED" && o.paymentStatus === "PAID") && o.status !== "CANCELLED"
-  );
-  const awaitingKitchenOrdersList = orders.filter((o) => {
-    if (o.status === "CANCELLED" || o.paymentStatus === "PAID") return false;
-    const notes = o.notes || "";
-    const rounds = o.items.map((it) => {
-      const match = (it.notes || "").match(/\[ROUND:(\d+)\]/);
-      return match ? parseInt(match[1], 10) : it.round || 1;
+  // Filter logic
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      // 1. Date Filter
+      if (dateFilter) {
+        const orderDate = new Date(o.createdAt).toISOString().split("T")[0];
+        if (orderDate !== dateFilter) return false;
+      }
+
+      // 2. Order ID Filter
+      if (orderIdFilter.trim()) {
+        const q = orderIdFilter.toLowerCase();
+        const num = o.orderNumber.toLowerCase();
+        const shortNum = o.orderNumber.replace(/^[A-Za-z]+-/, "").toLowerCase();
+        if (!num.includes(q) && !shortNum.includes(q)) return false;
+      }
+
+      // 3. Payment Type Filter
+      if (paymentTypeFilter !== "ALL") {
+        const m = (o.paymentMethod || "").toUpperCase();
+        if (paymentTypeFilter === "CASH" && m !== "CASH") return false;
+        if (paymentTypeFilter === "UPI" && m !== "UPI" && m !== "ONLINE" && m !== "RAZORPAY") return false;
+      }
+
+      // 4. Order Status Filter
+      if (orderStatusFilter !== "ALL") {
+        if (o.status !== orderStatusFilter) return false;
+      }
+
+      // 5. Contact Search Filter
+      if (contactFilter.trim()) {
+        const q = contactFilter.toLowerCase();
+        const phone = (o.customerPhone || "").toLowerCase();
+        const notes = (o.notes || "").toLowerCase();
+        if (!phone.includes(q) && !notes.includes(q)) return false;
+      }
+
+      return true;
     });
-    const highestRound = rounds.length > 0 ? Math.max(...rounds) : 1;
-    const confirmedMatch = notes.match(/\[KOT_CONFIRMED_ROUNDS:([0-9,]+)\]/);
-    const confirmedRounds = confirmedMatch
-      ? confirmedMatch[1].split(",").map(Number).filter((n) => !isNaN(n))
-      : [];
-    const isConfirmed = confirmedRounds.includes(highestRound) || o.status === "PREPARING" || o.status === "READY";
-    const manuallyDelivered = notes.includes("[KOT_MANUALLY_DELIVERED]");
-    return !isConfirmed && !manuallyDelivered;
-  });
+  }, [orders, dateFilter, orderIdFilter, paymentTypeFilter, orderStatusFilter, contactFilter]);
 
-  const baseOrders =
-    orderTab === "COMPLETED"
-      ? completedOrdersList
-      : orderTab === "UNSETTLED"
-      ? unsettledOrdersList
-      : awaitingKitchenOrdersList;
+  // Selected Order
+  const selectedOrder = useMemo(() => {
+    if (!selectedOrderId && filteredOrders.length > 0) {
+      return filteredOrders[0];
+    }
+    return filteredOrders.find((o) => o.id === selectedOrderId) || filteredOrders[0] || null;
+  }, [filteredOrders, selectedOrderId]);
 
-  const filteredOrders = baseOrders.filter((o) => {
-    const matchesSearch =
-      searchQuery === "" ||
-      o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (o.customerPhone && o.customerPhone.includes(searchQuery)) ||
-      o.tableNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (o.items || []).some((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const matchesStatus =
-      statusFilter === "ALL" || o.status === statusFilter;
-
-    const matchesMethod =
-      methodFilter === "ALL" || o.paymentMethod === methodFilter;
-
-    const matchesDate = !dateFilter || o.createdAt.startsWith(dateFilter);
-
-    return matchesSearch && matchesStatus && matchesMethod && matchesDate;
-  });
-
+  // Pagination
   const totalPages = Math.ceil(filteredOrders.length / pageSize) || 1;
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, currentPage, pageSize]);
+
+  const handleClearFilters = () => {
+    setDateFilter("");
+    setOrderIdFilter("");
+    setPaymentTypeFilter("ALL");
+    setOrderStatusFilter("ALL");
+    setContactFilter("");
+    setCurrentPage(1);
+  };
+
+  const handleCopyPaymentId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#CA340A]/10 pb-4">
-          <div>
-            <h1 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#2C1710] tracking-tight">
-              Order History &amp; Records
+      <div className="min-h-screen bg-[#F4F5F7] text-[#1E1E24] p-3 sm:p-5 flex flex-col gap-3 font-sans">
+        {/* ========================================================= */}
+        {/* TOP COMMAND HEADER (Replicating Image Reference) */}
+        {/* ========================================================= */}
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-zinc-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Left Title & Settings */}
+          <div className="flex items-center gap-3">
+            <h1 className="font-heading font-extrabold text-sm sm:text-base tracking-wide text-[#1E1E24] uppercase flex items-center gap-2">
+              <span>BILLING LISTS</span>
+              <Settings size={15} className="text-zinc-400 hover:text-zinc-600 cursor-pointer" />
             </h1>
-            <p className="text-xs sm:text-sm text-[#52525b]">
-              Complete archive of dine-in tickets, receipts, and customer orders
-            </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={fetchOrders}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-[#CA340A]/20 hover:bg-[#FFF9F5] text-xs font-bold text-[#2C1710] shadow-2xs transition-all cursor-pointer"
-            >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              <span>Refresh</span>
-            </button>
-          </div>
-        </div>
-
-        {/* TABS: COMPLETED ORDER HISTORY vs UNSETTLED / ACTIVE */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => {
-              setOrderTab("COMPLETED");
-              setStatusFilter("ALL");
-              setMethodFilter("ALL");
-              setCurrentPage(1);
-            }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-              orderTab === "COMPLETED"
-                ? "bg-[#2C1710] text-[#FFF9F5] border-[#2C1710] shadow-sm"
-                : "bg-white text-[#52525b] border-zinc-200 hover:bg-[#FFF9F5]"
-            }`}
-          >
-            <CheckCircle2 size={15} className={orderTab === "COMPLETED" ? "text-emerald-400" : "text-emerald-600"} />
-            <span>Completed Order History</span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/20 text-white">
-              {completedOrdersList.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setOrderTab("UNSETTLED");
-              setStatusFilter("ALL");
-              setMethodFilter("ALL");
-              setCurrentPage(1);
-            }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-              orderTab === "UNSETTLED"
-                ? "bg-[#CA340A] text-white border-[#CA340A] shadow-sm"
-                : "bg-white text-[#52525b] border-zinc-200 hover:bg-[#FFF9F5]"
-            }`}
-          >
-            <Clock size={15} />
-            <span>Unsettled / Active Orders</span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/20 text-white">
-              {unsettledOrdersList.length}
-            </span>
-            {unsettledOrdersList.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              setOrderTab("AWAITING_KITCHEN");
-              setStatusFilter("ALL");
-              setMethodFilter("ALL");
-              setCurrentPage(1);
-            }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-              orderTab === "AWAITING_KITCHEN"
-                ? "bg-[#CA340A] text-white border-[#CA340A] shadow-sm"
-                : "bg-white text-[#52525b] border-zinc-200 hover:bg-[#FFF9F5]"
-            }`}
-          >
-            <Flame size={15} className={orderTab === "AWAITING_KITCHEN" ? "text-white" : "text-[#CA340A]"} />
-            <span>Kitchen Recovery Queue</span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/20 text-white">
-              {awaitingKitchenOrdersList.length}
-            </span>
-            {awaitingKitchenOrdersList.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
-            )}
-          </button>
-        </div>
-
-        {/* Info banner for Awaiting Kitchen tab */}
-        {orderTab === "AWAITING_KITCHEN" && (
-          <div className="bg-[#FFF9F5] border border-[#CA340A]/30 p-4 rounded-2xl flex items-center justify-between text-xs text-[#4A2117] shadow-xs">
-            <div className="flex items-center gap-2.5">
-              <Flame size={18} className="text-[#CA340A] shrink-0" />
-              <span>
-                <strong>Kitchen Recovery Queue:</strong> Showing <strong>{awaitingKitchenOrdersList.length}</strong> order{awaitingKitchenOrdersList.length === 1 ? "" : "s"} awaiting kitchen transmission. Use this queue during or after power cuts to safely review, transmit, or mark tickets without duplicate printing.
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Info banner for Unsettled tab */}
-        {orderTab === "UNSETTLED" && (
-          <div className="bg-amber-50 border border-amber-200/80 p-3.5 rounded-2xl flex items-center gap-2.5 text-xs text-amber-900">
-            <AlertCircle size={16} className="text-amber-700 shrink-0" />
-            <span>
-              These orders are active on the Main Dashboard and awaiting completion or payment. Once collected &amp; completed, they automatically move to <strong>Completed Order History</strong>.
-            </span>
-          </div>
-        )}
-
-        {/* Filters Card */}
-        <div className="bg-white p-4 rounded-2xl border border-[#CA340A]/15 shadow-xs space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {/* Search */}
-            <div className="relative lg:col-span-2">
-              <Search size={16} className="absolute left-3 top-2.5 text-[#52525b]" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search order #, phone, table..."
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-[#FFF9F5] border border-[#CA340A]/20 focus:border-[#CA340A] focus:outline-none"
-              />
-            </div>
-
-            {/* Date Picker */}
-            <div>
+          {/* Filter Controls Row */}
+          <div className="flex items-center gap-2 flex-wrap flex-1 justify-start md:justify-center">
+            {/* Date Filter */}
+            <div className="relative">
+              <Calendar size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
               <input
                 type="date"
                 value={dateFilter}
@@ -403,338 +289,530 @@ export default function AdminOrdersPage() {
                   setDateFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full px-3 py-2 text-xs rounded-xl bg-[#FFF9F5] border border-zinc-200 font-semibold text-[#2C1710]"
+                className="pl-8 pr-2 py-1.5 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
               />
             </div>
 
-            {/* Order Status */}
-            <div>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full px-3 py-2 text-xs rounded-xl bg-[#FFF9F5] border border-zinc-200 font-semibold text-[#2C1710]"
-              >
-                {orderTab === "COMPLETED" ? (
-                  <>
-                    <option value="ALL">All Completed States</option>
-                    <option value="COMPLETED">COMPLETED</option>
-                    <option value="CANCELLED">CANCELLED</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="ALL">All Active States</option>
-                    <option value="PENDING">PENDING</option>
-                    <option value="PREPARING">PREPARING</option>
-                    <option value="READY">READY</option>
-                    <option value="COMPLETED">COMPLETED (Unpaid)</option>
-                  </>
-                )}
-              </select>
-            </div>
+            {/* Order ID */}
+            <input
+              type="text"
+              value={orderIdFilter}
+              onChange={(e) => {
+                setOrderIdFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Order ID"
+              className="w-24 sm:w-28 px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
+            />
 
-            {/* Payment Method */}
-            <div>
-              <select
-                value={methodFilter}
-                onChange={(e) => {
-                  setMethodFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full px-3 py-2 text-xs rounded-xl bg-[#FFF9F5] border border-zinc-200 font-semibold text-[#2C1710]"
+            {/* Payment Type */}
+            <select
+              value={paymentTypeFilter}
+              onChange={(e) => {
+                setPaymentTypeFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
+            >
+              <option value="ALL">Payment Type</option>
+              <option value="CASH">CASH</option>
+              <option value="UPI">UPI / ONLINE</option>
+            </select>
+
+            {/* Order Status */}
+            <select
+              value={orderStatusFilter}
+              onChange={(e) => {
+                setOrderStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
+            >
+              <option value="ALL">Order Status (All)</option>
+              <option value="COMPLETED">COMPLETED</option>
+              <option value="PENDING">PENDING</option>
+              <option value="PREPARING">PREPARING</option>
+              <option value="READY">READY</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+
+            {/* Contact Search */}
+            <input
+              type="text"
+              value={contactFilter}
+              onChange={(e) => {
+                setContactFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Contact Search..."
+              className="w-32 sm:w-36 px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
+            />
+
+            {/* Clear Button */}
+            {(dateFilter || orderIdFilter || paymentTypeFilter !== "ALL" || orderStatusFilter !== "ALL" || contactFilter) && (
+              <button
+                onClick={handleClearFilters}
+                className="px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
               >
-                <option value="ALL">All Payment Methods</option>
-                <option value="CASH">CASH</option>
-                <option value="ONLINE">ONLINE / UPI</option>
-              </select>
-            </div>
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Right Cafe Badge */}
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded-full bg-zinc-100 text-zinc-700 text-xs font-bold border border-zinc-200 flex items-center gap-1.5">
+              <span>Spiral Cafe</span>
+              <ChevronDown size={12} className="text-zinc-400" />
+            </span>
           </div>
         </div>
 
-        {/* Print Feedback Banner */}
-        {printFeedback && (
-          <div
-            className={`p-3.5 rounded-2xl text-xs font-bold flex items-center justify-between border animate-in fade-in ${
-              printFeedback.success
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-rose-50 text-rose-800 border-rose-200"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {printFeedback.success ? (
-                <CheckCircle2 size={16} className="text-emerald-600" />
+        {/* ========================================================= */}
+        {/* MASTER-DETAIL SPLIT CONTAINER (Left: Cards, Right: Inspector) */}
+        {/* ========================================================= */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-[75vh]">
+          {/* LEFT COLUMN: ORDER CARDS LIST (5 Cols on LG) */}
+          <div className="lg:col-span-5 bg-white rounded-2xl border border-zinc-200/80 shadow-xs flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+              {loading ? (
+                <div className="h-64 flex flex-col items-center justify-center text-zinc-400 text-xs">
+                  <div className="w-8 h-8 border-2 border-[#CA340A] border-t-transparent rounded-full animate-spin mb-2" />
+                  <span>Loading billing history...</span>
+                </div>
+              ) : paginatedOrders.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-zinc-400 text-xs text-center p-4">
+                  <CheckCircle2 size={32} className="mb-2 opacity-50" />
+                  <span className="font-bold">No orders found</span>
+                  <span className="text-[11px] text-zinc-400 mt-0.5">Try clearing filters or changing date</span>
+                </div>
               ) : (
-                <AlertCircle size={16} className="text-rose-600" />
+                paginatedOrders.map((ord) => {
+                  const isSelected = selectedOrder?.id === ord.id;
+                  const isPaid = ord.paymentStatus === "PAID";
+                  const isCash = ord.paymentMethod === "CASH";
+                  const shortId = ord.orderNumber.replace(/^[A-Za-z]+-/, "");
+                  const dt = new Date(ord.createdAt);
+                  const dateStr = dt.toLocaleDateString("en-GB");
+                  const timeStr = dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+                  return (
+                    <div
+                      key={ord.id}
+                      onClick={() => setSelectedOrderId(ord.id)}
+                      className={`p-3 rounded-2xl transition-all cursor-pointer border flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? "bg-[#3B1220] text-white border-[#3B1220] shadow-md shadow-[#3B1220]/20"
+                          : "bg-zinc-50/70 hover:bg-zinc-100/80 text-[#1E1E24] border-zinc-200/60"
+                      }`}
+                    >
+                      {/* Left Block */}
+                      <div className="space-y-1.5 min-w-0">
+                        {/* Status Badge */}
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider ${
+                            isSelected
+                              ? "bg-emerald-400/20 text-emerald-300 border border-emerald-400/30"
+                              : ord.status === "COMPLETED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : ord.status === "CANCELLED"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}>
+                            {ord.status === "COMPLETED" ? "Completed" : ord.status}
+                          </span>
+                        </div>
+
+                        {/* Order ID & Payment Pill */}
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className={`text-[11px] font-semibold ${isSelected ? "text-zinc-300" : "text-zinc-500"}`}>
+                            Order Id
+                          </span>
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase border ${
+                            isSelected
+                              ? "bg-white/10 text-white border-white/20"
+                              : "bg-white text-zinc-700 border-zinc-300"
+                          }`}>
+                            {isCash ? "CASH" : "UPI"}
+                          </span>
+                        </div>
+
+                        {/* Order Number (#2170) */}
+                        <div className="font-heading font-black text-lg sm:text-xl tracking-tight leading-none">
+                          #{shortId}
+                        </div>
+
+                        {/* Full Payment Badge */}
+                        <div>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            isSelected
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : isPaid
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}>
+                            {isPaid ? "Full payment" : "Unpaid"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right Block */}
+                      <div className="text-right space-y-1.5 shrink-0">
+                        {/* Amount */}
+                        <div className={`font-heading font-black text-base sm:text-lg tracking-tight ${
+                          isSelected ? "text-white" : "text-[#1E1E24]"
+                        }`}>
+                          ₹{(ord.grandTotal || 0).toLocaleString()}
+                        </div>
+
+                        {/* Date Time */}
+                        <div className={`text-[10px] font-mono ${isSelected ? "text-zinc-300" : "text-zinc-500"}`}>
+                          {dateStr} {timeStr}
+                        </div>
+
+                        {/* Terminal Badge */}
+                        <div>
+                          <span className={`px-2.5 py-0.5 rounded-md text-[9px] font-bold ${
+                            isSelected
+                              ? "bg-black/30 text-zinc-200"
+                              : "bg-zinc-200/80 text-zinc-700"
+                          }`}>
+                            Billing 1
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
               )}
-              <span>{printFeedback.message}</span>
             </div>
-            <button
-              onClick={() => setPrintFeedback(null)}
-              className="text-[11px] underline opacity-80 hover:opacity-100"
-            >
-              Dismiss
-            </button>
+
+            {/* Bottom Pagination Bar */}
+            <div className="p-2.5 border-t border-zinc-200/80 bg-zinc-50/50 flex items-center justify-between text-xs text-zinc-600">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">{pageSize}</span>
+                <ChevronDown size={12} className="text-zinc-400" />
+              </div>
+
+              <div className="font-semibold text-[11px]">
+                {paginatedOrders.length > 0 ? (
+                  <span>
+                    {(currentPage - 1) * pageSize + 1}-
+                    {Math.min(currentPage * pageSize, filteredOrders.length)} of {filteredOrders.length}
+                  </span>
+                ) : (
+                  <span>0 of 0</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="p-1 rounded-lg hover:bg-zinc-200 text-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="p-1 rounded-lg hover:bg-zinc-200 text-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* RIGHT COLUMN: DETAIL INSPECTOR (7 Cols on LG) */}
+          <div className="lg:col-span-7 bg-white rounded-2xl border border-zinc-200/80 shadow-xs flex flex-col overflow-hidden">
+            {!selectedOrder ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 text-xs p-8 text-center">
+                <Receipt size={36} className="mb-2 opacity-40" />
+                <span className="font-bold text-sm text-zinc-600">No order selected</span>
+                <span className="text-zinc-400 mt-1">Select an order ticket from the left to view breakdown</span>
+              </div>
+            ) : (
+              <>
+                {/* 3 Tabs Header: Orders | Payment Information | Customer Details */}
+                <div className="px-5 pt-4 border-b border-zinc-200 flex items-center gap-6 shrink-0 bg-white">
+                  <button
+                    onClick={() => setDetailTab("ORDERS")}
+                    className={`pb-3 text-xs font-bold tracking-wide uppercase transition-all cursor-pointer relative ${
+                      detailTab === "ORDERS"
+                        ? "text-[#CA340A]"
+                        : "text-zinc-500 hover:text-zinc-800"
+                    }`}
+                  >
+                    Orders
+                    {detailTab === "ORDERS" && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CA340A] rounded-full" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setDetailTab("PAYMENT")}
+                    className={`pb-3 text-xs font-bold tracking-wide uppercase transition-all cursor-pointer relative ${
+                      detailTab === "PAYMENT"
+                        ? "text-[#CA340A]"
+                        : "text-zinc-500 hover:text-zinc-800"
+                    }`}
+                  >
+                    Payment Information
+                    {detailTab === "PAYMENT" && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CA340A] rounded-full" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setDetailTab("CUSTOMER")}
+                    className={`pb-3 text-xs font-bold tracking-wide uppercase transition-all cursor-pointer relative ${
+                      detailTab === "CUSTOMER"
+                        ? "text-[#CA340A]"
+                        : "text-zinc-500 hover:text-zinc-800"
+                    }`}
+                  >
+                    Customer Details
+                    {detailTab === "CUSTOMER" && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CA340A] rounded-full" />
+                    )}
+                  </button>
+                </div>
+
+                {/* TAB 1: ORDERS CONTENT */}
+                {detailTab === "ORDERS" && (
+                  <div className="flex-1 flex flex-col justify-between overflow-hidden">
+                    <div className="p-5 overflow-y-auto space-y-5">
+                      {/* Big Order Title */}
+                      <div>
+                        <h2 className="font-heading font-black text-2xl text-[#1E1E24] tracking-tight">
+                          Order #{selectedOrder.orderNumber.replace(/^[A-Za-z]+-/, "")}
+                        </h2>
+                      </div>
+
+                      {/* Key-Value Metadata Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                        <div>
+                          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Date &amp; Time
+                          </div>
+                          <div className="font-semibold text-zinc-800 mt-0.5">
+                            {new Date(selectedOrder.createdAt).toLocaleDateString("en-CA")}{" "}
+                            {new Date(selectedOrder.createdAt).toLocaleTimeString([], { hour12: false })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Payment Type
+                          </div>
+                          <div className="font-semibold text-zinc-800 mt-0.5">
+                            {selectedOrder.paymentStatus === "PAID" ? "FULL-PAYMENT" : "UNPAID"}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Payment ID
+                          </div>
+                          <div className="flex items-center gap-1.5 font-mono text-zinc-800 mt-0.5">
+                            <span>Pay_{selectedOrder.id.slice(0, 6)}...</span>
+                            <button
+                              onClick={() => handleCopyPaymentId(`Pay_${selectedOrder.id}`)}
+                              className="text-zinc-400 hover:text-zinc-700 cursor-pointer"
+                              title="Copy ID"
+                            >
+                              <Copy size={12} />
+                            </button>
+                            {copiedId && <span className="text-[10px] text-emerald-600 font-bold">Copied!</span>}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Table Name
+                          </div>
+                          <div className="font-heading font-extrabold text-sm text-[#CA340A] mt-0.5">
+                            {selectedOrder.tableNumber === "TAKEAWAY" ? "TAKE AWAY" : selectedOrder.tableNumber}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Items Section */}
+                      <div className="pt-2">
+                        <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+                          Items ({selectedOrder.items?.length || 0})
+                        </div>
+
+                        <div className="divide-y divide-zinc-100 border-t border-b border-zinc-100">
+                          {(selectedOrder.items || []).map((it, idx) => (
+                            <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-zinc-900">{it.name}</div>
+                                {it.notes && (
+                                  <div className="text-[11px] text-zinc-400 italic">
+                                    + {it.notes.replace(/\[[^\]]+\]/g, "").trim()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-4 shrink-0 font-medium">
+                                <span className="text-zinc-500">Qty: {it.quantity}</span>
+                                <span className="text-zinc-500">₹{it.price}</span>
+                                <span className="font-heading font-bold text-zinc-900 w-16 text-right">
+                                  ₹{(it.price || 0) * (it.quantity || 1)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Summary & Actions Footer */}
+                    <div className="p-4 sm:p-5 bg-zinc-50/70 border-t border-zinc-200/80 space-y-3 shrink-0">
+                      <div className="space-y-1 text-xs text-zinc-600">
+                        <div className="flex justify-between">
+                          <span>Total Items</span>
+                          <span className="font-bold">{selectedOrder.items?.length || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Total Order Quantity</span>
+                          <span className="font-bold">
+                            {selectedOrder.items?.reduce((acc, it) => acc + (it.quantity || 1), 0) || 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-heading font-extrabold text-base text-[#1E1E24] pt-1.5 border-t border-zinc-200">
+                          <span>Total</span>
+                          <span className="text-[#CA340A]">₹{selectedOrder.grandTotal}</span>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => handleDirectPrintCustomerBill(selectedOrder, true)}
+                          disabled={printingOrderId === selectedOrder.id}
+                          className="flex-1 py-2 px-3 bg-white hover:bg-zinc-100 border border-zinc-300 rounded-xl text-xs font-bold text-zinc-800 flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <Printer size={14} className={printingOrderId === selectedOrder.id ? "animate-spin text-[#CA340A]" : "text-[#CA340A]"} />
+                          <span>
+                            {printingOrderId === selectedOrder.id ? "Printing Bill..." : "Print Bill (58mm Counter)"}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => handleViewInvoice(selectedOrder.id)}
+                          className="flex-1 py-2 px-3 bg-[#3B1220] hover:bg-[#2A0B16] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                        >
+                          <Receipt size={14} />
+                          <span>View Tax Invoice</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: PAYMENT INFORMATION CONTENT */}
+                {detailTab === "PAYMENT" && (
+                  <div className="p-5 overflow-y-auto space-y-4 text-xs">
+                    <h3 className="font-heading font-extrabold text-sm text-zinc-900 uppercase tracking-wide">
+                      Payment Settlement Breakdown
+                    </h3>
+
+                    <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-2.5">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Payment Mode</span>
+                        <span className="font-bold uppercase text-zinc-900">{selectedOrder.paymentMethod || "CASH"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Settlement Status</span>
+                        <span className="font-bold text-emerald-700">
+                          {selectedOrder.paymentStatus === "PAID" ? "Full payment (Settled)" : "Pending Settlement"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Transaction ID</span>
+                        <span className="font-mono font-bold text-zinc-800">ORD-TXN-{selectedOrder.id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Subtotal</span>
+                        <span className="font-semibold text-zinc-900">₹{selectedOrder.subtotal || selectedOrder.grandTotal}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">GST / Taxes</span>
+                        <span className="font-semibold text-zinc-900">₹{selectedOrder.tax || 0}</span>
+                      </div>
+                      <div className="flex justify-between font-heading font-extrabold text-sm text-zinc-900 pt-2 border-t border-zinc-200">
+                        <span>Grand Total Paid</span>
+                        <span className="text-[#CA340A]">₹{selectedOrder.grandTotal}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: CUSTOMER DETAILS CONTENT */}
+                {detailTab === "CUSTOMER" && (
+                  <div className="p-5 overflow-y-auto space-y-4 text-xs">
+                    <h3 className="font-heading font-extrabold text-sm text-zinc-900 uppercase tracking-wide">
+                      Customer &amp; Session Info
+                    </h3>
+
+                    <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-2.5">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Phone Number</span>
+                        <span className="font-bold text-zinc-900">
+                          {selectedOrder.customerPhone ? `+91 ${selectedOrder.customerPhone}` : "Walk-in Guest"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Dining Mode</span>
+                        <span className="font-bold text-zinc-900">
+                          {selectedOrder.tableNumber === "TAKEAWAY" ? "Take Away / Parcel" : `Dine-In (Table ${selectedOrder.tableNumber})`}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Customer Session ID</span>
+                        <span className="font-mono text-[11px] text-zinc-700">{selectedOrder.customerSessionId}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500 font-medium">Order Placed At</span>
+                        <span className="font-semibold text-zinc-900">{new Date(selectedOrder.createdAt).toLocaleString()}</span>
+                      </div>
+                      {selectedOrder.notes && (
+                        <div className="pt-2 border-t border-zinc-200">
+                          <span className="text-zinc-500 font-medium block mb-1">Notes / Special Instructions</span>
+                          <span className="font-normal text-zinc-800 bg-white p-2 rounded-xl block border border-zinc-200">
+                            {selectedOrder.notes}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Modals */}
+        {selectedOrderForCash && (
+          <CollectCashModal
+            order={selectedOrderForCash}
+            onClose={() => setSelectedOrderForCash(null)}
+            onSuccess={() => {
+              setSelectedOrderForCash(null);
+              fetchOrders();
+            }}
+          />
         )}
 
-        {/* Table View */}
-        <div className="bg-white rounded-2xl border border-[#CA340A]/15 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-[#2C1710]">
-              <thead className="bg-[#FFF9F5] text-zinc-500 font-bold uppercase tracking-wider text-xs border-b border-zinc-100">
-                <tr>
-                  <th className="py-3.5 px-4 font-bold">Order No</th>
-                  <th className="py-3.5 px-4 font-bold">Date &amp; Time</th>
-                  <th className="py-3.5 px-4 font-bold">Table</th>
-                  <th className="py-3.5 px-4 font-bold">Customer</th>
-                  <th className="py-3.5 px-4 font-bold">Items</th>
-                  <th className="py-3.5 px-4 text-right font-bold">Total</th>
-                  <th className="py-3.5 px-4 text-center font-bold">Status</th>
-                  <th className="py-3.5 px-4 text-center font-bold">Payment</th>
-                  <th className="py-3.5 px-4 text-center font-bold">Invoice</th>
-                  <th className="py-3.5 px-4 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {paginatedOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-14 text-center text-sm font-medium text-[#52525b]">
-                      <div className="flex flex-col items-center justify-center">
-                        <CheckCircle2 size={32} className="text-emerald-600 mb-2 opacity-60" />
-                        <p className="font-bold text-sm text-[#2C1710]">
-                          {orderTab === "COMPLETED"
-                            ? "No completed orders found matching your search."
-                            : "No unsettled orders. All active orders are paid and completed!"}
-                        </p>
-                        <p className="text-xs text-[#52525b] mt-1">
-                          {orderTab === "COMPLETED"
-                            ? "Orders automatically appear here once cooked/served and paid."
-                            : "Unpaid or in-progress orders from the dashboard will show here."}
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedOrders.map((order) => {
-                    const isPaid = order.paymentStatus === "PAID";
-                    const isCashUnpaid = order.paymentMethod === "CASH" && !isPaid;
-
-                    return (
-                      <tr key={order.id} className="hover:bg-[#FFF9F5]/70 transition-colors">
-                        <td className="py-4 px-4 font-mono font-bold text-sm text-[#2C1710]">
-                          <Link
-                            href={`/admin/orders/${order.id}`}
-                            className="hover:text-[#CA340A] hover:underline"
-                          >
-                            {order.orderNumber}
-                          </Link>
-                        </td>
-
-                        <td className="py-4 px-4 text-[#52525b]">
-                          <div className="font-semibold text-xs sm:text-sm text-[#2C1710]">{new Date(order.createdAt).toLocaleDateString()}</div>
-                          <div className="text-xs text-zinc-500 font-medium">
-                            {new Date(order.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </div>
-                        </td>
-
-                        <td className="py-4 px-4 font-bold text-xs sm:text-sm text-[#CA340A]">
-                          <span className="px-2 py-0.5 rounded-md bg-[#CA340A]/10 inline-block">
-                            {order.tableNumber}
-                          </span>
-                        </td>
-
-                        <td className="py-4 px-4 text-[#52525b]">
-                          {order.customerPhone ? (
-                            <span className="font-mono text-xs sm:text-sm flex items-center gap-1.5 font-medium text-[#2C1710]">
-                              <Phone size={12} className="text-[#CA340A]" />
-                              {order.customerPhone}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-400 text-xs sm:text-sm">Walk-in</span>
-                          )}
-                        </td>
-
-                        <td className="py-4 px-4">
-                          <div className="truncate max-w-[200px] text-xs sm:text-sm font-medium text-[#2C1710]" title={order.items.map((i) => `${i.name} ×${i.quantity}`).join(", ")}>
-                            {order.items.map((i) => `${i.name} ×${i.quantity}`).join(", ")}
-                          </div>
-                        </td>
-
-                        <td className="py-4 px-4 text-right font-heading font-black text-sm sm:text-base text-[#2C1710]">
-                          ₹{(order.grandTotal || 0).toLocaleString()}
-                        </td>
-
-                        <td className="py-4 px-4 text-center">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                              order.status === "COMPLETED"
-                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                : order.status === "READY"
-                                ? "bg-green-50 text-green-800 border border-green-200"
-                                : order.status === "PREPARING"
-                                ? "bg-blue-50 text-blue-800 border border-blue-200"
-                                : order.status === "CANCELLED"
-                                ? "bg-red-50 text-red-800 border border-red-200"
-                                : "bg-amber-50 text-amber-800 border border-amber-200"
-                            }`}
-                          >
-                            {order.status}
-                          </span>
-                        </td>
-
-                        <td className="py-4 px-4 text-center">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
-                              isPaid
-                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                : "bg-amber-50 text-amber-800 border border-amber-200"
-                            }`}
-                          >
-                            {order.paymentStatus}
-                          </span>
-                        </td>
-
-                        <td className="py-4 px-4 text-center">
-                          {order.invoiceNumber ? (
-                            <button
-                              onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                              className="text-xs font-mono font-bold text-[#CA340A] hover:underline cursor-pointer"
-                              title="View Invoice Receipt"
-                            >
-                              {order.invoiceNumber}
-                            </button>
-                          ) : (
-                            <span className="text-zinc-400 text-xs">None</span>
-                          )}
-                        </td>
-
-                        <td className="py-4 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {orderTab === "AWAITING_KITCHEN" && (
-                              <Link
-                                href={`/admin/tables/${encodeURIComponent(order.tableNumber)}`}
-                                className="px-3 py-1.5 bg-[#CA340A] hover:bg-[#A82806] text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors"
-                              >
-                                <Flame size={12} />
-                                <span>Table {order.tableNumber}</span>
-                              </Link>
-                            )}
-
-                            {isCashUnpaid && (
-                              <button
-                                onClick={() => setSelectedOrderForCash(order)}
-                                className="px-3 py-1.5 bg-[#15803D] hover:bg-[#166534] text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-                              >
-                                Collect
-                              </button>
-                            )}
-
-                            {isPaid && (
-                              <button
-                                disabled={printingOrderId === order.id}
-                                onClick={() => handleDirectPrintCustomerBill(order, true)}
-                                className="px-2.5 py-1.5 bg-[#3A1710] hover:bg-[#2C1710] text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-                                title="Reprint 58mm Customer Bill via Counter USB Printer"
-                              >
-                                <Printer size={12} className={printingOrderId === order.id ? "animate-spin" : ""} />
-                                <span>{printingOrderId === order.id ? "Printing..." : "Reprint Bill"}</span>
-                              </button>
-                            )}
-
-                            {!order.invoiceNumber ? (
-                              <button
-                                disabled={!isPaid || generatingId === order.id}
-                                onClick={() => handleGenerateInvoice(order.id)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-2xs transition-all ${
-                                  isPaid
-                                    ? "bg-[#CA340A] text-white hover:bg-[#A82806] cursor-pointer"
-                                    : "bg-zinc-100 text-zinc-400 opacity-60 cursor-not-allowed"
-                                }`}
-                              >
-                                Invoice
-                              </button>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                                  className="px-3 py-1.5 bg-[#FFF9F5] border border-[#CA340A]/30 text-[#CA340A] hover:bg-[#CA340A] hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
-                                  title="View 58mm Thermal Bill"
-                                >
-                                  <Printer size={13} />
-                                  <span>View Bill</span>
-                                </button>
-                                <button
-                                  onClick={() => handleViewInvoice(order.invoiceId || order.id)}
-                                  className="px-2.5 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                  title="Send Bill via SMS to Customer"
-                                >
-                                  <MessageSquare size={12} />
-                                  <span>SMS</span>
-                                </button>
-                              </>
-                            )}
-
-                            <Link
-                              href={`/admin/orders/${order.id}`}
-                              className="p-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:text-[#CA340A] hover:border-[#CA340A]/40 hover:bg-[#FFF9F5] transition-colors"
-                              title="View Details"
-                            >
-                              <Eye size={15} />
-                            </Link>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="p-4 border-t border-zinc-100 flex items-center justify-between text-xs text-[#52525b]">
-            <span>
-              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> ({filteredOrders.length} total)
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-2.5 py-1 rounded-lg border border-zinc-200 disabled:opacity-40"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="px-2.5 py-1 rounded-lg border border-zinc-200 disabled:opacity-40"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
+        {selectedInvoiceForPrint && (
+          <ThermalReceiptModal
+            invoice={selectedInvoiceForPrint}
+            onClose={() => setSelectedInvoiceForPrint(null)}
+          />
+        )}
       </div>
-
-      <CollectCashModal
-        order={selectedOrderForCash}
-        onClose={() => setSelectedOrderForCash(null)}
-        onSuccess={() => {
-          setSelectedOrderForCash(null);
-          fetchOrders();
-        }}
-      />
-
-      <ThermalReceiptModal
-        invoice={selectedInvoiceForPrint}
-        onClose={() => setSelectedInvoiceForPrint(null)}
-        onSmsSent={fetchOrders}
-      />
     </AdminLayout>
   );
 }

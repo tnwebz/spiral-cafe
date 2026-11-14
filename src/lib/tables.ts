@@ -170,24 +170,37 @@ function writeLocalConfigFile(data: { tables: TableDefinition[]; printerSettings
 
 export const RESERVATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
+let memoryReservations: TableReservation[] = [];
+let memoryReservationsLoaded = false;
+
 function getReservationsFilePath(): string {
   return path.resolve(process.cwd(), "src/data/reservations.json");
 }
 
 function readLocalReservations(): TableReservation[] {
+  if (memoryReservationsLoaded && memoryReservations.length > 0) {
+    return [...memoryReservations];
+  }
   try {
     const file = getReservationsFilePath();
     if (fs.existsSync(file)) {
       const parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        memoryReservations = parsed;
+        memoryReservationsLoaded = true;
+        return [...memoryReservations];
+      }
     }
   } catch (err) {
     console.warn("Failed to read reservations.json:", err);
   }
-  return [];
+  memoryReservationsLoaded = true;
+  return [...memoryReservations];
 }
 
 function writeLocalReservations(reservations: TableReservation[]) {
+  memoryReservations = [...reservations];
+  memoryReservationsLoaded = true;
   try {
     const file = getReservationsFilePath();
     const dir = path.dirname(file);
@@ -196,7 +209,7 @@ function writeLocalReservations(reservations: TableReservation[]) {
     }
     fs.writeFileSync(file, JSON.stringify(reservations, null, 2), "utf-8");
   } catch (err) {
-    console.warn("Failed to write reservations.json:", err);
+    console.warn("Failed to write reservations.json (non-fatal in serverless):", err);
   }
 }
 
@@ -551,30 +564,44 @@ export async function transferReservation(params: {
   return newReservation;
 }
 
+let memoryTransfers: TableTransferRequest[] = [];
+let memoryTransfersLoaded = false;
+
 function getTransfersFilePath(): string {
   return path.resolve(process.cwd(), "src/data/table_transfers.json");
 }
 
 export function readLocalTransfers(): TableTransferRequest[] {
+  if (memoryTransfersLoaded && memoryTransfers.length > 0) {
+    return [...memoryTransfers];
+  }
   try {
     const file = getTransfersFilePath();
     if (fs.existsSync(file)) {
       const raw = fs.readFileSync(file, "utf-8");
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        memoryTransfers = parsed;
+        memoryTransfersLoaded = true;
+        return [...memoryTransfers];
+      }
     }
   } catch (err) {
     console.warn("Read local transfers warning:", err);
   }
-  return [];
+  memoryTransfersLoaded = true;
+  return [...memoryTransfers];
 }
 
 export function writeLocalTransfers(transfers: TableTransferRequest[]): void {
+  memoryTransfers = [...transfers];
+  memoryTransfersLoaded = true;
   try {
     const file = getTransfersFilePath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(transfers, null, 2), "utf-8");
   } catch (err) {
-    console.warn("Write local transfers warning:", err);
+    console.warn("Write local transfers warning (non-fatal in serverless):", err);
   }
 }
 
@@ -722,14 +749,11 @@ export async function requestTableTransfer(params: {
 }
 
 /**
- * Admin Counter Staff Approval:
- * Atomically transfers Visit ID, orders, and bill to the new table.
- * Releases old table to AVAILABLE (White).
- * Locks new table as OCCUPIED.
- * Zero duplicate food preparation: does not automatically reprint past KOTs.
+ * Core atomic execution of table transfer:
+ * Moves orders in database, updates customer sessions, and switches reservations.
  */
-export async function approveTransferRequest(
-  requestId: string,
+export async function executeTableTransferCore(
+  targetReq: TableTransferRequest,
   adminUser: string = "Admin Staff"
 ): Promise<{
   success: boolean;
@@ -738,19 +762,12 @@ export async function approveTransferRequest(
   visitId: string;
   updatedOrdersCount: number;
 }> {
-  const transfers = readLocalTransfers();
-  const targetReq = transfers.find((t) => t.id === requestId);
-
-  if (!targetReq) {
-    throw new Error("Transfer request not found.");
-  }
-
-  if (targetReq.status !== "PENDING") {
-    throw new Error(`Transfer request is already ${targetReq.status}.`);
-  }
-
   const fromNorm = normalizeTableLabel(targetReq.fromTable);
   const toNorm = normalizeTableLabel(targetReq.toTable);
+
+  if (fromNorm.toUpperCase() === toNorm.toUpperCase()) {
+    throw new Error("Source and destination tables cannot be the same.");
+  }
 
   // Verify destination table is not occupied
   const activeOrderTo = await getActiveOrderForTable(toNorm);
@@ -763,8 +780,11 @@ export async function approveTransferRequest(
   const now = new Date().toISOString();
   let updatedOrdersCount = 0;
 
-  // 1. Atomically reassign all orders for this visit to the new table
+  // 1. Atomically reassign all orders for this visit / table to the new table
   try {
+    const ordersToMoveMap = new Map<string, { id: string; notes: string | null }>();
+
+    // A. Match by Visit ID
     if (targetReq.visitId) {
       const { data: matchedOrders } = await supabaseAdmin
         .from("orders" as any)
@@ -773,48 +793,58 @@ export async function approveTransferRequest(
         .neq("status", "CANCELLED")
         .neq("payment_status", "PAID");
 
-      if (Array.isArray(matchedOrders) && matchedOrders.length > 0) {
+      if (Array.isArray(matchedOrders)) {
         for (const order of matchedOrders as any[]) {
-          const transferTag = `[TABLE_TRANSFERRED:FROM_${fromNorm}_TO_${toNorm}_AT_${Date.now()}]`;
-          const newNotes = `${order.notes || ""} ${transferTag}`.trim();
-
-          await supabaseAdmin
-            .from("orders" as any)
-            .update({
-              table_number: toNorm,
-              notes: newNotes,
-              updated_at: now,
-            })
-            .eq("id", order.id);
-          updatedOrdersCount++;
+          ordersToMoveMap.set(order.id, order);
         }
       }
     }
 
-    // Fallback: update any remaining unpaid orders with fromTable and customerSessionId
-    const { data: sisterOrders } = await supabaseAdmin
+    // B. Match by customer session ID
+    if (targetReq.customerSessionId && targetReq.customerSessionId !== "counter-manual") {
+      const { data: sisterOrders } = await supabaseAdmin
+        .from("orders" as any)
+        .select("id, notes")
+        .eq("table_number", fromNorm)
+        .eq("customer_session_id", targetReq.customerSessionId)
+        .neq("status", "CANCELLED")
+        .neq("payment_status", "PAID");
+
+      if (Array.isArray(sisterOrders)) {
+        for (const order of sisterOrders as any[]) {
+          ordersToMoveMap.set(order.id, order);
+        }
+      }
+    }
+
+    // C. Always move any remaining active unpaid orders for fromTable
+    const { data: remainingFromOrders } = await supabaseAdmin
       .from("orders" as any)
       .select("id, notes")
       .eq("table_number", fromNorm)
-      .eq("customer_session_id", targetReq.customerSessionId)
       .neq("status", "CANCELLED")
       .neq("payment_status", "PAID");
 
-    if (Array.isArray(sisterOrders) && sisterOrders.length > 0) {
-      for (const order of sisterOrders as any[]) {
-        const transferTag = `[TABLE_TRANSFERRED:FROM_${fromNorm}_TO_${toNorm}_AT_${Date.now()}]`;
-        const newNotes = `${order.notes || ""} ${transferTag}`.trim();
-
-        await supabaseAdmin
-          .from("orders" as any)
-          .update({
-            table_number: toNorm,
-            notes: newNotes,
-            updated_at: now,
-          })
-          .eq("id", order.id);
-        updatedOrdersCount++;
+    if (Array.isArray(remainingFromOrders)) {
+      for (const order of remainingFromOrders as any[]) {
+        ordersToMoveMap.set(order.id, order);
       }
+    }
+
+    // Perform atomic updates
+    for (const [orderId, order] of ordersToMoveMap.entries()) {
+      const transferTag = `[TABLE_TRANSFERRED:FROM_${fromNorm}_TO_${toNorm}_AT_${Date.now()}]`;
+      const newNotes = `${order.notes || ""} ${transferTag}`.trim();
+
+      await supabaseAdmin
+        .from("orders" as any)
+        .update({
+          table_number: toNorm,
+          notes: newNotes,
+          updated_at: now,
+        })
+        .eq("id", orderId);
+      updatedOrdersCount++;
     }
   } catch (dbErr) {
     console.error("Database order table reassign error:", dbErr);
@@ -847,32 +877,45 @@ export async function approveTransferRequest(
 
   // 4. Update customer_sessions table if present
   try {
-    await supabaseAdmin
-      .from("customer_sessions" as any)
-      .update({ table_number: toNorm, updated_at: now })
-      .eq("session_id", targetReq.customerSessionId);
-  } catch {}
+    if (targetReq.customerSessionId && targetReq.customerSessionId !== "counter-manual") {
+      await supabaseAdmin
+        .from("customer_sessions" as any)
+        .update({ table_number: toNorm, last_active_at: now })
+        .eq("id", targetReq.customerSessionId);
+    }
+    if (targetReq.customerPhone) {
+      await supabaseAdmin
+        .from("customer_sessions" as any)
+        .update({ table_number: toNorm, last_active_at: now })
+        .eq("customer_phone", targetReq.customerPhone);
+    }
+  } catch (sessErr) {
+    console.warn("Update customer_sessions warning:", sessErr);
+  }
 
   // 5. Update transfer request record
-  const updatedTransfers = transfers.map((t) => {
-    if (t.id === requestId) {
-      return {
-        ...t,
-        status: "APPROVED" as const,
-        reviewedAt: now,
-        reviewedBy: adminUser,
-      };
-    }
-    return t;
-  });
-  writeLocalTransfers(updatedTransfers);
+  const transfers = readLocalTransfers();
+  const existingIdx = transfers.findIndex((t) => t.id === targetReq.id);
+  const approvedReq: TableTransferRequest = {
+    ...targetReq,
+    status: "APPROVED",
+    reviewedAt: now,
+    reviewedBy: adminUser,
+  };
+
+  if (existingIdx >= 0) {
+    transfers[existingIdx] = approvedReq;
+  } else {
+    transfers.unshift(approvedReq);
+  }
+  writeLocalTransfers(transfers);
 
   // 6. Audit log
   try {
     await supabaseAdmin.from("audit_logs" as any).insert({
       action: "TABLE_TRANSFER_APPROVED",
       details: {
-        requestId,
+        requestId: targetReq.id,
         fromTable: fromNorm,
         toTable: toNorm,
         visitId: targetReq.visitId,
@@ -890,6 +933,37 @@ export async function approveTransferRequest(
     visitId: targetReq.visitId,
     updatedOrdersCount,
   };
+}
+
+/**
+ * Admin Counter Staff Approval:
+ * Atomically transfers Visit ID, orders, and bill to the new table.
+ * Releases old table to AVAILABLE (White).
+ * Locks new table as OCCUPIED.
+ * Zero duplicate food preparation: does not automatically reprint past KOTs.
+ */
+export async function approveTransferRequest(
+  requestId: string,
+  adminUser: string = "Admin Staff"
+): Promise<{
+  success: boolean;
+  fromTable: string;
+  toTable: string;
+  visitId: string;
+  updatedOrdersCount: number;
+}> {
+  const transfers = readLocalTransfers();
+  const targetReq = transfers.find((t) => t.id === requestId);
+
+  if (!targetReq) {
+    throw new Error("Transfer request not found.");
+  }
+
+  if (targetReq.status !== "PENDING") {
+    throw new Error(`Transfer request is already ${targetReq.status}.`);
+  }
+
+  return executeTableTransferCore(targetReq, adminUser);
 }
 
 /**
@@ -967,7 +1041,25 @@ export async function adminManualTransfer(params: {
   }
 
   // 1. Check if source table has active dining orders (Red / Yellow / Green stage)
-  const activeOrderFrom = await getActiveOrderForTable(fromNorm);
+  let activeOrderFrom = await getActiveOrderForTable(fromNorm);
+  if (!activeOrderFrom) {
+    try {
+      const { data: anyUnpaid } = await supabaseAdmin
+        .from("orders" as any)
+        .select("*, order_items(*)")
+        .eq("table_number", fromNorm)
+        .neq("status", "CANCELLED")
+        .neq("payment_status", "PAID")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (anyUnpaid) {
+        activeOrderFrom = mapDbOrderToOrder(anyUnpaid);
+      }
+    } catch {}
+  }
+
   if (activeOrderFrom) {
     const visitId =
       activeOrderFrom.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
@@ -995,7 +1087,8 @@ export async function adminManualTransfer(params: {
     transfers.unshift(synthesizedRequest);
     writeLocalTransfers(transfers);
 
-    return approveTransferRequest(requestId, adminUser);
+    // Directly execute core transfer (bypassing redundant file lookup)
+    return executeTableTransferCore(synthesizedRequest, adminUser);
   }
 
   // 2. Check if source table is in BLUE STAGE (temporarily reserved / booking seat stage, no order yet)
@@ -1058,10 +1151,18 @@ export async function adminManualTransfer(params: {
 
     // Update customer_sessions table if present
     try {
-      await supabaseAdmin
-        .from("customer_sessions" as any)
-        .update({ table_number: toNorm, updated_at: now })
-        .eq("session_id", reservationFrom.customerSessionId);
+      if (reservationFrom.customerSessionId) {
+        await supabaseAdmin
+          .from("customer_sessions" as any)
+          .update({ table_number: toNorm, last_active_at: now })
+          .eq("id", reservationFrom.customerSessionId);
+      }
+      if (reservationFrom.customerPhone) {
+        await supabaseAdmin
+          .from("customer_sessions" as any)
+          .update({ table_number: toNorm, last_active_at: now })
+          .eq("customer_phone", reservationFrom.customerPhone);
+      }
     } catch {}
 
     // Record completed transfer record so customer polling synchronizes immediately
@@ -1091,6 +1192,33 @@ export async function adminManualTransfer(params: {
       updatedOrdersCount: 0,
     };
   }
+
+  // 3. Fallback: Check if an active customer session exists for fromTable
+  try {
+    const { data: sessionRows } = await supabaseAdmin
+      .from("customer_sessions" as any)
+      .select("*")
+      .eq("table_number", fromNorm)
+      .order("last_active_at", { ascending: false })
+      .limit(1);
+
+    if (Array.isArray(sessionRows) && sessionRows.length > 0) {
+      const sess = (sessionRows as any[])[0];
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("customer_sessions" as any)
+        .update({ table_number: toNorm, last_active_at: now })
+        .eq("id", sess?.id || sess?.session_id);
+
+      return {
+        success: true,
+        fromTable: fromNorm,
+        toTable: toNorm,
+        visitId: `VISIT-${toNorm}`,
+        updatedOrdersCount: 0,
+      };
+    }
+  } catch {}
 
   throw new Error(`Table ${fromNorm} is currently available with no active session or reservation to transfer.`);
 }

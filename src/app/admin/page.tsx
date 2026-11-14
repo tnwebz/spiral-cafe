@@ -222,26 +222,26 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6 w-full">
+      <div className="space-y-3.5 w-full">
         {/* TOP BAR / DASHBOARD HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#CA340A]/10 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[#CA340A]/10 pb-2.5">
           <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="font-heading font-black text-2xl sm:text-3xl text-[#2C1710] tracking-tight">
+            <div className="flex items-center gap-2">
+              <h1 className="font-heading font-black text-xl sm:text-2xl text-[#2C1710] tracking-tight">
                 Dashboard
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-[#52525b] mt-0.5">
+            <p className="text-xs text-[#52525b] mt-0.5">
               Today's sales, kitchen pipeline, revenue summary, and recent orders
             </p>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="hidden md:inline text-xs font-medium text-[#52525b] bg-white px-3 py-1.5 rounded-xl border border-zinc-200/80 shadow-2xs">
+            <span className="hidden md:inline text-xs font-medium text-[#52525b] bg-white px-2.5 py-1 rounded-xl border border-zinc-200/80 shadow-2xs">
               {new Date().toLocaleDateString("en-US", {
                 weekday: "short",
                 month: "short",
@@ -251,37 +251,37 @@ export default function AdminDashboardPage() {
             </span>
             <button
               onClick={fetchOverview}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#CA340A]/20 hover:bg-[#FFF9F5] text-xs font-bold text-[#2C1710] shadow-2xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-[#CA340A]/20 hover:bg-[#FFF9F5] text-xs font-bold text-[#2C1710] shadow-2xs transition-all cursor-pointer"
               title="Refresh Dashboard"
             >
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
               <span>Refresh</span>
             </button>
           </div>
         </div>
 
         {/* TOP METRIC CARDS: TODAY'S SALES | TODAY'S ORDERS | PENDING / PREPARING / READY */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* 1. TODAY'S SALES */}
-          <div className="bg-white p-5 rounded-2xl border border-[#CA340A]/15 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-[#CA340A]/30 transition-all">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#CA340A]/15 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-[#CA340A]/30 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold text-[#52525b] uppercase tracking-wider">
+              <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider">
                 Today’s Sales
               </span>
-              <div className="w-8 h-8 rounded-xl bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center">
-                <TrendingUp size={16} />
+              <div className="w-7 h-7 rounded-lg bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center">
+                <TrendingUp size={14} />
               </div>
             </div>
 
-            <div className="my-2">
-              <div className="font-heading font-black text-3xl sm:text-4xl text-[#2C1710] tracking-tight">
+            <div className="my-1.5">
+              <div className="font-heading font-black text-2xl sm:text-3xl text-[#2C1710] tracking-tight">
                 ₹{(kpis?.todaySales ?? 0).toLocaleString()}
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-100">
-              <span className="text-[#15803D] font-bold flex items-center gap-1">
-                <CheckCircle2 size={13} />
+            <div className="flex items-center justify-between text-xs pt-1.5 border-t border-zinc-100">
+              <span className="text-[#15803D] font-bold text-[11px] flex items-center gap-1">
+                <CheckCircle2 size={12} />
                 {kpis?.paidOrders ?? 0} orders settled
               </span>
               <span className="text-[#52525b] text-[11px]">
@@ -291,24 +291,24 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* 2. TODAY'S ORDERS */}
-          <div className="bg-white p-5 rounded-2xl border border-[#CA340A]/15 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-[#CA340A]/30 transition-all">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#CA340A]/15 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-[#CA340A]/30 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold text-[#52525b] uppercase tracking-wider">
+              <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider">
                 Today’s Orders
               </span>
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <ShoppingBag size={16} />
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <ShoppingBag size={14} />
               </div>
             </div>
 
-            <div className="my-2">
-              <div className="font-heading font-black text-3xl sm:text-4xl text-[#2C1710] tracking-tight">
+            <div className="my-1.5">
+              <div className="font-heading font-black text-2xl sm:text-3xl text-[#2C1710] tracking-tight">
                 {kpis?.ordersToday ?? 0}
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-100">
-              <span className="text-[#52525b]">
+            <div className="flex items-center justify-between text-xs pt-1.5 border-t border-zinc-100">
+              <span className="text-[#52525b] text-[11px]">
                 Active Tables: <strong className="text-[#2C1710]">{kpis?.activeTables ?? 0}</strong>
               </span>
               <span className="text-amber-700 font-bold text-[11px]">
@@ -318,62 +318,62 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* 3. PENDING / PREPARING / READY */}
-          <div className="bg-white p-5 rounded-2xl border border-[#CA340A]/15 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-[#CA340A]/30 transition-all">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#CA340A]/15 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-[#CA340A]/30 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold text-[#52525b] uppercase tracking-wider">
+              <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider">
                 Pending / Preparing / Ready
               </span>
               <Link
                 href="/kitchen"
                 target="_blank"
-                className="w-8 h-8 rounded-xl bg-orange-50 text-[#CA340A] hover:bg-[#CA340A] hover:text-white flex items-center justify-center transition-colors"
+                className="w-7 h-7 rounded-lg bg-orange-50 text-[#CA340A] hover:bg-[#CA340A] hover:text-white flex items-center justify-center transition-colors"
                 title="Launch Kitchen KDS"
               >
-                <ChefHat size={16} />
+                <ChefHat size={14} />
               </Link>
             </div>
 
             {/* 3 Status Counters */}
-            <div className="grid grid-cols-3 gap-2 my-2">
+            <div className="grid grid-cols-3 gap-1.5 my-1.5">
               {/* Pending */}
-              <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2.5 text-center">
-                <span className="block text-[10px] font-extrabold text-amber-800 uppercase tracking-wider">
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-1.5 text-center">
+                <span className="block text-[9px] font-extrabold text-amber-800 uppercase tracking-wider">
                   Pending
                 </span>
-                <span className="font-heading font-black text-2xl text-amber-700 leading-tight">
+                <span className="font-heading font-black text-xl text-amber-700 leading-tight">
                   {pendingCount}
                 </span>
               </div>
 
               {/* Preparing */}
-              <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-2.5 text-center">
-                <span className="block text-[10px] font-extrabold text-blue-800 uppercase tracking-wider">
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-1.5 text-center">
+                <span className="block text-[9px] font-extrabold text-blue-800 uppercase tracking-wider">
                   Preparing
                 </span>
-                <span className="font-heading font-black text-2xl text-blue-700 leading-tight">
+                <span className="font-heading font-black text-xl text-blue-700 leading-tight">
                   {preparingCount}
                 </span>
               </div>
 
               {/* Ready */}
-              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-2.5 text-center">
-                <span className="block text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider">
+              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-1.5 text-center">
+                <span className="block text-[9px] font-extrabold text-emerald-800 uppercase tracking-wider">
                   Ready
                 </span>
-                <span className="font-heading font-black text-2xl text-emerald-700 leading-tight">
+                <span className="font-heading font-black text-xl text-emerald-700 leading-tight">
                   {readyCount}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-100">
-              <span className="text-[#52525b] text-[11px]">
+            <div className="flex items-center justify-between text-xs pt-1.5 border-t border-zinc-100">
+              <span className="text-[#52525b] text-[10px]">
                 Total Active: <strong className="text-[#2C1710]">{pendingCount + preparingCount + readyCount}</strong>
               </span>
               <Link
                 href="/kitchen"
                 target="_blank"
-                className="text-[11px] font-bold text-[#CA340A] hover:underline flex items-center gap-0.5"
+                className="text-[10px] font-bold text-[#CA340A] hover:underline flex items-center gap-0.5"
               >
                 <span>Kitchen Screen</span>
                 <ExternalLink size={10} />
@@ -383,17 +383,17 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* 4. QUICK REVENUE SUMMARY */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-[#CA340A]/15 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-100 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <Banknote size={16} />
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#CA340A]/15 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-zinc-100 pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <Banknote size={15} />
               </div>
               <div>
-                <h2 className="font-heading font-extrabold text-base text-[#2C1710] tracking-tight">
+                <h2 className="font-heading font-extrabold text-sm sm:text-base text-[#2C1710] tracking-tight">
                   Quick Revenue Summary
                 </h2>
-                <p className="text-xs text-[#52525b]">
+                <p className="text-[11px] text-[#52525b]">
                   Payment methods breakdown, cash in hand, and unsettled collections for today
                 </p>
               </div>
@@ -405,8 +405,8 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Proportional Distribution Bar */}
-          <div className="space-y-1.5">
-            <div className="w-full h-3 bg-zinc-100 rounded-full overflow-hidden flex shadow-inner">
+          <div className="space-y-1">
+            <div className="w-full h-2.5 bg-zinc-100 rounded-full overflow-hidden flex shadow-inner">
               {cashPercent > 0 && (
                 <div
                   style={{ width: `${cashPercent}%` }}
@@ -430,69 +430,69 @@ export default function AdminDashboardPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between text-[11px] text-[#52525b] pt-1">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <div className="flex flex-wrap items-center justify-between text-[10px] text-[#52525b]">
+              <span className="flex items-center gap-1 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 Cash ({cashPercent}%)
               </span>
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+              <span className="flex items-center gap-1 font-medium">
+                <span className="w-2 h-2 rounded-full bg-indigo-600" />
                 Online / UPI ({onlinePercent}%)
               </span>
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+              <span className="flex items-center gap-1 font-medium">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
                 Unpaid / Due ({pendingPercent}%)
               </span>
             </div>
           </div>
 
           {/* 4 Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 pt-0.5">
             {/* Cash */}
-            <div className="p-3.5 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
-              <span className="text-[11px] font-extrabold text-[#52525b] uppercase tracking-wider block">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
+              <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider block">
                 Cash Collection
               </span>
-              <div className="font-heading font-black text-xl sm:text-2xl text-emerald-700 mt-1">
+              <div className="font-heading font-black text-lg sm:text-xl text-emerald-700 mt-0.5">
                 ₹{cashTotal.toLocaleString()}
               </div>
-              <span className="text-[10px] text-[#52525b] block mt-0.5">
+              <span className="text-[9px] text-[#52525b] block mt-0.5">
                 Physical drawer cash
               </span>
             </div>
 
             {/* Online */}
-            <div className="p-3.5 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
-              <span className="text-[11px] font-extrabold text-[#52525b] uppercase tracking-wider block">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
+              <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider block">
                 Online / UPI
               </span>
-              <div className="font-heading font-black text-xl sm:text-2xl text-indigo-700 mt-1">
+              <div className="font-heading font-black text-lg sm:text-xl text-indigo-700 mt-0.5">
                 ₹{onlineTotal.toLocaleString()}
               </div>
-              <span className="text-[10px] text-[#52525b] block mt-0.5">
+              <span className="text-[9px] text-[#52525b] block mt-0.5">
                 Razorpay &amp; QR payments
               </span>
             </div>
 
             {/* Pending / Unpaid */}
-            <div className="p-3.5 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
-              <span className="text-[11px] font-extrabold text-[#52525b] uppercase tracking-wider block">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
+              <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider block">
                 Pending / Unpaid
               </span>
-              <div className="font-heading font-black text-xl sm:text-2xl text-amber-700 mt-1">
+              <div className="font-heading font-black text-lg sm:text-xl text-amber-700 mt-0.5">
                 ₹{pendingTotal.toLocaleString()}
               </div>
-              <span className="text-[10px] text-[#52525b] block mt-0.5">
+              <span className="text-[9px] text-[#52525b] block mt-0.5">
                 {kpis?.unpaidOrders ?? 0} active tickets
               </span>
             </div>
 
             {/* Tax Collected */}
-            <div className="p-3.5 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
-              <span className="text-[11px] font-extrabold text-[#52525b] uppercase tracking-wider block">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/10">
+              <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider block">
                 GST (5%) Tax
               </span>
-              <div className="font-heading font-black text-xl sm:text-2xl text-[#CA340A] mt-1">
+              <div className="font-heading font-black text-lg sm:text-xl text-[#CA340A] mt-0.5">
                 ₹{taxTotal.toLocaleString()}
               </div>
               <span className="text-[10px] text-[#52525b] block mt-0.5">

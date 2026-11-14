@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import CreateTableModal from "@/components/Admin/CreateTableModal";
 import PrinterStatusModal from "@/components/Admin/PrinterStatusModal";
+import AdminOrderModal from "@/components/Admin/AdminOrderModal";
 import { TableCardStatus } from "@/lib/tables";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
 import { PrinterClient } from "@/services/printerClient";
@@ -30,6 +31,8 @@ import {
   Check,
   X,
   Lock,
+  ShoppingBag,
+  UtensilsCrossed,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -49,6 +52,10 @@ export default function AdminTablesPage() {
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [printerModalOpen, setPrinterModalOpen] = useState(false);
+  const [takeawayModalOpen, setTakeawayModalOpen] = useState(false);
+  const [manualOrderModalTable, setManualOrderModalTable] = useState<string | null>(null);
+  const [availablePromptTable, setAvailablePromptTable] = useState<TableCardStatus | null>(null);
+  const [activeTakeaways, setActiveTakeaways] = useState<any[]>([]);
 
   // Table Transfers State
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
@@ -57,6 +64,17 @@ export default function AdminTablesPage() {
 
   // Printer real-time status hook (raw TCP to CN811-UEWB port 9100)
   const printer = usePrinterStatus(8000);
+
+  // Fetch active takeaways
+  const fetchTakeaways = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/takeaway");
+      const d = await res.json();
+      if (d.success && Array.isArray(d.orders)) {
+        setActiveTakeaways(d.orders);
+      }
+    } catch {}
+  }, []);
 
   // Fetch pending transfers
   const fetchTransfers = useCallback(async () => {
@@ -117,10 +135,10 @@ export default function AdminTablesPage() {
           adminUser: "Cashier Staff",
         }).catch(() => {});
       } else {
-        alert(data.error || "Failed to approve transfer.");
+        setTransferAlertMsg(`⚠️ ${data.error || "Failed to approve transfer."}`);
       }
     } catch (err: any) {
-      alert(err.message || "Failed to approve transfer.");
+      setTransferAlertMsg(`⚠️ ${err.message || "Failed to approve transfer."}`);
     } finally {
       setTransferLoading(false);
     }
@@ -155,11 +173,13 @@ export default function AdminTablesPage() {
   useEffect(() => {
     fetchTables();
     fetchTransfers();
+    fetchTakeaways();
 
-    // Fast polling every 5s for live table & transfer updates
+    // Fast polling every 5s for live table, transfer, and takeaway updates
     const pollTimer = setInterval(() => {
       fetchTables(true);
       fetchTransfers();
+      fetchTakeaways();
     }, 5000);
 
     // Listen to Supabase Realtime for instant order changes
@@ -172,6 +192,7 @@ export default function AdminTablesPage() {
         () => {
           fetchTables(true);
           fetchTransfers();
+          fetchTakeaways();
         }
       )
       .subscribe();
@@ -180,7 +201,7 @@ export default function AdminTablesPage() {
       clearInterval(pollTimer);
       supabase.removeChannel(channel);
     };
-  }, [fetchTables, fetchTransfers]);
+  }, [fetchTables, fetchTransfers, fetchTakeaways]);
 
   // Next suggested table number for Create Table dialog
   const suggestedNextTable = useMemo(() => {
@@ -243,13 +264,13 @@ export default function AdminTablesPage() {
 
   return (
     <AdminLayout>
-      {/* Warm Beige Editorial Background (#F5F0E8) */}
-      <div className="min-h-screen bg-[#F5F0E8] text-[#2C1710] p-4 sm:p-6 lg:p-8 space-y-6">
+      {/* Warm Beige Editorial Background (#F5F0E8) - Compact All-in-One Floor View */}
+      <div className="min-h-screen bg-[#F5F0E8] text-[#2C1710] p-3 sm:p-4 lg:p-5 space-y-3 sm:space-y-3.5">
         {/* TOP COMMAND BAR */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/70 backdrop-blur-md p-4 sm:p-5 rounded-3xl border border-black/5 shadow-[0_10px_30px_rgba(0,0,0,0.02)]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white/80 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-black/5 shadow-2xs">
           <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="font-heading font-extrabold text-xl sm:text-2xl text-[#2C1710] tracking-tight">
+            <div className="flex items-center gap-2">
+              <h1 className="font-heading font-extrabold text-lg sm:text-xl text-[#2C1710] tracking-tight">
                 Table Management
               </h1>
               {stats.newOrders > 0 && (
@@ -259,7 +280,7 @@ export default function AdminTablesPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-[#52525b] mt-0.5">
+            <p className="text-[11px] text-[#52525b] mt-0.5">
               Live floor overview, KOT dispatch, and instant payment settlement
             </p>
           </div>
@@ -269,7 +290,7 @@ export default function AdminTablesPage() {
             {/* Kitchen Printer Connectivity Pill */}
             <button
               onClick={() => setPrinterModalOpen(true)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold border transition-all cursor-pointer shadow-xs ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
                 printer.status === "CONNECTED"
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
                   : printer.status === "WARNING"
@@ -279,7 +300,7 @@ export default function AdminTablesPage() {
               title="Click to check or configure kitchen printer"
             >
               <span
-                className={`w-2.5 h-2.5 rounded-full ${
+                className={`w-2 h-2 rounded-full ${
                   printer.status === "CONNECTED"
                     ? "bg-emerald-500 animate-pulse"
                     : printer.status === "WARNING"
@@ -287,10 +308,10 @@ export default function AdminTablesPage() {
                     : "bg-red-500"
                 }`}
               />
-              <Printer size={15} />
+              <Printer size={14} />
               <span>
                 {printer.status === "CONNECTED"
-                  ? "Kitchen Printer Ready"
+                  ? "Printer Ready"
                   : printer.status === "WARNING"
                   ? "Printer Warning"
                   : "Printer Disconnected"}
@@ -301,32 +322,125 @@ export default function AdminTablesPage() {
             <button
               onClick={() => fetchTables()}
               disabled={refreshing}
-              className="p-2.5 rounded-2xl bg-white border border-black/10 text-[#2C1710] hover:bg-zinc-50 transition-colors shadow-xs"
+              className="p-2 rounded-xl bg-white border border-black/10 text-[#2C1710] hover:bg-zinc-50 transition-colors shadow-2xs"
               title="Refresh Floor Tables"
             >
-              <RefreshCw size={17} className={refreshing ? "animate-spin text-[#CA340A]" : ""} />
+              <RefreshCw size={15} className={refreshing ? "animate-spin text-[#CA340A]" : ""} />
             </button>
 
             {/* Private Order Button */}
             <Link
               href="/admin/private-order"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#3A1710] text-[#FFF9F5] text-xs font-bold hover:bg-[#2A100A] shadow-md shadow-[#3A1710]/20 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#3A1710] text-[#FFF9F5] text-xs font-bold hover:bg-[#2A100A] shadow-xs transition-all cursor-pointer"
               title="Place internal or staff order (GIVE ON COUNTER)"
             >
-              <Lock size={15} className="text-[#E2C7BA]" />
+              <Lock size={14} className="text-[#E2C7BA]" />
               <span>Private Order</span>
             </Link>
+
+            {/* Take Away Action Button */}
+            <button
+              onClick={() => setTakeawayModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+              title="Create new customer Take Away order with (parcel) tags"
+            >
+              <ShoppingBag size={14} />
+              <span>Take Away</span>
+            </button>
 
             {/* + Create Table Button */}
             <button
               onClick={() => setCreateModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#B73F1D] shadow-md shadow-[#CA340A]/20 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#B73F1D] shadow-xs transition-all cursor-pointer"
             >
-              <Plus size={16} />
+              <Plus size={15} />
               <span>Create Table</span>
             </button>
           </div>
         </div>
+
+        {/* ACTIVE TAKE AWAY ORDERS BAR */}
+        {activeTakeaways.length > 0 && (
+          <div className="bg-white/80 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-[#EBDAD0] shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                  <ShoppingBag size={14} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-heading font-extrabold text-xs sm:text-sm text-[#2C1710]">
+                      Active Take Away Orders
+                    </h3>
+                    <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                      {activeTakeaways.length} Active
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#8C5E51]">
+                    Click any takeaway to view details, dispatch KOT, print bill, or collect payment
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setTakeawayModalOpen(true)}
+                className="px-3.5 py-1.5 bg-amber-700 hover:bg-amber-800 text-white font-heading font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={13} />
+                <span>New Take Away</span>
+              </button>
+            </div>
+
+            {/* Horizontal Cards Scroll */}
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-thin">
+              {activeTakeaways.map((ord) => {
+                const isPendingKot = ord.status === "PENDING" && !(ord.notes || "").includes("[KOT_CONFIRMED");
+                const itemsCount = ord.items?.length || 0;
+                const elapsedMins = Math.max(0, Math.floor((Date.now() - new Date(ord.createdAt).getTime()) / 60000));
+                const customerMatch = ord.notes?.match(/\[CUSTOMER_NAME:([^\]]+)\]/);
+                const custName = customerMatch ? customerMatch[1].trim() : (ord.customerPhone ? `+91 ${ord.customerPhone}` : "Walk-in Guest");
+
+                return (
+                  <div
+                    key={ord.id}
+                    onClick={() => router.push(`/admin/tables/TAKEAWAY`)}
+                    className="min-w-[240px] max-w-[280px] p-3.5 bg-[#FFFBF7] hover:bg-amber-50/70 border border-[#EBDAD0] hover:border-amber-400 rounded-2xl shadow-xs transition-all cursor-pointer shrink-0 flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="font-heading font-extrabold text-xs text-[#2C1710]">
+                        #{ord.orderNumber}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        isPendingKot
+                          ? "bg-red-100 text-red-700 border border-red-200 animate-pulse"
+                          : ord.status === "PREPARING"
+                          ? "bg-amber-100 text-amber-800 border border-amber-300"
+                          : "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      }`}>
+                        {isPendingKot ? "KOT PENDING" : ord.status}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-0.5">
+                      <div className="font-bold text-zinc-800 truncate">{custName}</div>
+                      <div className="text-[11px] text-zinc-500 flex items-center gap-2">
+                        <span>{itemsCount} item{itemsCount > 1 ? "s" : ""}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-0.5"><Clock size={11} /> {elapsedMins}m ago</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-[#EBDAD0] flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-zinc-500 font-medium">Total Bill</span>
+                      <span className="font-heading font-extrabold text-sm text-[#CA340A]">
+                        ₹{ord.grandTotal}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Transfer Alert Toast / Notice */}
         {transferAlertMsg && (
@@ -418,105 +532,105 @@ export default function AdminTablesPage() {
         )}
 
         {/* METRICS SUMMARY CARDS */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
           <button
             onClick={() => setStatusFilter(statusFilter === "AVAILABLE" ? "ALL" : "AVAILABLE")}
-            className={`p-4 rounded-3xl bg-white border text-left transition-all shadow-[0_8px_25px_rgba(0,0,0,0.02)] ${
+            className={`p-2.5 sm:p-3 rounded-2xl bg-white border text-left transition-all shadow-[0_4px_16px_rgba(0,0,0,0.02)] ${
               statusFilter === "AVAILABLE" ? "border-zinc-800 ring-2 ring-zinc-400" : "border-black/5 hover:border-black/15"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#52525b] uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-wider">
                 Available
               </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-zinc-300" />
+              <span className="w-2 h-2 rounded-full bg-zinc-300" />
             </div>
-            <p className="text-2xl font-heading font-extrabold text-[#2C1710] mt-1.5">
+            <p className="text-xl sm:text-2xl font-heading font-extrabold text-[#2C1710] mt-0.5">
               {stats.available}
             </p>
-            <span className="text-[10px] text-[#52525b]">Tables ready for guests</span>
+            <span className="text-[9px] text-[#52525b]">Tables ready for guests</span>
           </button>
 
           <button
             onClick={() => setStatusFilter(statusFilter === "RESERVED" ? "ALL" : "RESERVED")}
-            className={`p-4 rounded-3xl bg-white border text-left transition-all shadow-[0_8px_25px_rgba(0,0,0,0.02)] ${
+            className={`p-2.5 sm:p-3 rounded-2xl bg-white border text-left transition-all shadow-[0_4px_16px_rgba(0,0,0,0.02)] ${
               statusFilter === "RESERVED" ? "border-blue-600 ring-2 ring-blue-400" : "border-black/5 hover:border-black/15"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">
                 Reserved
               </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
             </div>
-            <p className="text-2xl font-heading font-extrabold text-blue-700 mt-1.5">
+            <p className="text-xl sm:text-2xl font-heading font-extrabold text-blue-700 mt-0.5">
               {stats.reserved}
             </p>
-            <span className="text-[10px] text-blue-600 font-semibold">10m temporary lock</span>
+            <span className="text-[9px] text-blue-600 font-semibold">10m temporary lock</span>
           </button>
 
           <button
             onClick={() => setStatusFilter(statusFilter === "NEW" ? "ALL" : "NEW")}
-            className={`p-4 rounded-3xl bg-white border text-left transition-all shadow-[0_8px_25px_rgba(0,0,0,0.02)] ${
+            className={`p-2.5 sm:p-3 rounded-2xl bg-white border text-left transition-all shadow-[0_4px_16px_rgba(0,0,0,0.02)] ${
               statusFilter === "NEW" ? "border-red-600 ring-2 ring-red-400" : "border-black/5 hover:border-black/15"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider">
                 New Orders
               </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
             </div>
-            <p className="text-2xl font-heading font-extrabold text-red-600 mt-1.5">
+            <p className="text-xl sm:text-2xl font-heading font-extrabold text-red-600 mt-0.5">
               {stats.newOrders}
             </p>
-            <span className="text-[10px] text-red-500 font-semibold">Requires KOT dispatch</span>
+            <span className="text-[9px] text-red-500 font-semibold">Requires KOT dispatch</span>
           </button>
 
           <button
             onClick={() => setStatusFilter(statusFilter === "YELLOW" ? "ALL" : "YELLOW")}
-            className={`p-4 rounded-3xl bg-white border text-left transition-all shadow-[0_8px_25px_rgba(0,0,0,0.02)] ${
+            className={`p-2.5 sm:p-3 rounded-2xl bg-white border text-left transition-all shadow-[0_4px_16px_rgba(0,0,0,0.02)] ${
               statusFilter === "YELLOW" ? "border-amber-500 ring-2 ring-amber-300" : "border-black/5 hover:border-black/15"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">
                 Action Needed
               </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
             </div>
-            <p className="text-2xl font-heading font-extrabold text-amber-700 mt-1.5">
+            <p className="text-xl sm:text-2xl font-heading font-extrabold text-amber-700 mt-0.5">
               {stats.actionNeeded}
             </p>
-            <span className="text-[10px] text-amber-600">Viewed / Manual KOT</span>
+            <span className="text-[9px] text-amber-600">Viewed / Manual KOT</span>
           </button>
 
           <button
             onClick={() => setStatusFilter(statusFilter === "GREEN" ? "ALL" : "GREEN")}
-            className={`p-4 rounded-3xl bg-white border text-left transition-all shadow-[0_8px_25px_rgba(0,0,0,0.02)] ${
+            className={`p-2.5 sm:p-3 rounded-2xl bg-white border text-left transition-all shadow-[0_4px_16px_rgba(0,0,0,0.02)] ${
               statusFilter === "GREEN" ? "border-emerald-600 ring-2 ring-emerald-300" : "border-black/5 hover:border-black/15"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
                 KOT Confirmed
               </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
             </div>
-            <p className="text-2xl font-heading font-extrabold text-emerald-700 mt-1.5">
+            <p className="text-xl sm:text-2xl font-heading font-extrabold text-emerald-700 mt-0.5">
               {stats.kotSent}
             </p>
-            <span className="text-[10px] text-emerald-600 font-semibold">Dining / Awaiting pay</span>
+            <span className="text-[9px] text-emerald-600 font-semibold">Dining / Awaiting pay</span>
           </button>
         </div>
 
         {/* FILTER BAR & SEARCH (Replicating Image 2 Reference) */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white/70 backdrop-blur-md p-3 sm:p-4 rounded-3xl border border-black/5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white/70 backdrop-blur-md p-2 sm:p-2.5 rounded-2xl border border-black/5">
           {/* Section Tabs (ALL / DINE-IN / ROOFTOP) */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setActiveTab("ALL")}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 activeTab === "ALL"
                   ? "bg-[#3A1710] text-[#FFF9F5] shadow-xs"
                   : "bg-white text-zinc-600 hover:bg-zinc-100"
@@ -526,7 +640,7 @@ export default function AdminTablesPage() {
             </button>
             <button
               onClick={() => setActiveTab("DINE-IN")}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 activeTab === "DINE-IN"
                   ? "bg-[#3A1710] text-[#FFF9F5] shadow-xs"
                   : "bg-white text-zinc-600 hover:bg-zinc-100"
@@ -536,7 +650,7 @@ export default function AdminTablesPage() {
             </button>
             <button
               onClick={() => setActiveTab("ROOFTOP")}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 activeTab === "ROOFTOP"
                   ? "bg-[#3A1710] text-[#FFF9F5] shadow-xs"
                   : "bg-white text-zinc-600 hover:bg-zinc-100"
@@ -550,15 +664,15 @@ export default function AdminTablesPage() {
           <div className="flex items-center gap-2 flex-1 sm:justify-end">
             <div className="relative flex-1 sm:max-w-xs">
               <Search
-                size={15}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
               />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search table or order..."
-                className="w-full pl-9 pr-3 py-2 bg-white border border-black/10 rounded-2xl text-xs font-semibold text-[#2C1710] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#CA340A]"
+                className="w-full pl-8 pr-3 py-1.5 bg-white border border-black/10 rounded-xl text-xs font-semibold text-[#2C1710] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#CA340A]"
               />
             </div>
 
@@ -594,7 +708,7 @@ export default function AdminTablesPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-6 gap-2 sm:gap-2.5">
             {filteredTables.map((t) => {
               const isWhite = t.color === "WHITE";
               const isBlue = t.color === "BLUE";
@@ -605,32 +719,38 @@ export default function AdminTablesPage() {
               return (
                 <div
                   key={t.tableNumber}
-                  onClick={() => router.push(`/admin/tables/${t.tableNumber}`)}
-                  className={`group relative rounded-3xl p-5 cursor-pointer transition-all duration-200 flex flex-col justify-between min-h-[170px] ${
+                  onClick={() => {
+                    if (isWhite) {
+                      setAvailablePromptTable(t);
+                    } else {
+                      router.push(`/admin/tables/${t.tableNumber}`);
+                    }
+                  }}
+                  className={`group relative rounded-xl p-2.5 sm:p-3 cursor-pointer transition-all duration-200 flex flex-col justify-between min-h-[110px] sm:min-h-[118px] ${
                     isWhite
-                      ? "bg-white border border-black/5 shadow-[0_12px_32px_rgba(44,23,16,0.04)] hover:shadow-[0_20px_45px_rgba(44,23,16,0.08)] hover:-translate-y-1"
+                      ? "bg-white border border-black/5 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
                       : isBlue
-                      ? "bg-[#EFF6FF] border-2 border-blue-400 shadow-[0_12px_32px_rgba(59,130,246,0.14)] hover:shadow-[0_20px_45px_rgba(59,130,246,0.22)] hover:-translate-y-1"
+                      ? "bg-[#EFF6FF] border-2 border-blue-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
                       : isRed
-                      ? "bg-[#FEF2F2] border-2 border-red-300 shadow-[0_12px_32px_rgba(239,68,68,0.12)] hover:shadow-[0_20px_45px_rgba(239,68,68,0.20)] hover:-translate-y-1"
+                      ? "bg-[#FEF2F2] border-2 border-red-300 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
                       : isYellow
-                      ? "bg-[#FFFBEB] border-2 border-amber-300 shadow-[0_12px_32px_rgba(245,158,11,0.12)] hover:shadow-[0_20px_45px_rgba(245,158,11,0.20)] hover:-translate-y-1"
-                      : "bg-[#F0FDF4] border-2 border-emerald-300 shadow-[0_12px_32px_rgba(34,197,94,0.12)] hover:shadow-[0_20px_45px_rgba(34,197,94,0.20)] hover:-translate-y-1"
+                      ? "bg-[#FFFBEB] border-2 border-amber-300 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
+                      : "bg-[#F0FDF4] border-2 border-emerald-300 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
                   }`}
                 >
                   {/* Top Status Row */}
                   <div className="flex items-center justify-between text-xs">
                     <span
-                      className={`font-extrabold text-[11px] px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
+                      className={`font-extrabold text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
                         isWhite
                           ? "bg-zinc-100 text-zinc-600 border border-zinc-200"
                           : isBlue
-                          ? "bg-blue-600 text-white shadow-xs"
+                          ? "bg-blue-600 text-white shadow-2xs"
                           : isRed
-                          ? "bg-red-500 text-white shadow-xs"
+                          ? "bg-red-500 text-white shadow-2xs"
                           : isYellow
-                          ? "bg-amber-400 text-amber-950 font-bold shadow-xs"
-                          : "bg-emerald-600 text-white shadow-xs"
+                          ? "bg-amber-400 text-amber-950 font-bold shadow-2xs"
+                          : "bg-emerald-600 text-white shadow-2xs"
                       }`}
                     >
                       <span
@@ -650,22 +770,22 @@ export default function AdminTablesPage() {
                     </span>
 
                     {isBlue && t.reservation?.remainingSeconds !== undefined ? (
-                      <span className="text-[11px] font-bold text-blue-700 flex items-center gap-1 bg-blue-100 px-2 py-0.5 rounded-full">
-                        <Clock size={11} />
-                        {Math.floor(t.reservation.remainingSeconds / 60)}m {t.reservation.remainingSeconds % 60}s left
+                      <span className="text-[9px] font-bold text-blue-700 flex items-center gap-1 bg-blue-100 px-1.5 py-0.5 rounded-full">
+                        <Clock size={9} />
+                        {Math.floor(t.reservation.remainingSeconds / 60)}m {t.reservation.remainingSeconds % 60}s
                       </span>
                     ) : t.elapsedMinutes !== undefined && !isWhite ? (
-                      <span className="text-[11px] font-semibold text-zinc-500 flex items-center gap-1">
-                        <Clock size={12} />
+                      <span className="text-[9px] font-semibold text-zinc-500 flex items-center gap-1">
+                        <Clock size={10} />
                         {t.elapsedMinutes}m ago
                       </span>
                     ) : null}
                   </div>
 
                   {/* Center Table Number & Capacity */}
-                  <div className="my-3 text-center">
+                  <div className="my-1 text-center">
                     <h2
-                      className={`font-heading font-extrabold text-3xl sm:text-4xl tracking-tight transition-transform group-hover:scale-105 ${
+                      className={`font-heading font-extrabold text-xl sm:text-2xl tracking-tight transition-transform group-hover:scale-105 ${
                         isWhite
                           ? "text-[#2C1710]"
                           : isBlue
@@ -679,13 +799,13 @@ export default function AdminTablesPage() {
                     >
                       {t.tableNumber}
                     </h2>
-                    <p className="text-xs font-semibold text-[#52525b] mt-1 flex items-center justify-center gap-1.5">
-                      <Users size={13} className="text-zinc-400" />
-                      Capacity: {t.capacity}
+                    <p className="text-[10px] font-semibold text-[#52525b] mt-0.5 flex items-center justify-center gap-1">
+                      <Users size={11} className="text-zinc-400" />
+                      Cap: {t.capacity}
                       {isBlue
                         ? t.reservation?.customerPhone
-                          ? ` • Guest: +91 ******${t.reservation.customerPhone.slice(-4)}`
-                          : " • Table Selected"
+                          ? ` • +91 ***${t.reservation.customerPhone.slice(-4)}`
+                          : " • Selected"
                         : t.itemsCount
                         ? ` • ${t.itemsCount} Items`
                         : ""}
@@ -694,7 +814,7 @@ export default function AdminTablesPage() {
 
                   {/* Bottom Order Total Row */}
                   <div
-                    className={`pt-2.5 border-t flex items-center justify-between text-xs ${
+                    className={`pt-1.5 border-t flex items-center justify-between text-[11px] ${
                       isWhite
                         ? "border-zinc-100 text-zinc-600"
                         : isBlue
@@ -708,11 +828,11 @@ export default function AdminTablesPage() {
                   >
                     <span className="font-bold">
                       {isBlue ? (
-                        <span className="text-blue-700 font-bold">10m Temp Reservation</span>
+                        <span className="text-blue-700 font-bold">10m Reserved</span>
                       ) : (
                         <>
-                          Order Total:{" "}
-                          <span className="font-extrabold text-sm">
+                          Total:{" "}
+                          <span className="font-extrabold text-xs sm:text-sm">
                             {t.totalAmount ? `₹${t.totalAmount}` : "--"}
                           </span>
                         </>
@@ -720,8 +840,8 @@ export default function AdminTablesPage() {
                     </span>
 
                     <ChevronRight
-                      size={16}
-                      className="text-zinc-400 group-hover:translate-x-1 transition-transform"
+                      size={14}
+                      className="text-zinc-400 group-hover:translate-x-0.5 transition-transform"
                     />
                   </div>
                 </div>
@@ -747,6 +867,80 @@ export default function AdminTablesPage() {
           printer.refresh();
         }}
       />
+
+      {/* Take Away Creator Modal */}
+      <AdminOrderModal
+        isOpen={takeawayModalOpen}
+        onClose={() => setTakeawayModalOpen(false)}
+        defaultTableNumber="TAKEAWAY"
+        onOrderCreated={() => {
+          fetchTables();
+          fetchTakeaways();
+        }}
+      />
+
+      {/* Manual Order by Admin on Table */}
+      <AdminOrderModal
+        isOpen={Boolean(manualOrderModalTable)}
+        onClose={() => setManualOrderModalTable(null)}
+        defaultTableNumber={manualOrderModalTable || "A1"}
+        onOrderCreated={() => {
+          fetchTables();
+          fetchTakeaways();
+        }}
+      />
+
+      {/* Available Table Choice Prompt */}
+      {availablePromptTable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-zinc-200 text-center space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto">
+              <UtensilsCrossed size={22} />
+            </div>
+
+            <div>
+              <h3 className="font-heading font-extrabold text-lg text-[#2C1710]">
+                Table {availablePromptTable.tableNumber} is Available
+              </h3>
+              <p className="text-xs text-zinc-500 mt-1">
+                Would you like to take a manual order directly for walk-in guests?
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => {
+                  const target = availablePromptTable.tableNumber;
+                  setAvailablePromptTable(null);
+                  setManualOrderModalTable(target);
+                }}
+                className="w-full py-2.5 px-4 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              >
+                <Plus size={15} />
+                <span>Take Manual Order</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const target = availablePromptTable.tableNumber;
+                  setAvailablePromptTable(null);
+                  router.push(`/admin/tables/${target}`);
+                }}
+                className="w-full py-2.5 px-4 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 font-heading font-bold text-xs rounded-xl border border-zinc-200 transition-all cursor-pointer"
+              >
+                <span>View Table Screen</span>
+              </button>
+
+              <button
+                onClick={() => setAvailablePromptTable(null)}
+                className="w-full py-1.5 text-zinc-400 hover:text-zinc-600 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

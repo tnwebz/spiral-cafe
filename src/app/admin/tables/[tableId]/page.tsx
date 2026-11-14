@@ -31,6 +31,7 @@ import {
   RefreshCw,
   FileText,
   ArrowLeftRight,
+  ChevronDown,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -146,6 +147,8 @@ export default function TableDetailPage() {
   const printer = usePrinterStatus(6000);
   const [sendingKotOrderId, setSendingKotOrderId] = useState<string | null>(null);
   const [markingManualOrderId, setMarkingManualOrderId] = useState<string | null>(null);
+  const [printingCounterKotOrderId, setPrintingCounterKotOrderId] = useState<string | null>(null);
+  const [openManageKotOrderId, setOpenManageKotOrderId] = useState<string | null>(null);
   const [orderNotices, setOrderNotices] = useState<
     Record<
       string,
@@ -170,6 +173,7 @@ export default function TableDetailPage() {
   // Direct Counter Bill Print
   const [isPrintingBillDirect, setIsPrintingBillDirect] = useState(false);
   const [billPrintDirectNotice, setBillPrintDirectNotice] = useState<string | null>(null);
+  const [actionBanner, setActionBanner] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
 
   const openManualTransferModal = async () => {
     try {
@@ -221,10 +225,10 @@ export default function TableDetailPage() {
 
         router.push(`/admin/tables/${targetFloorTable}`);
       } else {
-        alert(d.error || "Failed to transfer table.");
+        setActionBanner({ type: "error", message: d.error || "Failed to transfer table." });
       }
     } catch (err: any) {
-      alert(err.message || "Failed to transfer table.");
+      setActionBanner({ type: "error", message: err.message || "Failed to transfer table." });
     } finally {
       setTransferring(false);
     }
@@ -348,10 +352,10 @@ export default function TableDetailPage() {
       if (d.success) {
         router.push("/admin/tables");
       } else {
-        alert(d.error || "Failed to release table.");
+        setActionBanner({ type: "error", message: d.error || "Failed to release table." });
       }
     } catch (err: any) {
-      alert(err.message || "Failed to release table.");
+      setActionBanner({ type: "error", message: err.message || "Failed to release table." });
     } finally {
       setIsReleasing(false);
     }
@@ -501,10 +505,10 @@ export default function TableDetailPage() {
         }));
         await fetchTableData();
       } else {
-        alert(`Failed to reconcile database state: ${res.error || "Unknown error"}`);
+        setActionBanner({ type: "error", message: `Failed to reconcile database state: ${res.error || "Unknown error"}` });
       }
     } catch (err: any) {
-      alert(`Reconciliation error: ${err.message || "Network error"}`);
+      setActionBanner({ type: "error", message: `Reconciliation error: ${err.message || "Network error"}` });
     } finally {
       setIsReconciling(false);
     }
@@ -528,9 +532,40 @@ export default function TableDetailPage() {
       }));
       await fetchTableData();
     } catch {
-      alert("Failed to update status.");
+      setActionBanner({ type: "error", message: "Failed to update manual delivery status." });
     } finally {
       setMarkingManualOrderId(null);
+    }
+  };
+
+  // Handler: PRINT KOT AT COUNTER (58mm Emergency USB print during power cuts/offline kitchen)
+  const handlePrintCounterKot = async (specificOrderId: string) => {
+    if (!specificOrderId || printingCounterKotOrderId) return;
+    const target = orders.find((o) => o.id === specificOrderId);
+    if (!target) return;
+
+    setPrintingCounterKotOrderId(target.id);
+    try {
+      const kotData = buildKotData(target, (target as any).round || 1);
+      const res = await PrinterClient.printKotAtCounter(kotData);
+      if (res.success) {
+        await PrinterClient.recordManualHandoff(target.id, (target as any).round || 1, "Counter USB Emergency KOT");
+        setOrderNotices((prev) => ({
+          ...prev,
+          [target.id]: {
+            type: "SUCCESS",
+            message: `Emergency KOT printed on Counter USB printer! Order #${target.orderNumber} dispatched.`,
+          },
+        }));
+        await fetchTableData();
+      } else {
+        setActionBanner({ type: "error", message: `Counter KOT Print Failed: ${res.message}` });
+      }
+    } catch (err: any) {
+      setActionBanner({ type: "error", message: `Error printing counter KOT: ${err.message || "Unknown error"}` });
+    } finally {
+      setPrintingCounterKotOrderId(null);
+      setOpenManageKotOrderId(null);
     }
   };
 
@@ -722,6 +757,30 @@ export default function TableDetailPage() {
             </button>
           </div>
         </div>
+
+        {/* Action Status Banner */}
+        {actionBanner && (
+          <div
+            className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between shadow-xs transition-all ${
+              actionBanner.type === "success"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : actionBanner.type === "error"
+                ? "bg-red-50 border-red-200 text-red-800"
+                : "bg-blue-50 border-blue-200 text-blue-800"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span>{actionBanner.type === "success" ? "✅" : actionBanner.type === "error" ? "⚠️" : "ℹ️"}</span>
+              <span>{actionBanner.message}</span>
+            </div>
+            <button
+              onClick={() => setActionBanner(null)}
+              className="text-zinc-500 hover:text-zinc-800 p-1"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="py-24 flex flex-col items-center justify-center text-center">
@@ -1071,15 +1130,63 @@ export default function TableDetailPage() {
                             )}
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleMarkManual(ord.id)}
-                            disabled={markingManualOrderId === ord.id || sendingKotOrderId === ord.id}
-                            className="py-2 px-3 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                          >
-                            <HandHelping size={13} className={markingManualOrderId === ord.id ? "animate-pulse" : ""} />
-                            <span>{markingManualOrderId === ord.id ? "Updating..." : "Deliver on Paper"}</span>
-                          </button>
+                          {/* Manage KOT Dropdown (Deliver on Paper OR Print KOT at Counter) */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setOpenManageKotOrderId(openManageKotOrderId === ord.id ? null : ord.id)}
+                              disabled={markingManualOrderId === ord.id || sendingKotOrderId === ord.id || printingCounterKotOrderId === ord.id}
+                              className="py-2.5 px-3.5 rounded-2xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs"
+                            >
+                              <HandHelping size={14} className={markingManualOrderId === ord.id || printingCounterKotOrderId === ord.id ? "animate-pulse" : ""} />
+                              <span>Manage KOT</span>
+                              <ChevronDown size={13} className={`transition-transform duration-200 ${openManageKotOrderId === ord.id ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {openManageKotOrderId === ord.id && (
+                              <div className="absolute right-0 bottom-full mb-1.5 w-64 bg-white rounded-2xl shadow-xl border border-zinc-200 z-50 p-2 text-xs animate-in fade-in zoom-in-95 duration-150">
+                                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                  Power Cut / Offline KOT Options
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenManageKotOrderId(null);
+                                    handleMarkManual(ord.id);
+                                  }}
+                                  disabled={markingManualOrderId === ord.id}
+                                  className="w-full text-left p-2 hover:bg-zinc-50 rounded-xl flex items-center gap-2.5 text-zinc-800 cursor-pointer transition-colors"
+                                >
+                                  <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                    <HandHelping size={14} />
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-xs">Deliver on Paper</div>
+                                    <div className="text-[10px] text-zinc-500 font-normal">Handwritten chef acknowledgment</div>
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handlePrintCounterKot(ord.id);
+                                  }}
+                                  disabled={printingCounterKotOrderId === ord.id}
+                                  className="w-full text-left p-2 hover:bg-orange-50/60 rounded-xl flex items-center gap-2.5 text-zinc-800 cursor-pointer transition-colors mt-1 border-t border-zinc-100 pt-1.5"
+                                >
+                                  <div className="w-7 h-7 rounded-lg bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center shrink-0">
+                                    <Printer size={14} />
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-xs text-[#CA340A]">
+                                      {printingCounterKotOrderId === ord.id ? "Printing Counter Slip..." : "Print KOT at Counter"}
+                                    </div>
+                                    <div className="text-[10px] text-zinc-500 font-normal">58mm emergency slip via USB printer</div>
+                                  </div>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </>
                       ) : (
                         <div className="flex items-center justify-between w-full">

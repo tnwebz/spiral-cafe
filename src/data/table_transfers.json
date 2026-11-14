@@ -1,5 +1,47 @@
 [
   {
+    "id": "TRF-B4-C2-MWGGACNW",
+    "visitId": "VISIT-B4-MWGG25VY",
+    "fromTable": "B4",
+    "toTable": "C2",
+    "customerSessionId": "sess_1794663064340_04088515c7a84cbb9becb0240a614f8b",
+    "customerPhone": "1122334455",
+    "ordersCount": 1,
+    "currentBill": 179,
+    "status": "APPROVED",
+    "requestedAt": "2026-11-14T13:37:40.508Z",
+    "reviewedAt": "2026-11-14T13:37:47.767Z",
+    "reviewedBy": "Cashier Staff"
+  },
+  {
+    "id": "TRF-A1-B4-MWF64QD7",
+    "visitId": "VISIT-A1-MWF64I07",
+    "fromTable": "A1",
+    "toTable": "B4",
+    "customerSessionId": "sess_1790497577984_fz07f5o",
+    "customerPhone": "9842645295",
+    "ordersCount": 1,
+    "currentBill": 578,
+    "status": "APPROVED",
+    "requestedAt": "2026-11-13T16:05:35.995Z",
+    "reviewedAt": "2026-11-13T16:05:58.951Z",
+    "reviewedBy": "Cashier Staff"
+  },
+  {
+    "id": "MANUAL-TRF-B3-B6-MWF61RQV",
+    "visitId": "VISIT-B3-MWEZAPXL",
+    "fromTable": "B3",
+    "toTable": "B6",
+    "customerSessionId": "sess_1794000210334_1z1lhnz",
+    "customerPhone": "8608113558",
+    "ordersCount": 1,
+    "currentBill": 168,
+    "status": "APPROVED",
+    "requestedAt": "2026-11-13T16:03:17.815Z",
+    "reviewedAt": "2026-11-13T16:03:17.954Z",
+    "reviewedBy": "Cashier Staff"
+  },
+  {
     "id": "TRF-C2-B4-MW6SM9AJ",
     "visitId": "VISIT-C2-MW6RU8V0",
     "fromTable": "C2",

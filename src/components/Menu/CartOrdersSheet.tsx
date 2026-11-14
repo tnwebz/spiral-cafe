@@ -23,6 +23,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useCart, PlacedOrder } from "@/context/CartContext";
+import OrderSuccessModal from "./OrderSuccessModal";
 
 const DEFAULT_FLOOR_TABLES = [
   "A1", "A2",
@@ -86,6 +87,8 @@ export default function CartOrdersSheet() {
     [orderId: string]: { type: "info" | "error" | "cancelled"; message: string };
   }>({});
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalOrder, setSuccessModalOrder] = useState<PlacedOrder | null>(null);
   const [tablesStatus, setTablesStatus] = useState<
     Array<{
       tableNumber: string;
@@ -182,6 +185,10 @@ export default function CartOrdersSheet() {
     } else {
       setShowConfirmModal(false);
       setOrderNotes("");
+      if (res.order) {
+        setSuccessModalOrder(res.order);
+        setShowSuccessModal(true);
+      }
     }
   };
 
@@ -846,61 +853,40 @@ export default function CartOrdersSheet() {
                         </div>
                       )}
 
-                      {/* State 3: PENDING_CASH (Cash on delivery / counter selected, with instant option to pay online) */}
+                      {/* State 3: PENDING_CASH (Cash on delivery / counter selected) */}
                       {order.status !== "CANCELLED" && order.paymentStatus === "PENDING_CASH" && (
-                        <div className="p-3.5 bg-[#FFFBF7] border border-amber-300 rounded-2xl flex flex-col gap-2.5 shadow-xs">
+                        <div className="p-3.5 bg-[#FFFBF7] border border-[#CA340A]/30 rounded-2xl flex flex-col gap-2.5 shadow-xs">
                           <div className="flex items-start gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+                            <div className="w-8 h-8 rounded-full bg-[#CA340A]/10 flex items-center justify-center text-[#CA340A] shrink-0 mt-0.5">
                               <Banknote size={17} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
                                 <div className="font-heading font-extrabold text-xs text-amber-950 uppercase tracking-wide">
-                                  Cash on Delivery / Counter Selected
+                                  Pay at Counter Selected
                                 </div>
-                                <span className="font-heading font-extrabold text-xs text-[#B73F1D]">
+                                <span className="font-heading font-extrabold text-xs text-[#CA340A]">
                                   ₹{order.grandTotal}
                                 </span>
                               </div>
                               <p className="text-[11px] text-[#8C5E51] mt-0.5 leading-relaxed">
-                                Please pay <strong className="text-[#4A2117]">₹{order.grandTotal}</strong> in cash to your server or at the cashier counter.
+                                Please pay <strong className="text-[#4A2117]">₹{order.grandTotal}</strong> via Cash or UPI at the counter when settling your order.
                               </p>
                             </div>
-                          </div>
-
-                          <div className="pt-2 border-t border-[#EBDAD0]/70 flex items-center justify-between gap-2">
-                            <span className="text-[11px] text-[#8C5E51] font-medium">Need to pay online instead?</span>
-                            <button
-                              disabled={payingOrderId === order.id}
-                              onClick={() => handleSwitchToOnline(order)}
-                              className="py-1.5 px-3 bg-[#B73F1D] text-cream hover:bg-[#9D3E22] font-heading font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-60"
-                            >
-                              {payingOrderId === order.id ? (
-                                <>
-                                  <Loader2 size={13} className="animate-spin" />
-                                  <span>OPENING...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <CreditCard size={13} />
-                                  <span>PAY ONLINE (₹{order.grandTotal})</span>
-                                </>
-                              )}
-                            </button>
                           </div>
                         </div>
                       )}
 
-                      {/* State 4: UNPAID -> Payment options directly accessible */}
+                      {/* State 4: UNPAID -> Pay at Counter in prominent orange */}
                       {order.status !== "CANCELLED" && order.paymentStatus !== "PAID" && order.paymentStatus !== "PENDING_CASH" && (
                         <div className="p-3.5 bg-gradient-to-br from-[#FFF9F5] to-white border border-[#EBDAD0] rounded-2xl flex flex-col gap-2.5 shadow-sm">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5 text-[#4A2117] font-heading font-extrabold text-xs">
-                              <CreditCard size={14} className="text-[#B73F1D]" />
+                              <Banknote size={14} className="text-[#CA340A]" />
                               <span>CHOOSE PAYMENT METHOD</span>
                             </div>
                             <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300/70 rounded-full text-[10px] font-extrabold uppercase tracking-wider">
-                              DINE-IN
+                              {order.tableNumber === "TAKEAWAY" ? "TAKE AWAY" : "DINE-IN"}
                             </span>
                           </div>
 
@@ -908,37 +894,19 @@ export default function CartOrdersSheet() {
                             Select how you would like to settle Ticket #{order.orderNumber}:
                           </p>
 
-                          <div className="grid grid-cols-2 gap-2 mt-0.5">
-                            <button
-                              disabled={payingOrderId === order.id}
-                              onClick={() => handlePayOnline(order)}
-                              className="py-2.5 px-3 bg-[#B73F1D] text-cream hover:bg-[#9D3E22] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer disabled:opacity-60"
-                            >
-                              {payingOrderId === order.id ? (
-                                <>
-                                  <Loader2 size={14} className="animate-spin" />
-                                  <span>OPENING...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <CreditCard size={14} />
-                                  <span>PAY ONLINE (₹{order.grandTotal})</span>
-                                </>
-                              )}
-                            </button>
-
+                          <div className="mt-0.5">
                             <button
                               disabled={payingOrderId === order.id}
                               onClick={() => handleSelectCash(order.id)}
-                              className="py-2.5 px-3 bg-white text-[#4A2117] border border-[#EBDAD0] hover:bg-[#F7ECE4] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+                              className="w-full py-3 px-4 bg-[#CA340A] text-white hover:bg-[#B73F1D] font-heading font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60"
                             >
-                              <Banknote size={14} />
-                              <span>PAY AT COUNTER</span>
+                              <Banknote size={15} />
+                              <span>PAY AT COUNTER (₹{order.grandTotal})</span>
                             </button>
                           </div>
 
                           <div className="text-[10px] text-center text-[#8C5E51] font-medium pt-0.5">
-                            Online (UPI, GPay, PhonePe, Cards) or Cash on Delivery / Counter
+                            Pay via Cash or UPI at the counter when your food is ready
                           </div>
                         </div>
                       )}
@@ -1304,6 +1272,15 @@ export default function CartOrdersSheet() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Premium Order Placement Success Modal */}
+      <OrderSuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        orderNumber={successModalOrder?.orderNumber}
+        tableNumber={successModalOrder?.tableNumber || selectedTable || tableNumber}
+        totalAmount={successModalOrder?.grandTotal ?? grandTotal}
+      />
     </div>
   );
 }

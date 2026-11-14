@@ -3,6 +3,29 @@ import { getAllOrders, getAllMenuItems } from "@/lib/db";
 import { menuData } from "@/data/menu";
 import { requireAdminAuth } from "@/lib/auth";
 
+// IST is UTC + 5:30 (Chengalpattu, Tamil Nadu, India)
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function getIstParts(dateInput: Date | string | number) {
+  const d = typeof dateInput === "object" ? dateInput : new Date(dateInput);
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  return {
+    year: ist.getUTCFullYear(),
+    month: ist.getUTCMonth(),
+    date: ist.getUTCDate(),
+    hours: ist.getUTCHours(),
+    minutes: ist.getUTCMinutes(),
+    day: ist.getUTCDay(),
+    dateStr: ist.toISOString().slice(0, 10), // "YYYY-MM-DD"
+  };
+}
+
+function getIstDayEpochRange(year: number, month: number, date: number) {
+  const startEpoch = Date.UTC(year, month, date, 0, 0, 0, 0) - IST_OFFSET_MS;
+  const endEpoch = Date.UTC(year, month, date, 23, 59, 59, 999) - IST_OFFSET_MS;
+  return { startEpoch, endEpoch };
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requireAdminAuth(req);
   if (authError) return authError;
@@ -17,6 +40,7 @@ export async function GET(req: NextRequest) {
     // Exclude private orders strictly from customer analytics
     const orders = allOrders.filter((o) => o.orderType !== "PRIVATE");
     const now = new Date();
+    const istNow = getIstParts(now);
 
     let startDate: Date;
     let endDate: Date;
@@ -24,64 +48,73 @@ export async function GET(req: NextRequest) {
     let selectedDateLabel = "";
 
     const formatDateShort = (d: Date) =>
-      d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
 
     if (range === "yesterday") {
-      const y = new Date(now);
-      y.setDate(now.getDate() - 1);
-      startDate = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0);
-      endDate = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
+      const yesterdayDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const istYest = getIstParts(yesterdayDate);
+      const { startEpoch, endEpoch } = getIstDayEpochRange(istYest.year, istYest.month, istYest.date);
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
       periodLabel = "Yesterday";
       selectedDateLabel = formatDateShort(startDate);
     } else if (range === "date" && dateParam) {
       const parts = dateParam.split("-").map(Number);
-      startDate = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
-      endDate = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
+      const { startEpoch, endEpoch } = getIstDayEpochRange(parts[0], parts[1] - 1, parts[2]);
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
       const formatted = formatDateShort(startDate);
       periodLabel = formatted;
       selectedDateLabel = formatted;
     } else if (range === "today") {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const { startEpoch, endEpoch } = getIstDayEpochRange(istNow.year, istNow.month, istNow.date);
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
       periodLabel = "Today";
       selectedDateLabel = formatDateShort(startDate);
     } else if (range === "week" || range === "this_week" || range === "7days") {
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 6);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const endEpoch = Date.UTC(istNow.year, istNow.month, istNow.date, 23, 59, 59, 999) - IST_OFFSET_MS;
+      const startEpoch = Date.UTC(istNow.year, istNow.month, istNow.date - 6, 0, 0, 0, 0) - IST_OFFSET_MS;
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
       periodLabel = "Past 7 Days";
       selectedDateLabel = `${formatDateShort(startDate)} – ${formatDateShort(endDate)}`;
     } else if (range === "30days" || range === "month" || range === "this_month") {
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 29);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const endEpoch = Date.UTC(istNow.year, istNow.month, istNow.date, 23, 59, 59, 999) - IST_OFFSET_MS;
+      const startEpoch = Date.UTC(istNow.year, istNow.month, istNow.date - 29, 0, 0, 0, 0) - IST_OFFSET_MS;
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
       periodLabel = "Past 30 Days";
       selectedDateLabel = `${formatDateShort(startDate)} – ${formatDateShort(endDate)}`;
     } else if (range === "year" || range === "this_year") {
-      startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-      const yearStr = `${now.getFullYear()}`;
+      const startEpoch = Date.UTC(istNow.year, 0, 1, 0, 0, 0, 0) - IST_OFFSET_MS;
+      const endEpoch = Date.UTC(istNow.year, 11, 31, 23, 59, 59, 999) - IST_OFFSET_MS;
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
+      const yearStr = `${istNow.year}`;
       periodLabel = yearStr;
       selectedDateLabel = yearStr;
     } else if (range === "custom" && startDateParam) {
       const sParts = startDateParam.split("-").map(Number);
-      startDate = new Date(sParts[0], sParts[1] - 1, sParts[2], 0, 0, 0, 0);
+      const startEpoch = Date.UTC(sParts[0], sParts[1] - 1, sParts[2], 0, 0, 0, 0) - IST_OFFSET_MS;
+      let endEpoch: number;
       if (endDateParam) {
         const eParts = endDateParam.split("-").map(Number);
-        endDate = new Date(eParts[0], eParts[1] - 1, eParts[2], 23, 59, 59, 999);
+        endEpoch = Date.UTC(eParts[0], eParts[1] - 1, eParts[2], 23, 59, 59, 999) - IST_OFFSET_MS;
       } else {
-        endDate = new Date(sParts[0], sParts[1] - 1, sParts[2], 23, 59, 59, 999);
+        endEpoch = Date.UTC(sParts[0], sParts[1] - 1, sParts[2], 23, 59, 59, 999) - IST_OFFSET_MS;
       }
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
       const sFormatted = formatDateShort(startDate);
       const eFormatted = formatDateShort(endDate);
       periodLabel = sFormatted === eFormatted ? sFormatted : `${sFormatted} – ${eFormatted}`;
       selectedDateLabel = periodLabel;
     } else {
-      // Default to today
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      // Default to today in IST
+      const { startEpoch, endEpoch } = getIstDayEpochRange(istNow.year, istNow.month, istNow.date);
+      startDate = new Date(startEpoch);
+      endDate = new Date(endEpoch);
       periodLabel = "Today";
       selectedDateLabel = formatDateShort(startDate);
     }
@@ -133,7 +166,7 @@ export async function GET(req: NextRequest) {
       (range === "custom" && startDate.toDateString() === endDate.toDateString());
 
     if (isSingleDay) {
-      // 12 2-hour buckets: 12am, 2am, 4am, 6am, 8am, 10am, 12pm, 2pm, 4pm, 6pm, 8pm, 10pm
+      // 12 2-hour buckets: 12am, 2am, 4am, 6am, 8am, 10am, 12pm, 2pm, 4pm, 6pm, 8pm, 10pm (in IST)
       const hourlyLabels = [
         "12am", "2am", "4am", "6am", "8am", "10am",
         "12pm", "2pm", "4pm", "6pm", "8pm", "10pm"
@@ -144,15 +177,15 @@ export async function GET(req: NextRequest) {
         const endHour = startHour + 2;
 
         const bucketOrders = nonCancelledOrders.filter((o) => {
-          const d = new Date(o.createdAt);
-          const h = d.getHours();
+          const h = getIstParts(o.createdAt).hours;
           return h >= startHour && h < endHour;
         });
 
         const bucketPaid = bucketOrders.filter((o) => o.paymentStatus === "PAID");
         const bucketCredit = bucketOrders.filter((o) => o.paymentStatus !== "PAID");
 
-        const bucketSales = bucketPaid.reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0);
+        const bucketPaidSales = bucketPaid.reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0);
+        const bucketGrossSales = bucketOrders.reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0);
         const bucketCreditVal = bucketCredit.reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0);
         const bucketCash = bucketPaid.filter((o) => o.paymentMethod === "CASH").reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0);
         const bucketOnline = bucketPaid.filter((o) => o.paymentMethod === "ONLINE").reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0);
@@ -160,31 +193,32 @@ export async function GET(req: NextRequest) {
         timeline.push({
           label: hourlyLabels[i],
           fullLabel: `${hourlyLabels[i]} – ${hourlyLabels[(i + 1) % 12]}`,
-          sales: bucketSales,
+          sales: bucketPaidSales > 0 ? bucketPaidSales : bucketGrossSales,
           orders: bucketOrders.length,
           cash: bucketCash,
           online: bucketOnline,
           credit: bucketCreditVal,
         });
       }
-    } else if (range === "week" || range === "this_week") {
-      // 7 day buckets: Mon, Tue, Wed, Thu, Fri, Sat, Sun
-      const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    } else if (range === "week" || range === "this_week" || range === "7days") {
+      // 7 day buckets ending today (in IST)
+      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       for (let d = 0; d < 7; d++) {
-        const dayDate = new Date(startDate);
-        dayDate.setDate(startDate.getDate() + d);
-        const dayStr = dayDate.toISOString().slice(0, 10);
+        const dayEpoch = startDate.getTime() + d * 24 * 60 * 60 * 1000;
+        const dayIst = getIstParts(dayEpoch);
+        const dayStr = dayIst.dateStr;
+        const weekdayName = dayNames[dayIst.day];
 
         const bucketOrders = nonCancelledOrders.filter((o) => {
-          return o.createdAt.slice(0, 10) === dayStr;
+          return getIstParts(o.createdAt).dateStr === dayStr;
         });
 
         const bucketPaid = bucketOrders.filter((o) => o.paymentStatus === "PAID");
         const bucketCredit = bucketOrders.filter((o) => o.paymentStatus !== "PAID");
 
         timeline.push({
-          label: dayNames[d],
-          fullLabel: dayDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+          label: weekdayName,
+          fullLabel: new Date(dayEpoch).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Kolkata" }),
           sales: bucketPaid.reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0),
           orders: bucketOrders.length,
           cash: bucketPaid.filter((o) => o.paymentMethod === "CASH").reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0),
@@ -195,10 +229,8 @@ export async function GET(req: NextRequest) {
     } else if (range === "30days" || range === "month" || range === "this_month") {
       // 10 steps across the past 30 days (every 3 days)
       for (let d = 0; d < 30; d += 3) {
-        const dayDate = new Date(startDate);
-        dayDate.setDate(startDate.getDate() + d);
-        const nextDate = new Date(dayDate);
-        nextDate.setDate(dayDate.getDate() + 3);
+        const dayDate = new Date(startDate.getTime() + d * 24 * 60 * 60 * 1000);
+        const nextDate = new Date(dayDate.getTime() + 3 * 24 * 60 * 60 * 1000);
 
         const bucketOrders = nonCancelledOrders.filter((o) => {
           const t = new Date(o.createdAt).getTime();
@@ -209,8 +241,8 @@ export async function GET(req: NextRequest) {
         const bucketCredit = bucketOrders.filter((o) => o.paymentStatus !== "PAID");
 
         timeline.push({
-          label: dayDate.toLocaleDateString("en-US", { day: "2-digit", month: "short" }),
-          fullLabel: `${dayDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+          label: dayDate.toLocaleDateString("en-US", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" }),
+          fullLabel: `${dayDate.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}`,
           sales: bucketPaid.reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0),
           orders: bucketOrders.length,
           cash: bucketPaid.filter((o) => o.paymentMethod === "CASH").reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0),
@@ -223,8 +255,8 @@ export async function GET(req: NextRequest) {
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       for (let m = 0; m < 12; m++) {
         const bucketOrders = nonCancelledOrders.filter((o) => {
-          const d = new Date(o.createdAt);
-          return d.getFullYear() === now.getFullYear() && d.getMonth() === m;
+          const ist = getIstParts(o.createdAt);
+          return ist.year === istNow.year && ist.month === m;
         });
 
         const bucketPaid = bucketOrders.filter((o) => o.paymentStatus === "PAID");
@@ -232,7 +264,7 @@ export async function GET(req: NextRequest) {
 
         timeline.push({
           label: months[m],
-          fullLabel: `${months[m]} ${now.getFullYear()}`,
+          fullLabel: `${months[m]} ${istNow.year}`,
           sales: bucketPaid.reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0),
           orders: bucketOrders.length,
           cash: bucketPaid.filter((o) => o.paymentMethod === "CASH").reduce((acc, o) => acc + (Number(o.grandTotal) || 0), 0),
@@ -360,10 +392,10 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Peak sales hour detection
+    // Peak sales hour detection (IST)
     const hourCounts: Record<number, number> = {};
     nonCancelledOrders.forEach((o) => {
-      const h = new Date(o.createdAt).getHours();
+      const h = getIstParts(o.createdAt).hours;
       hourCounts[h] = (hourCounts[h] || 0) + 1;
     });
 

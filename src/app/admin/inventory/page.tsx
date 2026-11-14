@@ -1,0 +1,1528 @@
+"use client";
+
+import React, { useState, useEffect, useMemo } from "react";
+import AdminLayout from "@/components/Admin/AdminLayout";
+import Link from "next/link";
+import {
+  FileSpreadsheet,
+  Plus,
+  Download,
+  Calendar,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  Search,
+  Filter,
+  Lock,
+  Unlock,
+  Save,
+  Truck,
+  Trash2,
+  ClipboardCheck,
+  ChevronRight,
+  Package,
+  Layers,
+  ArrowUpRight,
+  Sparkles,
+  Info,
+  RotateCcw,
+} from "lucide-react";
+import {
+  InventoryCategory,
+  InventoryIngredient,
+  InventoryDay,
+  InventoryDayItem,
+  InventoryMovement,
+  getKolkataDateString,
+  calculateUsedQty,
+} from "@/types/inventory";
+
+export default function AdminInventoryPage() {
+  const todayDate = useMemo(() => getKolkataDateString(), []);
+  const [selectedDate, setSelectedDate] = useState<string>(todayDate);
+  const [activeTab, setActiveTab] = useState<"register" | "overview" | "movements" | "master">("register");
+
+  // Core Data States
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const [day, setDay] = useState<InventoryDay | null>(null);
+  const [items, setItems] = useState<InventoryDayItem[]>([]);
+  const [categories, setCategories] = useState<InventoryCategory[]>([]);
+  const [ingredients, setIngredients] = useState<InventoryIngredient[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+
+  // Filter States for Daily Register
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Local draft changes for daily register (maps itemId -> partial changes)
+  const [draftChanges, setDraftChanges] = useState<
+    Record<
+      string,
+      {
+        opening_qty?: number;
+        purchased_qty?: number;
+        wastage_qty?: number;
+        closing_actual_qty?: number | null;
+        notes?: string;
+      }
+    >
+  >({});
+
+  // Modals
+  const [showAddIngredientModal, setShowAddIngredientModal] = useState<boolean>(false);
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState<boolean>(false);
+  const [showLogMovementModal, setShowLogMovementModal] = useState<boolean>(false);
+  const [showFinalizeModal, setShowFinalizeModal] = useState<boolean>(false);
+
+  // New Ingredient Form
+  const [newIngForm, setNewIngForm] = useState({
+    name: "",
+    category_id: "",
+    unit: "kg",
+    min_stock_level: 0,
+    notes: "",
+  });
+
+  // New Category Form
+  const [newCatForm, setNewCatForm] = useState({
+    name: "",
+    code: "",
+    display_order: 10,
+  });
+
+  // New Movement Form
+  const [newMovForm, setNewMovForm] = useState({
+    ingredient_id: "",
+    movement_type: "PURCHASE" as "PURCHASE" | "WASTAGE",
+    quantity: 1,
+    unit: "kg",
+    supplier: "",
+    cost: "",
+    reason: "",
+    notes: "",
+  });
+
+  // Load Day Register & Meta
+  const fetchDayData = async (targetDate: string) => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch(`/api/admin/inventory/daily?date=${targetDate}`);
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to load inventory data");
+      }
+      setDay(json.day);
+      setItems(json.items || []);
+      setCategories(json.categories || []);
+      setDraftChanges({});
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to fetch inventory data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load Ingredients Master
+  const fetchIngredientsMaster = async () => {
+    try {
+      const res = await fetch("/api/admin/inventory/ingredients");
+      const json = await res.json();
+      if (json.success) {
+        setIngredients(json.ingredients || []);
+      }
+    } catch {}
+  };
+
+  // Load Movements
+  const fetchMovements = async () => {
+    try {
+      const res = await fetch("/api/admin/inventory/movements");
+      const json = await res.json();
+      if (json.success) {
+        setMovements(json.movements || []);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchDayData(selectedDate);
+    fetchIngredientsMaster();
+    fetchMovements();
+  }, [selectedDate]);
+
+  // Handle inline changes in daily register
+  const handleCellChange = (
+    itemId: string,
+    field: "opening_qty" | "purchased_qty" | "wastage_qty" | "closing_actual_qty" | "notes",
+    rawVal: string
+  ) => {
+    setDraftChanges((prev) => {
+      const existing = prev[itemId] || {};
+      let val: any;
+
+      if (field === "notes") {
+        val = rawVal;
+      } else if (rawVal === "" || rawVal === undefined) {
+        // Empty string means uncounted for closing, or 0 for purchased/wastage
+        val = field === "closing_actual_qty" ? null : 0;
+      } else {
+        const num = parseFloat(rawVal);
+        val = isNaN(num) ? (field === "closing_actual_qty" ? null : 0) : Math.max(0, num);
+      }
+
+      return {
+        ...prev,
+        [itemId]: {
+          ...existing,
+          [field]: val,
+        },
+      };
+    });
+  };
+
+  // Save all pending daily register changes
+  const saveRegisterChanges = async () => {
+    if (!day || Object.keys(draftChanges).length === 0) return;
+    setSaving(true);
+    setErrorMessage(null);
+    try {
+      const updates = Object.entries(draftChanges).map(([id, patch]) => ({
+        id,
+        ...patch,
+      }));
+
+      const res = await fetch("/api/admin/inventory/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dayId: day.id,
+          updates,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to save daily register");
+      }
+
+      setDay(json.day);
+      setItems(json.items);
+      setDraftChanges({});
+      setSaveSuccessMessage("Daily register saved successfully!");
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Finalize Day Register
+  const finalizeDay = async () => {
+    if (!day) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/inventory/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dayId: day.id,
+          action: "finalize",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to finalize day");
+      }
+      setDay(json.day);
+      setShowFinalizeModal(false);
+      setSaveSuccessMessage("Day finalized and locked! Closing actuals carried forward to next day.");
+      setTimeout(() => setSaveSuccessMessage(null), 4000);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to finalize day");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Reopen Day Register for Corrections (Switches status back to DRAFT)
+  const reopenDay = async () => {
+    if (!day) return;
+    setSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch("/api/admin/inventory/daily", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dayId: day.id,
+          action: "reopen",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to reopen day register");
+      }
+      setDay(json.day);
+      setSaveSuccessMessage("✅ Register reopened for corrections! Status changed back to Draft. You can now edit quantities.");
+      setTimeout(() => setSaveSuccessMessage(null), 5000);
+      fetchDayData(selectedDate);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to reopen day register");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle Add Ingredient Submit
+  const handleAddIngredient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch("/api/admin/inventory/ingredients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newIngForm),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to add ingredient");
+
+      setShowAddIngredientModal(false);
+      setNewIngForm({ name: "", category_id: "", unit: "kg", min_stock_level: 0, notes: "" });
+      setSaveSuccessMessage("✅ Ingredient added successfully!");
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      fetchDayData(selectedDate);
+      fetchIngredientsMaster();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to add ingredient");
+    }
+  };
+
+  // Handle Add Category Submit
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch("/api/admin/inventory/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCatForm),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to add category");
+
+      setShowAddCategoryModal(false);
+      setNewCatForm({ name: "", code: "", display_order: 10 });
+      setSaveSuccessMessage("✅ Category created successfully!");
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      fetchDayData(selectedDate);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to add category");
+    }
+  };
+
+  // Handle Log Movement Submit
+  const handleLogMovement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch("/api/admin/inventory/movements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...newMovForm,
+          date: selectedDate,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to log movement");
+
+      setShowLogMovementModal(false);
+      setNewMovForm({
+        ingredient_id: "",
+        movement_type: "PURCHASE",
+        quantity: 1,
+        unit: "kg",
+        supplier: "",
+        cost: "",
+        reason: "",
+        notes: "",
+      });
+      setSaveSuccessMessage("✅ Stock movement recorded successfully!");
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      fetchDayData(selectedDate);
+      fetchMovements();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to log movement");
+    }
+  };
+
+  // Filtered Items for Daily Register Table
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesCat =
+        selectedCategoryFilter === "ALL" || item.category_id === selectedCategoryFilter;
+      const matchesSearch =
+        searchQuery === "" ||
+        item.ingredient_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.ingredient_number.toString().includes(searchQuery);
+      return matchesCat && matchesSearch;
+    });
+  }, [items, selectedCategoryFilter, searchQuery]);
+
+  // Group filtered items by category
+  const groupedItemsByCategory = useMemo(() => {
+    const map = new Map<string, { category: InventoryCategory; items: InventoryDayItem[] }>();
+    categories.forEach((cat) => {
+      map.set(cat.id, { category: cat, items: [] });
+    });
+
+    filteredItems.forEach((item) => {
+      if (map.has(item.category_id)) {
+        map.get(item.category_id)!.items.push(item);
+      } else {
+        // Fallback for custom or unknown category
+        const fallbackCat: InventoryCategory = {
+          id: item.category_id,
+          code: "?",
+          name: item.category_name,
+          display_order: 99,
+          is_active: true,
+        };
+        map.set(item.category_id, { category: fallbackCat, items: [item] });
+      }
+    });
+
+    return Array.from(map.values()).filter((g) => g.items.length > 0);
+  }, [categories, filteredItems]);
+
+  // Calculations for stats
+  const totalCounted = useMemo(() => items.filter((i) => i.is_counted).length, [items]);
+  const totalIngredientsCount = items.length;
+  const isFinalized = day?.status === "FINALIZED";
+
+  const hasUnsavedChanges = Object.keys(draftChanges).length > 0;
+
+  return (
+    <AdminLayout>
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* TOP BENTO HEADER: TITLE, DATE, STATS (Matches Mockup 1) */}
+        <div className="bg-[#2C1710] text-[#FFF9F5] rounded-3xl p-6 sm:p-8 shadow-xl border border-[#CA340A]/20 relative overflow-hidden">
+          <div className="absolute -right-16 -top-16 w-64 h-64 bg-[#CA340A]/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="p-2.5 rounded-xl bg-[#CA340A]/30 text-[#FFF9F5] border border-[#CA340A]/40">
+                  <FileSpreadsheet size={24} />
+                </span>
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+                    Inventory Management
+                  </h1>
+                  <p className="text-xs sm:text-sm text-[#E2C7BA] font-medium">
+                    Manual Daily Register & Physical Stock Counting
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-[#E2C7BA]/80 font-mono mt-1">
+                {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link
+                href="/admin/stock-checklist"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 text-xs font-bold transition shadow-sm"
+              >
+                <ClipboardCheck size={16} />
+                <span>Open Mobile Checklist</span>
+              </Link>
+
+              <button
+                onClick={() => setShowAddIngredientModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/15 text-xs font-bold transition"
+              >
+                <Plus size={16} />
+                <span>Add Ingredient</span>
+              </button>
+
+              <button
+                onClick={() => setShowAddCategoryModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/15 text-xs font-bold transition"
+              >
+                <Plus size={16} />
+                <span>New Category</span>
+              </button>
+
+              <a
+                href={`/api/admin/inventory/export?date=${selectedDate}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#CA340A] hover:bg-[#b02d08] text-white text-xs font-bold transition shadow-md"
+              >
+                <Download size={16} />
+                <span>Export CSV</span>
+              </a>
+            </div>
+          </div>
+
+          {/* 4 BENTO METRIC STATS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-white/10">
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+              <span className="text-[11px] uppercase tracking-wider text-[#E2C7BA] font-semibold">
+                Ingredients
+              </span>
+              <div className="text-2xl sm:text-3xl font-extrabold text-[#FFF9F5] mt-1">
+                {totalIngredientsCount || 69}
+              </div>
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+              <span className="text-[11px] uppercase tracking-wider text-[#E2C7BA] font-semibold">
+                Categories
+              </span>
+              <div className="text-2xl sm:text-3xl font-extrabold text-[#FFF9F5] mt-1">
+                {categories.length || 8}
+              </div>
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+              <span className="text-[11px] uppercase tracking-wider text-[#E2C7BA] font-semibold">
+                Counted Today
+              </span>
+              <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 mt-1">
+                {totalCounted}
+                <span className="text-base font-normal text-white/50">/{totalIngredientsCount}</span>
+              </div>
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+              <span className="text-[11px] uppercase tracking-wider text-[#E2C7BA] font-semibold">
+                Register Status
+              </span>
+              <div className="mt-1 flex items-center gap-2 flex-wrap">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-black tracking-wide ${
+                    isFinalized
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : day?.status === "READY_FOR_REVIEW"
+                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                      : day?.status === "COUNTING"
+                      ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  }`}
+                >
+                  {day?.status || "DRAFT"}
+                </span>
+
+                {isFinalized && (
+                  <button
+                    type="button"
+                    onClick={reopenDay}
+                    disabled={saving}
+                    className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition flex items-center gap-1 cursor-pointer"
+                    title="Reopen for Corrections"
+                  >
+                    <RotateCcw size={11} className={saving ? "animate-spin" : ""} />
+                    <span>Reopen</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* FEEDBACK BANNERS */}
+        {saveSuccessMessage && (
+          <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-900 border border-emerald-200 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
+              <span className="text-sm font-semibold">{saveSuccessMessage}</span>
+            </div>
+            <button
+              onClick={() => setSaveSuccessMessage(null)}
+              className="text-xs text-emerald-700 font-bold hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="p-4 rounded-2xl bg-red-50 text-red-900 border border-red-200 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3">
+              <AlertTriangle size={20} className="text-red-600 shrink-0" />
+              <span className="text-sm font-semibold">{errorMessage}</span>
+            </div>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="text-xs text-red-700 font-bold hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* CONTROLS: TABS & DATE SELECTOR */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white/70 backdrop-blur-md p-3 rounded-2xl border border-[#CA340A]/10 shadow-xs">
+          {/* Main Tab Nav */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <button
+              onClick={() => setActiveTab("register")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === "register"
+                  ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
+                  : "text-[#52525b] hover:bg-[#2C1710]/5"
+              }`}
+            >
+              <FileSpreadsheet size={15} />
+              <span>Daily Register</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("overview")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === "overview"
+                  ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
+                  : "text-[#52525b] hover:bg-[#2C1710]/5"
+              }`}
+            >
+              <Layers size={15} />
+              <span>Category Progress</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("movements")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === "movements"
+                  ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
+                  : "text-[#52525b] hover:bg-[#2C1710]/5"
+              }`}
+            >
+              <Truck size={15} />
+              <span>Purchases & Wastage</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("master")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+                activeTab === "master"
+                  ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
+                  : "text-[#52525b] hover:bg-[#2C1710]/5"
+              }`}
+            >
+              <Package size={15} />
+              <span>Ingredients Master</span>
+            </button>
+          </div>
+
+          {/* Date Picker & Refresh */}
+          <div className="flex items-center gap-2.5 self-end sm:self-auto">
+            <div className="flex items-center gap-1.5 bg-[#FFF9F5] px-3 py-1.5 rounded-xl border border-[#CA340A]/15 text-xs text-[#2C1710]">
+              <Calendar size={14} className="text-[#CA340A]" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold text-[#2C1710] focus:outline-hidden"
+              />
+            </div>
+
+            <button
+              onClick={() => fetchDayData(selectedDate)}
+              title="Refresh register"
+              className="p-2 rounded-xl bg-white hover:bg-neutral-100 text-[#2C1710] border border-[#CA340A]/15 transition"
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* TAB 1: DAILY REGISTER (THE PHYSICAL NOTEBOOK SHEET - MOCKUP 2)           */}
+        {/* ========================================================================= */}
+        {activeTab === "register" && (
+          <div className="space-y-6">
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white/60 p-3 rounded-2xl border border-[#CA340A]/10">
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                <button
+                  onClick={() => setSelectedCategoryFilter("ALL")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    selectedCategoryFilter === "ALL"
+                      ? "bg-[#CA340A] text-white"
+                      : "bg-white text-zinc-700 hover:bg-neutral-100 border border-neutral-200"
+                  }`}
+                >
+                  All Categories
+                </button>
+                {categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategoryFilter(cat.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+                      selectedCategoryFilter === cat.id
+                        ? "bg-[#CA340A] text-white"
+                        : "bg-white text-zinc-700 hover:bg-neutral-100 border border-neutral-200"
+                    }`}
+                  >
+                    {cat.code}. {cat.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Box */}
+              <div className="relative min-w-[220px]">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Search ingredient..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-white rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                />
+              </div>
+            </div>
+
+            {/* Notebook Instructions & Formula Bar */}
+            <div className="bg-[#FAF9F5] border-l-4 border-[#CA340A] p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-zinc-700">
+              <div className="flex items-center gap-2">
+                <Info size={16} className="text-[#CA340A] shrink-0" />
+                <span>
+                  <strong>Manual Register:</strong> Enter quantities directly into rows.{" "}
+                  <code className="bg-white px-2 py-0.5 rounded border border-zinc-200 text-[#CA340A] font-bold">
+                    Used = Opening + Purchased − Wastage − Closing Actual
+                  </code>
+                </span>
+              </div>
+              <div className="text-[11px] text-zinc-500">
+                Next day opening balances automatically carry forward from previous finalized closing actuals.
+              </div>
+            </div>
+
+            {/* REGISTER TABLES GROUPED BY CATEGORY */}
+            {loading ? (
+              <div className="py-20 text-center text-zinc-400 font-medium">
+                Loading daily inventory register...
+              </div>
+            ) : groupedItemsByCategory.length === 0 ? (
+              <div className="py-16 text-center bg-white rounded-2xl border border-dashed border-zinc-300 text-zinc-500">
+                No ingredients found matching the filter.
+              </div>
+            ) : (
+              groupedItemsByCategory.map((group) => {
+                const cat = group.category;
+                return (
+                  <div
+                    key={cat.id}
+                    className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs overflow-hidden"
+                  >
+                    {/* Category Header (Matches Notebook) */}
+                    <div className="bg-[#FAF9F5] px-5 py-3.5 border-b border-zinc-200 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-7 h-7 rounded-lg bg-[#2C1710] text-white flex items-center justify-center font-bold text-xs">
+                          {cat.code}
+                        </span>
+                        <div>
+                          <h2 className="text-sm font-bold text-zinc-900">{cat.name}</h2>
+                          <p className="text-[11px] text-zinc-500">
+                            Enter quantities like the physical register
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-zinc-400 font-medium">
+                        {group.items.length} items
+                      </span>
+                    </div>
+
+                    {/* Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-zinc-50/70 border-b border-zinc-200 text-zinc-600 font-bold tracking-wide uppercase text-[10px]">
+                            <th className="py-3 px-4 w-12 text-center">#</th>
+                            <th className="py-3 px-4 min-w-[180px]">Ingredient</th>
+                            <th className="py-3 px-3 w-28 text-center">Opening</th>
+                            <th className="py-3 px-3 w-28 text-center">Purchased</th>
+                            <th className="py-3 px-3 w-28 text-center">Wastage</th>
+                            <th className="py-3 px-3 w-32 text-center">Closing Actual</th>
+                            <th className="py-3 px-4 w-28 text-center">Used</th>
+                            <th className="py-3 px-4 w-20 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {group.items.map((item) => {
+                            const draft = draftChanges[item.id] || {};
+                            const opening = draft.opening_qty !== undefined ? draft.opening_qty : item.opening_qty;
+                            const purchased =
+                              draft.purchased_qty !== undefined ? draft.purchased_qty : item.purchased_qty;
+                            const wastage = draft.wastage_qty !== undefined ? draft.wastage_qty : item.wastage_qty;
+                            const closing =
+                              draft.closing_actual_qty !== undefined
+                                ? draft.closing_actual_qty
+                                : item.closing_actual_qty;
+
+                            const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
+                            const isCounted = closing !== null && closing !== undefined;
+
+                            return (
+                              <tr
+                                key={item.id}
+                                className={`hover:bg-zinc-50/60 transition ${
+                                  isCounted ? "bg-emerald-50/20" : ""
+                                }`}
+                              >
+                                {/* Item Number */}
+                                <td className="py-3 px-4 text-center text-zinc-400 font-mono text-[11px]">
+                                  {item.ingredient_number}
+                                </td>
+
+                                {/* Ingredient Name & Unit */}
+                                <td className="py-3 px-4">
+                                  <div className="font-bold text-zinc-950 text-xs sm:text-sm">
+                                    {item.ingredient_name}
+                                  </div>
+                                  <span className="inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 font-mono text-[10px] mt-0.5">
+                                    {item.unit}
+                                  </span>
+                                </td>
+
+                                {/* Opening (Carry-forward balance) */}
+                                <td className="py-3 px-3 text-center">
+                                  {isFinalized ? (
+                                    <span className="font-bold text-zinc-900">{opening}</span>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={opening}
+                                      onChange={(e) =>
+                                        handleCellChange(item.id, "opening_qty", e.target.value)
+                                      }
+                                      className="w-20 text-center py-1.5 px-2 bg-zinc-50 rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                                    />
+                                  )}
+                                </td>
+
+                                {/* Purchased Input */}
+                                <td className="py-3 px-3 text-center">
+                                  {isFinalized ? (
+                                    <span className="font-semibold text-zinc-800">{purchased}</span>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={purchased === 0 ? "0" : purchased}
+                                      onChange={(e) =>
+                                        handleCellChange(item.id, "purchased_qty", e.target.value)
+                                      }
+                                      className="w-20 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                                    />
+                                  )}
+                                </td>
+
+                                {/* Wastage Input */}
+                                <td className="py-3 px-3 text-center">
+                                  {isFinalized ? (
+                                    <span className="font-semibold text-zinc-800">{wastage}</span>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      value={wastage === 0 ? "0" : wastage}
+                                      onChange={(e) =>
+                                        handleCellChange(item.id, "wastage_qty", e.target.value)
+                                      }
+                                      className="w-20 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                                    />
+                                  )}
+                                </td>
+
+                                {/* Closing Actual (Count) Input */}
+                                <td className="py-3 px-3 text-center">
+                                  {isFinalized ? (
+                                    <span className="font-bold text-zinc-900">
+                                      {closing !== null ? closing : "—"}
+                                    </span>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      placeholder="Count"
+                                      value={closing === null || closing === undefined ? "" : closing}
+                                      onChange={(e) =>
+                                        handleCellChange(item.id, "closing_actual_qty", e.target.value)
+                                      }
+                                      className={`w-24 text-center py-1.5 px-2 rounded-lg border text-xs font-bold focus:outline-hidden ${
+                                        isCounted
+                                          ? "bg-emerald-50 border-emerald-300 text-emerald-900 focus:border-emerald-500"
+                                          : "bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400 focus:border-[#CA340A]"
+                                      }`}
+                                    />
+                                  )}
+                                </td>
+
+                                {/* Used (Calculated Output) */}
+                                <td className="py-3 px-4 text-center">
+                                  {calculatedUsed !== null ? (
+                                    <span
+                                      className={`font-black text-sm ${
+                                        calculatedUsed < 0
+                                          ? "text-red-600"
+                                          : "text-[#CA340A]"
+                                      }`}
+                                    >
+                                      {calculatedUsed}
+                                    </span>
+                                  ) : (
+                                    <span className="text-zinc-300 font-bold">—</span>
+                                  )}
+                                </td>
+
+                                {/* Counted Status */}
+                                <td className="py-3 px-4 text-center">
+                                  {isCounted ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                                      <CheckCircle2 size={13} />
+                                      Done
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] font-medium text-amber-600">
+                                      Pending
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            {/* STICKY SAVE & FINALIZE BAR */}
+            <div className="sticky bottom-4 z-30 bg-[#2C1710] text-[#FFF9F5] p-4 rounded-2xl shadow-2xl border border-[#CA340A]/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`w-3 h-3 rounded-full ${
+                    hasUnsavedChanges ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
+                  }`}
+                />
+                <div>
+                  <div className="text-xs font-bold text-[#FFF9F5]">
+                    {hasUnsavedChanges
+                      ? `${Object.keys(draftChanges).length} unsaved change(s)`
+                      : "All daily entries saved to database"}
+                  </div>
+                  <div className="text-[11px] text-[#E2C7BA]">
+                    {totalCounted} of {totalIngredientsCount} items counted
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                {hasUnsavedChanges && (
+                  <button
+                    onClick={saveRegisterChanges}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#CA340A] hover:bg-[#b02d08] text-white text-xs font-bold transition shadow-md disabled:opacity-50"
+                  >
+                    <Save size={15} />
+                    <span>{saving ? "Saving..." : "Save Register Changes"}</span>
+                  </button>
+                )}
+
+                {!isFinalized && (
+                  <button
+                    onClick={() => setShowFinalizeModal(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/20 text-xs font-bold transition"
+                  >
+                    <Lock size={15} />
+                    <span>Finalize Day Register</span>
+                  </button>
+                )}
+
+                {isFinalized && (
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold">
+                      <CheckCircle2 size={15} />
+                      <span>Finalized by {day?.finalized_by || "Manager"}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={reopenDay}
+                      disabled={saving}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition shadow-sm cursor-pointer"
+                    >
+                      <RotateCcw size={15} className={saving ? "animate-spin" : ""} />
+                      <span>{saving ? "Reopening..." : "Reopen for Corrections"}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: CATEGORY OVERVIEW & PROGRESS (MOCKUP 1 BOTTOM HALF)               */}
+        {/* ========================================================================= */}
+        {activeTab === "overview" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-6 border border-zinc-200/80 shadow-xs">
+              <h2 className="text-base font-bold text-zinc-900 mb-1">
+                Today&apos;s Category Progress
+              </h2>
+              <p className="text-xs text-zinc-500 mb-6">
+                Progress tracking for physical daily counting across all 8 standard sections
+              </p>
+
+              <div className="divide-y divide-zinc-100">
+                {categories.map((cat) => {
+                  const catItems = items.filter((i) => i.category_id === cat.id);
+                  const countedCount = catItems.filter((i) => i.is_counted).length;
+                  const total = catItems.length;
+                  const isDone = total > 0 && countedCount === total;
+                  const pct = total > 0 ? Math.round((countedCount / total) * 100) : 0;
+
+                  return (
+                    <div key={cat.id} className="py-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-xl bg-[#FAF9F5] border border-zinc-200 text-[#2C1710] flex items-center justify-center font-black text-xs">
+                          {cat.code}
+                        </span>
+                        <div>
+                          <div className="text-sm font-bold text-zinc-950">{cat.name}</div>
+                          <div className="text-xs text-zinc-400 mt-0.5">
+                            {countedCount} of {total} ingredients counted ({pct}%)
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="hidden sm:block w-36 bg-zinc-100 rounded-full h-2.5 overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 ${
+                              isDone ? "bg-emerald-500" : "bg-[#CA340A]"
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-black tracking-wide ${
+                            isDone
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {isDone ? "Done" : "Pending"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: PURCHASES & WASTAGE LOG                                           */}
+        {/* ========================================================================= */}
+        {activeTab === "movements" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-zinc-900">Purchases & Wastage Logs</h2>
+                <p className="text-xs text-zinc-500">
+                  Audited stock entry and waste logging for vendor deliveries and kitchen scrap
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowLogMovementModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-xs"
+              >
+                <Plus size={16} />
+                <span>Log Movement</span>
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold uppercase text-[10px]">
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Ingredient</th>
+                      <th className="py-3 px-4 text-center">Quantity</th>
+                      <th className="py-3 px-4">Supplier / Reason</th>
+                      <th className="py-3 px-4 text-right">Cost (₹)</th>
+                      <th className="py-3 px-4">Recorded By</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {movements.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-zinc-400">
+                          No stock movements recorded yet. Click &quot;Log Movement&quot; to add a purchase or wastage.
+                        </td>
+                      </tr>
+                    ) : (
+                      movements.map((mov) => {
+                        const ing = items.find((i) => i.ingredient_id === mov.ingredient_id);
+                        return (
+                          <tr key={mov.id} className="hover:bg-zinc-50">
+                            <td className="py-3 px-4 text-zinc-500 font-mono text-[11px]">{mov.date}</td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  mov.movement_type === "PURCHASE"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {mov.movement_type}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-bold text-zinc-900">
+                              {mov.ingredient_name || ing?.ingredient_name || mov.ingredient_id}
+                            </td>
+                            <td className="py-3 px-4 text-center font-bold text-zinc-900">
+                              {mov.quantity} {mov.unit}
+                            </td>
+                            <td className="py-3 px-4 text-zinc-600">
+                              {mov.supplier || mov.reason || "—"}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-zinc-800">
+                              {mov.cost ? `₹${mov.cost}` : "—"}
+                            </td>
+                            <td className="py-3 px-4 text-zinc-500">{mov.recorded_by}</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: INGREDIENTS MASTER                                                */}
+        {/* ========================================================================= */}
+        {activeTab === "master" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-zinc-900">Ingredients Catalog</h2>
+                <p className="text-xs text-zinc-500">
+                  Master list of standard ingredients, stock thresholds, and counting units
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowAddIngredientModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-xs"
+              >
+                <Plus size={16} />
+                <span>+ Add Ingredient</span>
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold uppercase text-[10px]">
+                      <th className="py-3 px-4 w-12 text-center">#</th>
+                      <th className="py-3 px-4">Ingredient Name</th>
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4 text-center">Counting Unit</th>
+                      <th className="py-3 px-4 text-center">Min Stock Alert</th>
+                      <th className="py-3 px-4">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {(ingredients.length > 0 ? ingredients : items.map(i => ({
+                      id: i.ingredient_id,
+                      item_number: i.ingredient_number,
+                      name: i.ingredient_name,
+                      category_id: i.category_id,
+                      unit: i.unit,
+                      min_stock_level: 0,
+                      display_order: i.ingredient_number,
+                      is_active: true,
+                      notes: i.notes || null
+                    }))).map((ing) => {
+                      const cat = categories.find((c) => c.id === ing.category_id);
+                      return (
+                        <tr key={ing.id} className="hover:bg-zinc-50">
+                          <td className="py-3 px-4 text-center font-mono text-zinc-400">
+                            {ing.item_number}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-zinc-900">{ing.name}</td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 text-[11px] font-medium">
+                              {cat ? `${cat.code}. ${cat.name}` : ing.category_id}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono text-zinc-700">{ing.unit}</td>
+                          <td className="py-3 px-4 text-center font-mono text-zinc-700">
+                            {ing.min_stock_level || 0} {ing.unit}
+                          </td>
+                          <td className="py-3 px-4 text-zinc-400 text-[11px]">{ing.notes || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: ADD INGREDIENT                                                    */}
+        {/* ========================================================================= */}
+        {showAddIngredientModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-zinc-200">
+              <h3 className="text-lg font-bold text-zinc-900 mb-1">Add New Ingredient</h3>
+              <p className="text-xs text-zinc-500 mb-5">
+                Add a new ingredient to the daily register and physical stock checklist.
+              </p>
+
+              <form onSubmit={handleAddIngredient} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Ingredient Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sriracha Mayo"
+                    value={newIngForm.name}
+                    onChange={(e) => setNewIngForm({ ...newIngForm, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Category</label>
+                    <select
+                      required
+                      value={newIngForm.category_id}
+                      onChange={(e) => setNewIngForm({ ...newIngForm, category_id: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    >
+                      <option value="">Select Category</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.code}. {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Counting Unit</label>
+                    <select
+                      value={newIngForm.unit}
+                      onChange={(e) => setNewIngForm({ ...newIngForm, unit: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    >
+                      <option value="kg">kg</option>
+                      <option value="L">L</option>
+                      <option value="pcs">pcs</option>
+                      <option value="g">g</option>
+                      <option value="pack">pack</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Minimum Stock Level (Alert Threshold)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={newIngForm.min_stock_level}
+                    onChange={(e) =>
+                      setNewIngForm({ ...newIngForm, min_stock_level: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddIngredientModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md"
+                  >
+                    Save Ingredient
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: ADD CATEGORY                                                      */}
+        {/* ========================================================================= */}
+        {showAddCategoryModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-zinc-200">
+              <h3 className="text-lg font-bold text-zinc-900 mb-1">Create Category</h3>
+              <p className="text-xs text-zinc-500 mb-5">Add a new section to organize inventory.</p>
+
+              <form onSubmit={handleAddCategory} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Category Code</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={3}
+                    placeholder="e.g. I, J"
+                    value={newCatForm.code}
+                    onChange={(e) => setNewCatForm({ ...newCatForm, code: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 uppercase focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Category Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Beverages & Syrups"
+                    value={newCatForm.name}
+                    onChange={(e) => setNewCatForm({ ...newCatForm, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCategoryModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md"
+                  >
+                    Create Category
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: LOG MOVEMENT (PURCHASE / WASTAGE)                                  */}
+        {/* ========================================================================= */}
+        {showLogMovementModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-zinc-200">
+              <h3 className="text-lg font-bold text-zinc-900 mb-1">Record Stock Movement</h3>
+              <p className="text-xs text-zinc-500 mb-5">
+                Log a stock delivery or wastage entry. This updates today&apos;s daily register.
+              </p>
+
+              <form onSubmit={handleLogMovement} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Type</label>
+                    <select
+                      value={newMovForm.movement_type}
+                      onChange={(e) =>
+                        setNewMovForm({ ...newMovForm, movement_type: e.target.value as any })
+                      }
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    >
+                      <option value="PURCHASE">Purchase / Delivery</option>
+                      <option value="WASTAGE">Wastage / Scrap</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Ingredient</label>
+                    <select
+                      required
+                      value={newMovForm.ingredient_id}
+                      onChange={(e) => {
+                        const ing = items.find((i) => i.ingredient_id === e.target.value);
+                        setNewMovForm({
+                          ...newMovForm,
+                          ingredient_id: e.target.value,
+                          unit: ing?.unit || "kg",
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    >
+                      <option value="">Select Item</option>
+                      {items.map((i) => (
+                        <option key={i.ingredient_id} value={i.ingredient_id}>
+                          {i.ingredient_number}. {i.ingredient_name} ({i.unit})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.001"
+                      required
+                      value={newMovForm.quantity}
+                      onChange={(e) =>
+                        setNewMovForm({ ...newMovForm, quantity: parseFloat(e.target.value) || 0 })
+                      }
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Cost (₹ Optional)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="e.g. 450"
+                      value={newMovForm.cost}
+                      onChange={(e) => setNewMovForm({ ...newMovForm, cost: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    {newMovForm.movement_type === "PURCHASE" ? "Supplier / Vendor Name" : "Reason for Wastage"}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={
+                      newMovForm.movement_type === "PURCHASE"
+                        ? "e.g. Local Meat Market, Metro"
+                        : "e.g. Spilled, Expired, Burnt"
+                    }
+                    value={
+                      newMovForm.movement_type === "PURCHASE" ? newMovForm.supplier : newMovForm.reason
+                    }
+                    onChange={(e) =>
+                      newMovForm.movement_type === "PURCHASE"
+                        ? setNewMovForm({ ...newMovForm, supplier: e.target.value })
+                        : setNewMovForm({ ...newMovForm, reason: e.target.value })
+                    }
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowLogMovementModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md"
+                  >
+                    Record Movement
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: FINALIZE DAY CONFIRMATION                                         */}
+        {/* ========================================================================= */}
+        {showFinalizeModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-zinc-200">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mb-4">
+                <Lock size={24} />
+              </div>
+
+              <h3 className="text-lg font-bold text-zinc-900 mb-1">Finalize Daily Register?</h3>
+              <p className="text-xs text-zinc-600 mb-4 leading-relaxed">
+                Finalizing locks today&apos;s counts. The current Closing Actual balances will automatically
+                become tomorrow&apos;s Opening balances.
+              </p>
+
+              <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 mb-5 text-xs text-zinc-700 space-y-1">
+                <div>
+                  <strong>Total Ingredients:</strong> {totalIngredientsCount}
+                </div>
+                <div>
+                  <strong>Counted:</strong> {totalCounted} (
+                  {totalIngredientsCount - totalCounted} uncounted)
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowFinalizeModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={finalizeDay}
+                  disabled={saving}
+                  className="px-5 py-2 rounded-xl bg-[#2C1710] text-[#FFF9F5] text-xs font-bold hover:bg-black transition shadow-md disabled:opacity-50"
+                >
+                  {saving ? "Finalizing..." : "Confirm & Lock Day"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </AdminLayout>
+  );
+}

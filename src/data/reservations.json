@@ -1,15 +1,5 @@
 [
   {
-    "id": "RES-A1-MW1RUIPQ",
-    "tableNumber": "A1",
-    "customerSessionId": "sess_1793775842506_x44240g",
-    "customerPhone": "9629181283",
-    "reservedAt": "2026-11-04T07:04:44.246Z",
-    "expiresAt": "2026-11-04T07:16:03.413Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-A1-MW1RWCAT"
-  },
-  {
     "id": "RES-B5-MW1U0J6Q",
     "tableNumber": "B5",
     "customerSessionId": "sess_1793779152880_v5am6fa",
@@ -20,34 +10,72 @@
     "visitId": "VISIT-B5-MW1U3T7U"
   },
   {
-    "id": "RES-B4-MW3CXU2Q",
-    "tableNumber": "B4",
-    "customerSessionId": "sess_1793721512886_3hj9irs",
-    "customerPhone": "1234567899",
-    "reservedAt": "2026-11-05T09:42:57.020Z",
-    "expiresAt": "2026-11-05T09:53:14.204Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-B4-MW3CY9AJ"
+    "id": "RES-A1-MWF78LJC",
+    "tableNumber": "A1",
+    "customerSessionId": "sess_1794587786703_a8bbe6b08f314ab68b548ca31f350a37",
+    "customerPhone": "1234565678",
+    "reservedAt": "2026-11-13T16:36:35.475Z",
+    "expiresAt": "2026-11-13T16:46:35.475Z",
+    "status": "ACTIVE"
   },
   {
-    "id": "RES-B4-MW6SUJVU",
-    "tableNumber": "B4",
-    "customerSessionId": "sess_1790439195177_ulvduvd",
-    "customerPhone": "8608113558",
-    "reservedAt": "2026-11-07T19:31:36.069Z",
-    "expiresAt": "2026-11-07T20:31:36.618Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-C2-MW6RU8V0",
-    "notes": "Transferred from C2 by Cashier Staff"
+    "id": "RES-C3-MWFTV5P5",
+    "tableNumber": "C3",
+    "customerSessionId": "sess_1794625662237_200af81449124812b8e0f01452442a12",
+    "customerPhone": "7637251616",
+    "reservedAt": "2026-11-14T03:09:59.488Z",
+    "expiresAt": "2026-11-14T03:19:59.488Z",
+    "status": "ACTIVE"
   },
   {
-    "id": "RES-B3-MW7QVJGT",
+    "id": "RES-B3-MWG3WT0E",
     "tableNumber": "B3",
-    "customerSessionId": "sess_1794136898412_f6d7a1a88d524e059bd8a3505534f877",
-    "customerPhone": "2345677812",
-    "reservedAt": "2026-11-08T11:24:09.169Z",
-    "expiresAt": "2026-11-08T11:34:09.169Z",
+    "customerSessionId": "sess_1794642665812_5037350db92746bfa5add3a96454c8b1",
+    "customerPhone": "2323234563",
+    "reservedAt": "2026-11-14T07:51:11.971Z",
+    "expiresAt": "2026-11-14T08:01:11.971Z",
     "status": "CONVERTED",
-    "visitId": "VISIT-B3-MW7QW20O"
+    "visitId": "VISIT-B3-MWG3XC98"
+  },
+  {
+    "id": "RES-B6-MWG4G6GU",
+    "tableNumber": "B6",
+    "customerSessionId": "sess_1794643491038_376ce0de215648e59a80b68717e241a2",
+    "customerPhone": "2323234563",
+    "reservedAt": "2026-11-14T08:06:15.547Z",
+    "expiresAt": "2026-11-14T08:16:15.547Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B6-MWG4HA3W"
+  },
+  {
+    "id": "RES-A2-MWG6L2AK",
+    "tableNumber": "A2",
+    "customerSessionId": "sess_1794647161582_7af2d24d55c9479ca290ce593274f1bd",
+    "customerPhone": "",
+    "reservedAt": "2026-11-14T09:06:03.687Z",
+    "expiresAt": "2026-11-14T09:16:03.687Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-A2-MWG6LAQC"
+  },
+  {
+    "id": "RES-B4-MWGG1XPQ",
+    "tableNumber": "B4",
+    "customerSessionId": "sess_1794663064340_04088515c7a84cbb9becb0240a614f8b",
+    "customerPhone": "1122334455",
+    "reservedAt": "2026-11-14T13:31:07.313Z",
+    "expiresAt": "2026-11-14T13:41:07.313Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B4-MWGG25VY"
+  },
+  {
+    "id": "RES-C2-MWGGAJ1S",
+    "tableNumber": "C2",
+    "customerSessionId": "sess_1794663064340_04088515c7a84cbb9becb0240a614f8b",
+    "customerPhone": "1122334455",
+    "reservedAt": "2026-11-14T13:37:47.767Z",
+    "expiresAt": "2026-11-14T14:37:48.784Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B4-MWGG25VY",
+    "notes": "Transferred from B4 by Cashier Staff"
   }
 ]

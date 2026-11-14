@@ -160,10 +160,14 @@ export default function PrivateSalesAnalyticsPage() {
     ];
   }, [data?.timeline]);
 
-  // Trending items (exact count from API)
+  // Trending items (Dynamically sorted by Quantity or Total Value)
   const trendingList: ProductItem[] = useMemo(() => {
-    return data?.trendingItems || [];
-  }, [data?.trendingItems]);
+    const raw: ProductItem[] = [...(data?.trendingItems || [])];
+    if (trendingMetric === "revenue") {
+      return raw.sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+    }
+    return raw.sort((a, b) => (b.quantity || 0) - (a.quantity || 0));
+  }, [data?.trendingItems, trendingMetric]);
 
   // Inventory filtered items for inventory buying management in private orders
   const inventoryItems = useMemo(() => {
@@ -613,24 +617,26 @@ export default function PrivateSalesAnalyticsPage() {
                 {/* Quantity vs Revenue Toggle */}
                 <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-xl text-xs font-bold text-zinc-500">
                   <button
+                    type="button"
                     onClick={() => setTrendingMetric("quantity")}
-                    className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                    className={`p-1.5 px-2 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                       trendingMetric === "quantity"
-                        ? "bg-white text-zinc-900 shadow-2xs font-extrabold"
-                        : "hover:text-zinc-800"
+                        ? "bg-white text-zinc-900 shadow-xs font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-800"
                     }`}
-                    title="Sold Quantity"
+                    title="Sort by Sold Quantity"
                   >
                     <ShoppingBag size={13} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => setTrendingMetric("revenue")}
-                    className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                    className={`p-1.5 px-2.5 rounded-lg transition-all cursor-pointer font-extrabold text-xs ${
                       trendingMetric === "revenue"
-                        ? "bg-white text-zinc-900 shadow-2xs font-extrabold"
-                        : "hover:text-zinc-800"
+                        ? "bg-[#3B1220] text-white shadow-xs"
+                        : "text-zinc-500 hover:text-zinc-800"
                     }`}
-                    title="Total Value in ₹"
+                    title="Sort by Total Value in ₹"
                   >
                     ₹
                   </button>

@@ -7,9 +7,11 @@ export interface KotData {
   orderNumber: string;
   tableNumber: string;
   round: number;
-  terminalName: string;
+  terminalName?: string;
   dateStr: string;
   timeStr: string;
+  isPrivateOrder?: boolean;
+  isTakeaway?: boolean;
   items: Array<{
     name: string;
     quantity: number;
@@ -20,8 +22,8 @@ export interface KotData {
 }
 
 /**
- * Accurately replicates the user's uploaded physical KOT receipt (Image 4)
- * Width: 32 columns standard (compact) or 42 columns (80mm)
+ * High-visibility, de-cluttered KOT Receipt Engine
+ * Width: 32 columns standard (compact/58mm) or 42 columns (80mm)
  */
 export class KotReceiptEngine {
   private static LINE_WIDTH = 32;
@@ -34,18 +36,35 @@ export class KotReceiptEngine {
   static formatPlainSlip(data: KotData): string {
     const divider = "-".repeat(this.LINE_WIDTH);
 
+    let headerTitle = `TABLE ${data.tableNumber.toUpperCase()}`;
+    if (data.isPrivateOrder) {
+      headerTitle = "*** PRIVATE ORDER ***";
+    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway) {
+      headerTitle = "*** TAKE AWAY ***";
+    }
+
     const lines: string[] = [
-      `Table No: ${data.tableNumber}`,
-      `Date: ${data.dateStr} ${data.timeStr}`,
-      `Terminal : ${data.terminalName || "Billing 1"}`,
-      divider,
-      this.formatLine("Item", "Qty"),
-      divider,
+      headerTitle,
+      `Order: #${data.orderNumber} | ${data.timeStr}`,
     ];
 
+    if (data.round && data.round > 1) {
+      lines.push(`Round: ${data.round} (Add-on)`);
+    }
+
+    lines.push(divider);
+    lines.push(this.formatLine("ITEM", "QTY"));
+    lines.push(divider);
+
     data.items.forEach((item) => {
+      const isTakeaway = data.tableNumber === "TAKEAWAY" || data.isTakeaway;
+      let displayName = item.name;
+      if (isTakeaway && !displayName.toLowerCase().includes("(parcel)")) {
+        displayName = `${displayName} - (parcel)`;
+      }
+
       // Main item name and quantity on right
-      lines.push(this.formatLine(item.name.substring(0, 26), String(item.quantity)));
+      lines.push(this.formatLine(displayName.substring(0, 26), String(item.quantity)));
 
       // Add-on / customization if present, indented below parent
       if (item.notes) {
@@ -64,6 +83,7 @@ export class KotReceiptEngine {
 
   /**
    * Generates standard ESC/POS binary command string for 80mm thermal receipt printer (CN811-UEWB)
+   * Formatted with BOLD, double-height dish items and zero clutter for busy kitchen visibility.
    */
   static generateEscPosCommands(data: KotData): string {
     const ESC = "\x1B";
@@ -77,28 +97,47 @@ export class KotReceiptEngine {
     // 2. Set character code page to standard PC437
     commands += `${ESC}t\x00`;
 
-    // 3. Double-width & Double-height for Table Header
+    // 3. Double-width & Double-height for Table / Type Header
     commands += `${ESC}!\x30`; // double width + double height + bold
-    commands += `Table No: ${data.tableNumber}\n`;
+    if (data.isPrivateOrder) {
+      commands += `*** PRIVATE ORDER ***\n`;
+    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway) {
+      commands += `*** TAKE AWAY ***\n`;
+    } else {
+      commands += `TABLE ${data.tableNumber.toUpperCase()}\n`;
+    }
 
     // 4. Reset font to standard Font A
     commands += `${ESC}!\x00`;
 
-    // 5. Date & Terminal
-    commands += `Date: ${data.dateStr} ${data.timeStr}\n`;
-    commands += `Terminal : ${data.terminalName || "Billing 1"}\n`;
+    // 5. Compact Order & Time line (no redundant terminal/hash clutter)
+    commands += `Order: #${data.orderNumber}  |  ${data.timeStr}\n`;
+    if (data.round && data.round > 1) {
+      commands += `Round: ${data.round} (Add-on Order)\n`;
+    }
 
     // 6. Header divider
     const divider = "-".repeat(32);
     commands += `${divider}\n`;
     commands += `${ESC}E\x01`; // Bold ON
-    commands += `${this.formatLine("Item", "Qty")}\n`;
+    commands += `${this.formatLine("ITEM", "QTY")}\n`;
     commands += `${ESC}E\x00`; // Bold OFF
     commands += `${divider}\n`;
 
-    // 7. Items
+    // 7. Dishes in BOLD & DOUBLE HEIGHT for chefs
+    const isTakeaway = data.tableNumber === "TAKEAWAY" || data.isTakeaway;
     data.items.forEach((item) => {
-      commands += `${this.formatLine(item.name.substring(0, 26), String(item.quantity))}\n`;
+      let displayName = item.name;
+      if (isTakeaway && !displayName.toLowerCase().includes("(parcel)")) {
+        displayName = `${displayName} - (parcel)`;
+      }
+
+      // Double-height + Bold for item line
+      commands += `${ESC}!\x10`; // Double-height
+      commands += `${ESC}E\x01`; // Bold ON
+      commands += `${this.formatLine(displayName.substring(0, 24), String(item.quantity))}\n`;
+      commands += `${ESC}E\x00`; // Bold OFF
+      commands += `${ESC}!\x00`; // Normal font
 
       if (item.notes) {
         const cleanNote = item.notes.replace(/\[[^\]]+\]/g, "").trim();
@@ -143,7 +182,8 @@ export function filterItemsForRound(items: OrderItem[], targetRound: number): Or
 export function buildKotData(
   order: Order,
   targetRound = 1,
-  terminalName = "Billing 1"
+  terminalName = "Billing 1",
+  options?: { isPrivateOrder?: boolean; isTakeaway?: boolean }
 ): KotData {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-GB", {
@@ -167,6 +207,14 @@ export function buildKotData(
   const shortOrderId = order.orderNumber.replace(/^[A-Za-z]+-/, "");
   const kotId = `KOT-${shortOrderId}-${String(targetRound).padStart(2, "0")}`;
 
+  const isTakeaway = Boolean(
+    options?.isTakeaway ||
+    order.tableNumber === "TAKEAWAY" ||
+    (order as any).isTakeaway ||
+    (order as any).orderType === "TAKEAWAY"
+  );
+  const isPrivateOrder = Boolean(options?.isPrivateOrder || (order as any).isPrivate);
+
   return {
     kotId,
     orderId: order.id,
@@ -176,11 +224,19 @@ export function buildKotData(
     terminalName,
     dateStr,
     timeStr,
-    items: itemsToPrint.map((it) => ({
-      name: it.name,
-      quantity: it.quantity || 1,
-      notes: it.notes,
-    })),
+    isTakeaway,
+    isPrivateOrder,
+    items: itemsToPrint.map((it) => {
+      let itemName = it.name;
+      if (isTakeaway && !itemName.toLowerCase().includes("(parcel)")) {
+        itemName = `${itemName} - (parcel)`;
+      }
+      return {
+        name: itemName,
+        quantity: it.quantity || 1,
+        notes: it.notes,
+      };
+    }),
     totalItems,
     totalQuantity,
   };

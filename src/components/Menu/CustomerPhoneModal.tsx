@@ -19,6 +19,7 @@ import {
   Check,
   Salad,
   Drumstick,
+  ShoppingBag,
 } from "lucide-react";
 import FoodIcon from "@/components/FoodIcon";
 import { useCart, FoodPreference, CustomerProfile } from "@/context/CartContext";
@@ -47,7 +48,7 @@ export default function CustomerPhoneModal({
   const router = useRouter();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState<"welcome_back" | "phone" | "preference" | "table_select">("phone");
+  const [step, setStep] = useState<"welcome_back" | "phone" | "dining_option" | "preference" | "table_select">("phone");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -110,6 +111,23 @@ export default function CustomerPhoneModal({
       onPhoneSaved(savedPhone, clean);
     }
     router.push("/menu");
+  };
+
+  const handleSelectTakeaway = () => {
+    setTableNumber("TAKEAWAY");
+    setSelectedTable("TAKEAWAY");
+    try {
+      localStorage.setItem("spiral_table_number", "TAKEAWAY");
+      localStorage.setItem("spiral_order_mode", "TAKEAWAY");
+    } catch {}
+    if (onPhoneSaved) {
+      const savedPhone =
+        phone.replace(/\D/g, "").slice(-10) ||
+        (typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : "") ||
+        "";
+      onPhoneSaved(savedPhone, "TAKEAWAY");
+    }
+    setIsOpen(false);
   };
 
   // Check returning customer session on load (30-day retention window)
@@ -219,7 +237,7 @@ export default function CustomerPhoneModal({
     }
 
     setError("");
-    setStep("preference");
+    setStep("dining_option");
   };
 
   // Handler for Food Preference Selection (Saves 30-day session & closes modal)
@@ -303,7 +321,7 @@ export default function CustomerPhoneModal({
     }
 
     fetchTablesList();
-    setStep("table_select");
+    setStep("dining_option");
   };
 
   // Handler for Reserving Table in Step 3
@@ -569,6 +587,94 @@ export default function CustomerPhoneModal({
         )}
 
         {/* ========================================================= */}
+        {/* SCENARIO 1 - STEP 2: DINE IN OR TAKE AWAY SELECTION */}
+        {/* ========================================================= */}
+        {step === "dining_option" && (
+          <div className="space-y-4">
+            <div className="text-center space-y-1">
+              <span className="text-[11px] font-extrabold text-[#CA340A] uppercase tracking-wider">
+                Select Dining Option
+              </span>
+              <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
+                DINE IN OR TAKE AWAY?
+              </h2>
+              <p className="text-xs text-[#6B5E55] font-medium">
+                Choose whether you are dining at a table or picking up parcel.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              {/* Option 1: DINE IN */}
+              <button
+                type="button"
+                onClick={() => {
+                  fetchTablesList();
+                  setStep("preference");
+                }}
+                className="w-full p-4 rounded-2xl bg-white border-2 border-[#3A1710]/20 hover:border-[#CA340A] hover:bg-orange-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <UtensilsCrossed size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
+                        DINE IN
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-[#CA340A]">
+                        Table Seating
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#6B5E55] mt-0.5">
+                      Select your floor table and enjoy table service
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight size={18} className="text-[#CA340A] opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+
+              {/* Option 2: TAKE AWAY / PARCEL */}
+              <button
+                type="button"
+                onClick={handleSelectTakeaway}
+                className="w-full p-4 rounded-2xl bg-white border-2 border-emerald-500/30 hover:border-emerald-600 hover:bg-emerald-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <ShoppingBag size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
+                        TAKE AWAY (PARCEL)
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        Counter Pickup
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#6B5E55] mt-0.5">
+                      Skip table reservation and pick up packaged food
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight size={18} className="text-emerald-700 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setStep("phone")}
+                className="text-xs font-semibold text-[#8C5E51] hover:text-[#CA340A] transition-colors"
+              >
+                ← Back to Mobile Number
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
         {/* SCENARIO 1 - SCREEN 2: FOOD PREFERENCE SELECTION */}
         {/* ========================================================= */}
         {step === "preference" && (
@@ -662,6 +768,32 @@ export default function CustomerPhoneModal({
                   : "Choose your floor table to reserve it for 10 minutes."}
               </p>
             </div>
+
+            {/* Quick Take Away / Parcel Mode Selection */}
+            {!conflictVisitTable && (
+              <div className="p-3 bg-gradient-to-r from-[#FFFBF7] to-amber-50/60 border border-amber-200 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-800 flex items-center justify-center shrink-0">
+                    <ShoppingBag size={16} />
+                  </div>
+                  <div>
+                    <div className="font-heading font-extrabold text-xs text-[#2C1710]">
+                      Ordering Take Away / Parcel?
+                    </div>
+                    <p className="text-[10px] text-[#8C5E51]">
+                      Skip table & pick up fresh food at the counter
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSelectTakeaway}
+                  className="px-3.5 py-1.5 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+                >
+                  Take Away
+                </button>
+              </div>
+            )}
 
             {error && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs font-semibold text-red-700 text-center">

@@ -366,6 +366,39 @@ export class PrinterClient {
   }
 
   /**
+   * Print 58mm emergency KOT via Counter USB Printer (when kitchen Ethernet is offline / power cut)
+   */
+  static async printKotAtCounter(
+    kotPayload: any
+  ): Promise<{ success: boolean; message: string; durationMs?: number }> {
+    try {
+      const res = await fetch(`${CONNECTOR_BASE_URL}/printer/print-counter-kot`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer spiral_kot_sig_7f8a9b2c3d4e5f6018273645`,
+        },
+        body: JSON.stringify({ kotPayload }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      const data = await res.json();
+      return {
+        success: Boolean(data.success),
+        message:
+          data.message ||
+          (data.success ? "Emergency KOT printed at Counter USB printer!" : data.error || "Counter KOT print failed."),
+        durationMs: data.durationMs,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || "Failed to reach local print connector for counter KOT.",
+      };
+    }
+  }
+
+  /**
    * Print 58mm test bill on counter printer
    */
   static async printTestCustomerBill(): Promise<{ success: boolean; message: string; durationMs?: number }> {
