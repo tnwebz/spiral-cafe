@@ -784,14 +784,13 @@ export async function executeTableTransferCore(
   try {
     const ordersToMoveMap = new Map<string, { id: string; notes: string | null }>();
 
-    // A. Match by Visit ID
+    // A. Match by Visit ID (move ALL orders in this dining visit, whether paid or unpaid)
     if (targetReq.visitId) {
       const { data: matchedOrders } = await supabaseAdmin
         .from("orders" as any)
         .select("id, notes")
         .ilike("notes", `%[VISIT_ID:${targetReq.visitId}]%`)
-        .neq("status", "CANCELLED")
-        .neq("payment_status", "PAID");
+        .neq("status", "CANCELLED");
 
       if (Array.isArray(matchedOrders)) {
         for (const order of matchedOrders as any[]) {
@@ -807,8 +806,7 @@ export async function executeTableTransferCore(
         .select("id, notes")
         .eq("table_number", fromNorm)
         .eq("customer_session_id", targetReq.customerSessionId)
-        .neq("status", "CANCELLED")
-        .neq("payment_status", "PAID");
+        .neq("status", "CANCELLED");
 
       if (Array.isArray(sisterOrders)) {
         for (const order of sisterOrders as any[]) {
@@ -817,17 +815,35 @@ export async function executeTableTransferCore(
       }
     }
 
-    // C. Always move any remaining active unpaid orders for fromTable
+    // C. Always move any remaining non-cancelled orders for fromTable in dining window
+    const activeCutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
     const { data: remainingFromOrders } = await supabaseAdmin
       .from("orders" as any)
       .select("id, notes")
       .eq("table_number", fromNorm)
       .neq("status", "CANCELLED")
-      .neq("payment_status", "PAID");
+      .gte("created_at", activeCutoffIso);
 
     if (Array.isArray(remainingFromOrders)) {
       for (const order of remainingFromOrders as any[]) {
         ordersToMoveMap.set(order.id, order);
+      }
+    }
+
+    // D. Fallback if map is still empty: grab any non-cancelled order on fromTable
+    if (ordersToMoveMap.size === 0) {
+      const { data: anyTableOrders } = await supabaseAdmin
+        .from("orders" as any)
+        .select("id, notes")
+        .eq("table_number", fromNorm)
+        .neq("status", "CANCELLED")
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (Array.isArray(anyTableOrders)) {
+        for (const order of anyTableOrders as any[]) {
+          ordersToMoveMap.set(order.id, order);
+        }
       }
     }
 
@@ -875,6 +891,33 @@ export async function executeTableTransferCore(
   localRes.push(toReservation);
   writeLocalReservations(localRes);
 
+  // Persist in Supabase table_reservations
+  try {
+    await supabaseAdmin
+      .from("table_reservations" as any)
+      .update({
+        status: "TRANSFERRED",
+        notes: `Transferred to ${toNorm} by ${adminUser}`,
+        updated_at: now,
+      })
+      .eq("table_number", fromNorm)
+      .eq("status", "ACTIVE");
+
+    await supabaseAdmin.from("table_reservations" as any).insert({
+      id: toReservation.id,
+      table_number: toNorm,
+      customer_session_id: targetReq.customerSessionId,
+      customer_phone: targetReq.customerPhone || null,
+      reserved_at: toReservation.reservedAt,
+      expires_at: toReservation.expiresAt,
+      status: "ACTIVE",
+      visit_id: toReservation.visitId,
+      notes: toReservation.notes,
+      created_at: now,
+      updated_at: now,
+    });
+  } catch {}
+
   // 4. Update customer_sessions table if present
   try {
     if (targetReq.customerSessionId && targetReq.customerSessionId !== "counter-manual") {
@@ -889,9 +932,26 @@ export async function executeTableTransferCore(
         .update({ table_number: toNorm, last_active_at: now })
         .eq("customer_phone", targetReq.customerPhone);
     }
+    await supabaseAdmin
+      .from("customer_sessions" as any)
+      .update({ table_number: toNorm, last_active_at: now })
+      .eq("table_number", fromNorm);
   } catch (sessErr) {
     console.warn("Update customer_sessions warning:", sessErr);
   }
+
+  // 4b. Update restaurant_tables in Supabase
+  try {
+    await supabaseAdmin
+      .from("restaurant_tables" as any)
+      .update({ status: "AVAILABLE", active_order_id: null, updated_at: now })
+      .eq("table_number", fromNorm);
+
+    await supabaseAdmin
+      .from("restaurant_tables" as any)
+      .update({ status: "OCCUPIED", updated_at: now })
+      .eq("table_number", toNorm);
+  } catch {}
 
   // 5. Update transfer request record
   const transfers = readLocalTransfers();
@@ -1040,22 +1100,38 @@ export async function adminManualTransfer(params: {
     throw new Error(`Table ${toNorm} is already occupied by an active order.`);
   }
 
-  // 1. Check if source table has active dining orders (Red / Yellow / Green stage)
+  // 1. Check if source table has active dining orders (Red / Yellow / Green stage, or recent dining orders)
   let activeOrderFrom = await getActiveOrderForTable(fromNorm);
   if (!activeOrderFrom) {
     try {
-      const { data: anyUnpaid } = await supabaseAdmin
+      const activeCutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
+      const { data: recentOrders } = await supabaseAdmin
         .from("orders" as any)
         .select("*, order_items(*)")
         .eq("table_number", fromNorm)
         .neq("status", "CANCELLED")
-        .neq("payment_status", "PAID")
+        .gte("created_at", activeCutoffIso)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
 
-      if (anyUnpaid) {
-        activeOrderFrom = mapDbOrderToOrder(anyUnpaid);
+      if (Array.isArray(recentOrders) && recentOrders.length > 0) {
+        activeOrderFrom = mapDbOrderToOrder(recentOrders[0]);
+      }
+    } catch {}
+  }
+
+  if (!activeOrderFrom) {
+    try {
+      const { data: anyOrders } = await supabaseAdmin
+        .from("orders" as any)
+        .select("*, order_items(*)")
+        .eq("table_number", fromNorm)
+        .neq("status", "CANCELLED")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (Array.isArray(anyOrders) && anyOrders.length > 0) {
+        activeOrderFrom = mapDbOrderToOrder(anyOrders[0]);
       }
     } catch {}
   }
@@ -1220,7 +1296,52 @@ export async function adminManualTransfer(params: {
     }
   } catch {}
 
-  throw new Error(`Table ${fromNorm} is currently available with no active session or reservation to transfer.`);
+  // 4. Safe fallback: Staff transfers seat state even if no prior order/reservation
+  const now = new Date().toISOString();
+  await releaseTableReservation(fromNorm, adminUser);
+
+  const fallbackReservation: TableReservation = {
+    id: `RES-${toNorm}-${Date.now().toString(36).toUpperCase()}`,
+    tableNumber: toNorm,
+    customerSessionId: `staff-transfer-${Date.now()}`,
+    reservedAt: now,
+    expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    status: "ACTIVE",
+    visitId: `VISIT-${toNorm}`,
+    notes: `Transferred from Table ${fromNorm} by ${adminUser}`,
+  };
+
+  const localRes = readLocalReservations().map((r) => {
+    if (r.tableNumber.toUpperCase() === fromNorm.toUpperCase() && r.status === "ACTIVE") {
+      return { ...r, status: "TRANSFERRED" as const };
+    }
+    return r;
+  });
+  localRes.push(fallbackReservation);
+  writeLocalReservations(localRes);
+
+  try {
+    await supabaseAdmin.from("table_reservations" as any).insert({
+      id: fallbackReservation.id,
+      table_number: toNorm,
+      customer_session_id: fallbackReservation.customerSessionId,
+      reserved_at: fallbackReservation.reservedAt,
+      expires_at: fallbackReservation.expiresAt,
+      status: "ACTIVE",
+      visit_id: fallbackReservation.visitId,
+      notes: fallbackReservation.notes,
+      created_at: now,
+      updated_at: now,
+    });
+  } catch {}
+
+  return {
+    success: true,
+    fromTable: fromNorm,
+    toTable: toNorm,
+    visitId: `VISIT-${toNorm}`,
+    updatedOrdersCount: 0,
+  };
 }
 
 /**

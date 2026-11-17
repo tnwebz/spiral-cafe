@@ -167,6 +167,7 @@ export default function TableDetailPage() {
   const [availableFloors, setAvailableFloors] = useState<string[]>([]);
   const [targetFloorTable, setTargetFloorTable] = useState<string>("");
   const [transferring, setTransferring] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
   const [isPrintingTransferNotice, setIsPrintingTransferNotice] = useState(false);
   const [transferNoticeResult, setTransferNoticeResult] = useState<string | null>(null);
 
@@ -176,6 +177,7 @@ export default function TableDetailPage() {
   const [actionBanner, setActionBanner] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
 
   const openManualTransferModal = async () => {
+    setTransferError(null);
     try {
       const res = await fetch("/api/tables");
       const d = await res.json();
@@ -193,6 +195,7 @@ export default function TableDetailPage() {
   const handleExecuteManualTransfer = async () => {
     if (!targetFloorTable) return;
     setTransferring(true);
+    setTransferError(null);
     try {
       const res = await fetch("/api/tables/transfer", {
         method: "POST",
@@ -225,10 +228,14 @@ export default function TableDetailPage() {
 
         router.push(`/admin/tables/${targetFloorTable}`);
       } else {
-        setActionBanner({ type: "error", message: d.error || "Failed to transfer table." });
+        const errorMsg = d.error || "Failed to transfer table.";
+        setTransferError(errorMsg);
+        setActionBanner({ type: "error", message: errorMsg });
       }
     } catch (err: any) {
-      setActionBanner({ type: "error", message: err.message || "Failed to transfer table." });
+      const errorMsg = err.message || "Failed to transfer table.";
+      setTransferError(errorMsg);
+      setActionBanner({ type: "error", message: errorMsg });
     } finally {
       setTransferring(false);
     }
@@ -1476,6 +1483,13 @@ export default function TableDetailPage() {
                 </div>
               )}
             </div>
+
+            {transferError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 font-bold flex items-center gap-2">
+                <span className="text-sm shrink-0">⚠️</span>
+                <span>{transferError}</span>
+              </div>
+            )}
 
             <div className="pt-2 flex flex-col gap-2">
               <button

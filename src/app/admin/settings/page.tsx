@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import PWAInstallCard from "@/components/Admin/PWAInstallCard";
 import {
@@ -10,13 +11,30 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
+  Database,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Lock,
+  ArrowRight,
+  X,
 } from "lucide-react";
 
 export default function AdminSettingsPage() {
+  const router = useRouter();
   const [config, setConfig] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
+
+  // Security Audit: Toggle visibility of terminal PINs
+  const [showPins, setShowPins] = useState(false);
+
+  // Data Management Password Verification Modal
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -33,6 +51,36 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleVerifyAndOpenDataManagement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminPasswordInput) {
+      setAuthError("Please enter your administrator password.");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      const res = await fetch("/api/admin/data-management/verify-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: adminPasswordInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsAuthModalOpen(false);
+        setAdminPasswordInput("");
+        router.push("/admin/settings/data-management");
+      } else {
+        setAuthError(data.error || "Incorrect password. Access denied.");
+      }
+    } catch {
+      setAuthError("Network error. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +168,37 @@ export default function AdminSettingsPage() {
 
         {/* PWA Desktop App Installation Card */}
         <PWAInstallCard />
+
+        {/* Data Management Settings Card (Phase 2 Master Implementation) */}
+        <div className="bg-gradient-to-br from-[#FFFDFB] to-[#FFF9F5] p-6 sm:p-7 rounded-2xl border-2 border-[#CA340A]/20 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-xl">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center">
+                <Database size={19} />
+              </div>
+              <h3 className="font-heading font-black text-lg text-[#2C1710]">
+                Data Management
+              </h3>
+            </div>
+            <p className="text-xs sm:text-sm text-[#52525b] leading-relaxed">
+              Monitor database storage, preserve business records, export historical data and access previous archives.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAdminPasswordInput("");
+              setAuthError(null);
+              setIsAuthModalOpen(true);
+            }}
+            className="px-5 py-3 bg-[#2C1710] hover:bg-[#432319] text-white rounded-xl text-xs sm:text-sm font-heading font-black shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 shrink-0 cursor-pointer"
+          >
+            <ShieldCheck size={16} className="text-emerald-400" />
+            <span>Open Data Management</span>
+            <ArrowRight size={14} />
+          </button>
+        </div>
 
         <form onSubmit={handleSaveConfig} className="space-y-6">
           {/* Cafe Profile */}
@@ -242,13 +321,23 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          {/* Terminal PINs */}
+          {/* Terminal PINs (Masked for Security Audit Compliance) */}
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-[#CA340A]/15 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <KeyRound size={18} className="text-[#CA340A]" />
-              <h3 className="font-heading font-black text-lg text-[#2C1710]">
-                Terminal Authorization PINs
-              </h3>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <KeyRound size={18} className="text-[#CA340A]" />
+                <h3 className="font-heading font-black text-lg text-[#2C1710]">
+                  Terminal Authorization PINs
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPins(!showPins)}
+                className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 cursor-pointer"
+              >
+                {showPins ? <EyeOff size={14} /> : <Eye size={14} />}
+                <span>{showPins ? "Mask PINs" : "Show PINs"}</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -257,7 +346,7 @@ export default function AdminSettingsPage() {
                   Admin PIN
                 </label>
                 <input
-                  type="text"
+                  type={showPins ? "text" : "password"}
                   maxLength={6}
                   value={config.adminPin}
                   onChange={(e) => setConfig({ ...config, adminPin: e.target.value })}
@@ -270,7 +359,7 @@ export default function AdminSettingsPage() {
                   Kitchen PIN
                 </label>
                 <input
-                  type="text"
+                  type={showPins ? "text" : "password"}
                   maxLength={6}
                   value={config.kitchenPin}
                   onChange={(e) => setConfig({ ...config, kitchenPin: e.target.value })}
@@ -283,7 +372,7 @@ export default function AdminSettingsPage() {
                   Cashier PIN
                 </label>
                 <input
-                  type="text"
+                  type={showPins ? "text" : "password"}
                   maxLength={6}
                   value={config.cashierPin}
                   onChange={(e) => setConfig({ ...config, cashierPin: e.target.value })}
@@ -304,6 +393,79 @@ export default function AdminSettingsPage() {
             </button>
           </div>
         </form>
+
+        {/* Data Management Administrator Verification Modal */}
+        {isAuthModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="bg-[#FFFDFB] rounded-3xl p-6 sm:p-7 max-w-md w-full border border-[#EBDAD0] shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-[#F0E4DC] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#2C1710] text-amber-400 flex items-center justify-center">
+                    <Lock size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-black text-base text-[#2C1710]">
+                      Administrator Verification
+                    </h3>
+                    <p className="text-[11px] text-[#52525b]">
+                      Enter your Spiral Cafe administrator password to proceed
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsAuthModalOpen(false)}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-black hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {authError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleVerifyAndOpenDataManagement} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2C1710] uppercase tracking-wider mb-1.5">
+                    Admin Password or Master PIN
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Enter password..."
+                    autoFocus
+                    value={adminPasswordInput}
+                    onChange={(e) => setAdminPasswordInput(e.target.value)}
+                    className="w-full px-4 py-3 bg-[#FFF9F5] border border-zinc-200 rounded-xl text-sm font-semibold text-[#2C1710] focus:outline-none focus:border-[#CA340A]"
+                  />
+                  <p className="text-[10px] text-zinc-400 mt-1">
+                    Protected administrative operation. Access expires after 15 minutes.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAuthModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-600 hover:bg-zinc-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className="px-5 py-2.5 bg-[#CA340A] hover:bg-[#A82806] text-white rounded-xl text-xs font-heading font-black shadow-md flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  >
+                    <ShieldCheck size={14} />
+                    <span>{authLoading ? "Verifying..." : "Unlock Data Management"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

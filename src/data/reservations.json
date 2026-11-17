@@ -16,7 +16,8 @@
     "customerPhone": "1234565678",
     "reservedAt": "2026-11-13T16:36:35.475Z",
     "expiresAt": "2026-11-13T16:46:35.475Z",
-    "status": "ACTIVE"
+    "status": "RELEASED",
+    "notes": "Released by Test Runner at 2026-11-15T09:44:06.816Z"
   },
   {
     "id": "RES-C3-MWFTV5P5",
@@ -77,5 +78,35 @@
     "status": "CONVERTED",
     "visitId": "VISIT-B4-MWGG25VY",
     "notes": "Transferred from B4 by Cashier Staff"
+  },
+  {
+    "id": "RES-B5-MWHNDUEX",
+    "tableNumber": "B5",
+    "customerSessionId": "admin_1794594459261_57czv",
+    "reservedAt": "2026-11-15T09:44:06.310Z",
+    "expiresAt": "2026-11-15T10:44:06.969Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-A1-ORD_1794",
+    "notes": "Transferred from A1 by Test Runner"
+  },
+  {
+    "id": "RES-B5-MWHNZQYX",
+    "tableNumber": "B5",
+    "customerSessionId": "admin_1794594459261_57czv",
+    "reservedAt": "2026-11-15T10:01:08.271Z",
+    "expiresAt": "2026-11-15T11:01:08.937Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-A1-ORD_1794",
+    "notes": "Transferred from A1 by Automated Tester"
+  },
+  {
+    "id": "RES-A1-MWHNZSNT",
+    "tableNumber": "A1",
+    "customerSessionId": "admin_1794594459261_57czv",
+    "reservedAt": "2026-11-15T10:01:10.513Z",
+    "expiresAt": "2026-11-15T11:01:11.129Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B5-ORD_1794",
+    "notes": "Transferred from B5 by Automated Tester"
   }
 ]

@@ -1,5 +1,44 @@
 [
   {
+    "id": "MANUAL-TRF-B5-A1-MWHNZS2V",
+    "visitId": "VISIT-B5-ORD_1794",
+    "fromTable": "B5",
+    "toTable": "A1",
+    "customerSessionId": "admin_1794594459261_57czv",
+    "ordersCount": 1,
+    "currentBill": 461,
+    "status": "APPROVED",
+    "requestedAt": "2026-11-15T10:01:10.375Z",
+    "reviewedAt": "2026-11-15T10:01:10.513Z",
+    "reviewedBy": "Automated Tester"
+  },
+  {
+    "id": "MANUAL-TRF-A1-B5-MWHNZQD2",
+    "visitId": "VISIT-A1-ORD_1794",
+    "fromTable": "A1",
+    "toTable": "B5",
+    "customerSessionId": "admin_1794594459261_57czv",
+    "ordersCount": 1,
+    "currentBill": 461,
+    "status": "APPROVED",
+    "requestedAt": "2026-11-15T10:01:08.150Z",
+    "reviewedAt": "2026-11-15T10:01:08.271Z",
+    "reviewedBy": "Automated Tester"
+  },
+  {
+    "id": "MANUAL-TRF-A1-B5-MWHNDTSU",
+    "visitId": "VISIT-A1-ORD_1794",
+    "fromTable": "A1",
+    "toTable": "B5",
+    "customerSessionId": "admin_1794594459261_57czv",
+    "ordersCount": 1,
+    "currentBill": 461,
+    "status": "APPROVED",
+    "requestedAt": "2026-11-15T09:44:06.174Z",
+    "reviewedAt": "2026-11-15T09:44:06.310Z",
+    "reviewedBy": "Test Runner"
+  },
+  {
     "id": "TRF-B4-C2-MWGGACNW",
     "visitId": "VISIT-B4-MWGG25VY",
     "fromTable": "B4",
