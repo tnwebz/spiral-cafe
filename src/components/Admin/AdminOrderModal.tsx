@@ -58,7 +58,7 @@ export default function AdminOrderModal({
   // Cart: Map of item ID -> { item: MenuItem, quantity: number }
   const [cart, setCart] = useState<Map<string, { item: MenuItem; quantity: number }>>(new Map());
   const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: "SUCCESS" | "ERROR"; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "SUCCESS" | "ERROR" | "WARNING"; message: string } | null>(null);
 
   // Load Menu items
   useEffect(() => {
@@ -134,6 +134,14 @@ export default function AdminOrderModal({
     });
   };
 
+  const handleDeleteCompletely = (itemId: string) => {
+    setCart((prev) => {
+      const next = new Map(prev);
+      next.delete(itemId);
+      return next;
+    });
+  };
+
   const handleClearCart = () => setCart(new Map());
 
   // Calculations
@@ -172,9 +180,10 @@ export default function AdminOrderModal({
 
       const data = await res.json();
       if (data.success && data.order) {
+        const isKotPrinted = Boolean(data.printedKot);
         setFeedback({
-          type: "SUCCESS",
-          message: data.message || "Order created and KOT dispatched!",
+          type: isKotPrinted ? "SUCCESS" : "WARNING",
+          message: data.message || (isKotPrinted ? "Take Away Order created and Kitchen KOT printed! ✅" : "Take Away Order placed! Kitchen printer offline — KOT pending."),
         });
         setCart(new Map());
         setCustomerName("");
@@ -185,7 +194,7 @@ export default function AdminOrderModal({
         }
         setTimeout(() => {
           onClose();
-        }, 1200);
+        }, isKotPrinted ? 1400 : 3200);
       } else {
         setFeedback({
           type: "ERROR",
@@ -247,9 +256,15 @@ export default function AdminOrderModal({
           <div className={`px-5 py-2.5 text-xs font-bold flex items-center gap-2 ${
             feedback.type === "SUCCESS"
               ? "bg-emerald-50 text-emerald-800 border-b border-emerald-200"
+              : feedback.type === "WARNING"
+              ? "bg-amber-50 text-amber-900 border-b border-amber-300"
               : "bg-red-50 text-red-800 border-b border-red-200"
           }`}>
-            {feedback.type === "SUCCESS" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+            {feedback.type === "SUCCESS" ? (
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle size={16} className={feedback.type === "WARNING" ? "text-amber-600 shrink-0" : "text-red-600 shrink-0"} />
+            )}
             <span>{feedback.message}</span>
           </div>
         )}
@@ -456,7 +471,7 @@ export default function AdminOrderModal({
                   cartItemsList.map(({ item, quantity }) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between p-2 rounded-xl bg-zinc-50 border border-zinc-100 text-xs"
+                      className="flex items-center justify-between p-2 rounded-xl bg-zinc-50 border border-zinc-100 text-xs gap-2"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-[#2C1710] truncate">
@@ -468,12 +483,48 @@ export default function AdminOrderModal({
                           )}
                         </div>
                         <div className="text-[11px] text-zinc-500">
-                          ₹{item.price} × {quantity}
+                          ₹{item.price} each
                         </div>
                       </div>
-                      <span className="font-heading font-extrabold text-xs text-[#CA340A] ml-2">
-                        ₹{item.price * quantity}
-                      </span>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Stepper */}
+                        <div className="flex items-center gap-1 bg-white rounded-lg p-0.5 border border-zinc-200">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="w-5 h-5 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center cursor-pointer transition-colors"
+                            title="Decrease quantity"
+                          >
+                            <Minus size={10} />
+                          </button>
+                          <span className="font-heading font-extrabold text-xs text-[#CA340A] min-w-[16px] text-center">
+                            {quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddItem(item)}
+                            className="w-5 h-5 rounded bg-[#CA340A] hover:bg-[#B73F1D] text-white flex items-center justify-center cursor-pointer transition-colors"
+                            title="Increase quantity"
+                          >
+                            <Plus size={10} />
+                          </button>
+                        </div>
+
+                        <span className="font-heading font-extrabold text-xs text-[#CA340A] min-w-[50px] text-right">
+                          ₹{item.price * quantity}
+                        </span>
+
+                        {/* Delete button */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCompletely(item.id)}
+                          className="p-1 rounded-md text-red-500 hover:text-white hover:bg-red-600 bg-red-50 border border-red-200/60 transition-all cursor-pointer"
+                          title={`Remove ${item.name}`}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}

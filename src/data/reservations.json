@@ -10,16 +10,6 @@
     "visitId": "VISIT-B5-MW1U3T7U"
   },
   {
-    "id": "RES-A1-MWF78LJC",
-    "tableNumber": "A1",
-    "customerSessionId": "sess_1794587786703_a8bbe6b08f314ab68b548ca31f350a37",
-    "customerPhone": "1234565678",
-    "reservedAt": "2026-11-13T16:36:35.475Z",
-    "expiresAt": "2026-11-13T16:46:35.475Z",
-    "status": "RELEASED",
-    "notes": "Released by Test Runner at 2026-11-15T09:44:06.816Z"
-  },
-  {
     "id": "RES-C3-MWFTV5P5",
     "tableNumber": "C3",
     "customerSessionId": "sess_1794625662237_200af81449124812b8e0f01452442a12",
@@ -27,16 +17,6 @@
     "reservedAt": "2026-11-14T03:09:59.488Z",
     "expiresAt": "2026-11-14T03:19:59.488Z",
     "status": "ACTIVE"
-  },
-  {
-    "id": "RES-B3-MWG3WT0E",
-    "tableNumber": "B3",
-    "customerSessionId": "sess_1794642665812_5037350db92746bfa5add3a96454c8b1",
-    "customerPhone": "2323234563",
-    "reservedAt": "2026-11-14T07:51:11.971Z",
-    "expiresAt": "2026-11-14T08:01:11.971Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-B3-MWG3XC98"
   },
   {
     "id": "RES-B6-MWG4G6GU",
@@ -100,13 +80,22 @@
     "notes": "Transferred from A1 by Automated Tester"
   },
   {
-    "id": "RES-A1-MWHNZSNT",
+    "id": "RES-A1-MWKU6W95",
     "tableNumber": "A1",
-    "customerSessionId": "admin_1794594459261_57czv",
-    "reservedAt": "2026-11-15T10:01:10.513Z",
-    "expiresAt": "2026-11-15T11:01:11.129Z",
+    "customerSessionId": "sess_1794928673892_6db8fe760b6449b392c67d70cd52bedb",
+    "customerPhone": "1111111111",
+    "reservedAt": "2026-11-17T15:17:57.909Z",
+    "expiresAt": "2026-11-17T15:27:57.909Z",
     "status": "CONVERTED",
-    "visitId": "VISIT-B5-ORD_1794",
-    "notes": "Transferred from B5 by Automated Tester"
+    "visitId": "VISIT-A1-MWKU7D13"
+  },
+  {
+    "id": "RES-B3-MWLMY37Y",
+    "tableNumber": "B3",
+    "customerSessionId": "sess_1794976966645_f9352bc24b474beea524f5f211fa4e1b",
+    "customerPhone": "9999999999",
+    "reservedAt": "2026-11-18T04:42:55.512Z",
+    "expiresAt": "2026-11-18T04:52:55.512Z",
+    "status": "ACTIVE"
   }
 ]

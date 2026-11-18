@@ -7,7 +7,7 @@
 export interface PrinterState {
   connectorOnline: boolean;
   printerReachable: boolean;
-  status: "CONNECTED" | "DISCONNECTED" | "WARNING" | "CHECKING" | "IDENTIFICATION_REQUIRED";
+  status: "CONNECTED" | "DISCONNECTED" | "WARNING" | "CHECKING" | "IDENTIFICATION_REQUIRED" | "RECONNECTING";
   latencyMs: number;
   lastChecked: string;
   printerIp: string;
@@ -288,12 +288,31 @@ export class PrinterClient {
           : (kitchenData.status === "CONNECTED" || kitchenData.probe?.reachable)
       );
 
+      let kitchenStatus: "CONNECTED" | "DISCONNECTED" | "WARNING" | "CHECKING" | "IDENTIFICATION_REQUIRED" | "RECONNECTING" = "DISCONNECTED";
+      if (kitchenData.status === "CONNECTED" || isKitchenReachable) {
+        kitchenStatus = "CONNECTED";
+      } else if (kitchenData.status === "RECONNECTING" || kitchenData.healthState === "RECONNECTING") {
+        kitchenStatus = "RECONNECTING";
+      } else if (
+        kitchenData.status === "CHECKING" ||
+        kitchenData.healthState === "CHECKING" ||
+        kitchenData.healthState === "SUSPECTED_FAILURE"
+      ) {
+        kitchenStatus = "CHECKING";
+      } else if (kitchenData.status === "IDENTIFICATION_REQUIRED") {
+        kitchenStatus = "IDENTIFICATION_REQUIRED";
+      } else if (kitchenData.status === "WARNING") {
+        kitchenStatus = "WARNING";
+      } else {
+        kitchenStatus = "DISCONNECTED";
+      }
+
       return {
         connectorOnline: true,
         kitchen: {
           connectorOnline: true,
           printerReachable: isKitchenReachable,
-          status: isKitchenReachable ? "CONNECTED" : (kitchenData.status === "WARNING" ? "WARNING" : "DISCONNECTED"),
+          status: kitchenStatus,
           latencyMs: kitchenData.latencyMs ?? kitchenData.probe?.durationMs ?? 0,
           lastChecked: new Date(kitchenData.lastChecked || data.timestamp || Date.now()).toLocaleTimeString(),
           printerIp: kitchenData.printerIp || "192.168.1.233",

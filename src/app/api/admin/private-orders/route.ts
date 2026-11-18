@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { purpose, privateNote, items, specialInstructions } = body;
+    const { purpose, privateNote, tableNumber, destination, items, specialInstructions } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -48,9 +48,12 @@ export async function POST(req: NextRequest) {
         ? purpose
         : "STAFF";
 
+    const targetTable = (tableNumber || destination || "COUNTER").toString().trim();
+
     const order = await createPrivateOrder({
       purpose: validPurpose,
       privateNote: typeof privateNote === "string" ? privateNote.trim() : undefined,
+      tableNumber: targetTable,
       items,
       specialInstructions:
         typeof specialInstructions === "string" ? specialInstructions.trim() : undefined,
@@ -59,7 +62,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       order,
-      message: `Private order #${order.orderNumber} placed for ${validPurpose}. Destination: GIVE ON COUNTER.`,
+      message: `Private order #${order.orderNumber} placed for ${validPurpose}. Destination: ${order.tableNumber}.`,
     });
   } catch (error: any) {
     console.error("Failed to place private order:", error);

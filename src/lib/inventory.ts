@@ -10,11 +10,13 @@ import {
   InventoryDayStatus,
   InventoryDayItem,
   InventoryMovement,
+  InventoryPurchaseRecord,
   InventoryDashboardData,
   DEFAULT_CATEGORIES,
   DEFAULT_INGREDIENTS,
   getKolkataDateString,
   calculateUsedQty,
+  calculateWeightedAverageCost,
 } from "@/types/inventory";
 
 // ---------------------------------------------------------
@@ -27,6 +29,7 @@ interface LocalStoreSchema {
   days: InventoryDay[];
   dayItems: InventoryDayItem[];
   movements: InventoryMovement[];
+  purchases: InventoryPurchaseRecord[];
 }
 
 function getLocalStorePath(): string {
@@ -38,7 +41,9 @@ function readLocalStore(): LocalStoreSchema {
   try {
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, "utf-8");
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.purchases) parsed.purchases = [];
+      return parsed;
     }
   } catch (err) {
     console.warn("Failed reading local inventory store, initializing fresh defaults:", err);
@@ -50,6 +55,7 @@ function readLocalStore(): LocalStoreSchema {
     days: [],
     dayItems: [],
     movements: [],
+    purchases: [],
   };
 
   try {
@@ -297,6 +303,19 @@ export async function updateInventoryIngredient(
   const idx = store.ingredients.findIndex((i) => i.id === id);
   if (idx === -1) return null;
   store.ingredients[idx] = { ...store.ingredients[idx], ...patch, updated_at: new Date().toISOString() };
+
+  if (patch.category_id) {
+    const targetCategory = store.categories.find((c) => c.id === patch.category_id);
+    if (targetCategory) {
+      for (const item of store.dayItems) {
+        if (item.ingredient_id === id) {
+          item.category_id = patch.category_id;
+          item.category_name = targetCategory.name;
+        }
+      }
+    }
+  }
+
   writeLocalStore(store);
   return store.ingredients[idx];
 }
@@ -318,157 +337,44 @@ export async function getOrCreateDayRegister(
   const targetDate = dateStr || getKolkataDateString();
   const categories = await getInventoryCategories();
   const ingredients = await getInventoryIngredients();
+  const ingMap = new Map(ingredients.map((ing) => [ing.id, ing]));
+  const catMap = new Map(categories.map((c) => [c.id, c.name]));
 
-  // Try Supabase first
-  if (await isSupabaseAvailable()) {
-    try {
-      const admin = getSupabaseAdminClient() as any;
-      // Check existing day
-      const { data: existingDay } = await admin
-        .from("inventory_days")
-        .select("*")
-        .eq("date", targetDate)
-        .maybeSingle();
+  const store = readLocalStore();
+  if (!store.purchases) store.purchases = [];
 
-      if (existingDay) {
-        const { data: dayItems } = await admin
-          .from("inventory_day_items")
-          .select("*")
-          .eq("inventory_day_id", existingDay.id)
-          .order("ingredient_number", { ascending: true });
+  // 1. Locate the latest previous FINALIZED day to carry forward quantities & unit costs
+  const previousFinalizedDays = store.days
+    .filter((d) => d.date < targetDate && d.status === "FINALIZED")
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const prevDay = previousFinalizedDays[0];
 
-        const itemsList: InventoryDayItem[] = (dayItems || []) as InventoryDayItem[];
-        const existingIngIds = new Set(itemsList.map((i) => i.ingredient_id));
-        const missing = ingredients.filter((ing) => !existingIngIds.has(ing.id));
+  const prevClosingMap: Record<string, number> = {};
+  const prevCostMap: Record<string, number | null> = {};
 
-        if (missing.length > 0) {
-          const catMap = new Map(categories.map((c) => [c.id, c.name]));
-          const missingItems: InventoryDayItem[] = missing.map((ing) => ({
-            id: `item_${existingDay.id}_${ing.id}`,
-            inventory_day_id: existingDay.id,
-            ingredient_id: ing.id,
-            ingredient_number: ing.item_number,
-            ingredient_name: ing.name,
-            category_id: ing.category_id,
-            category_name: catMap.get(ing.category_id) || "Other",
-            unit: ing.unit,
-            opening_qty: 0,
-            purchased_qty: 0,
-            wastage_qty: 0,
-            closing_actual_qty: null,
-            calculated_used_qty: null,
-            is_counted: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }));
-
-          try {
-            await admin.from("inventory_day_items").insert(missingItems);
-            itemsList.push(...missingItems);
-            itemsList.sort((a, b) => a.ingredient_number - b.ingredient_number);
-            await admin
-              .from("inventory_days")
-              .update({ total_active_ingredients: ingredients.length })
-              .eq("id", existingDay.id);
-            existingDay.total_active_ingredients = ingredients.length;
-          } catch (e) {
-            console.warn("Reconciling missing day items to Supabase failed:", e);
-          }
-        }
-
-        return {
-          day: existingDay as InventoryDay,
-          items: itemsList,
-          categories,
-        };
+  if (prevDay) {
+    const prevItems = store.dayItems.filter((di) => di.inventory_day_id === prevDay.id);
+    for (const pi of prevItems) {
+      if (pi.closing_actual_qty !== null && pi.closing_actual_qty !== undefined && !isNaN(Number(pi.closing_actual_qty))) {
+        prevClosingMap[pi.ingredient_id] = Number(pi.closing_actual_qty);
       }
-
-      // Find previous day's closing actual quantities for carry-forward
-      const { data: prevDay } = await admin
-        .from("inventory_days")
-        .select("id")
-        .lt("date", targetDate)
-        .order("date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      let prevClosingMap: Record<string, number> = {};
-      if (prevDay) {
-        const { data: prevItems } = await admin
-          .from("inventory_day_items")
-          .select("ingredient_id, closing_actual_qty")
-          .eq("inventory_day_id", prevDay.id);
-        if (prevItems) {
-          prevItems.forEach((pi: any) => {
-            if (pi.closing_actual_qty !== null && pi.closing_actual_qty !== undefined) {
-              prevClosingMap[pi.ingredient_id] = Number(pi.closing_actual_qty);
-            }
-          });
-        }
+      if (pi.unit_cost !== null && pi.unit_cost !== undefined && !isNaN(Number(pi.unit_cost))) {
+        prevCostMap[pi.ingredient_id] = Number(pi.unit_cost);
       }
-
-      // Create new day row
-      const dayId = `day_${targetDate.replace(/-/g, "")}`;
-      const newDay: InventoryDay = {
-        id: dayId,
-        date: targetDate,
-        status: "DRAFT",
-        checked_by: staffName,
-        total_active_ingredients: ingredients.length,
-        counted_ingredients: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      await admin.from("inventory_days").insert(newDay);
-
-      // Create day items with carry-forward opening balance
-      const catMap = new Map(categories.map((c) => [c.id, c.name]));
-      const itemsToInsert: InventoryDayItem[] = ingredients.map((ing) => {
-        const opening = prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0;
-        return {
-          id: `item_${dayId}_${ing.id}`,
-          inventory_day_id: dayId,
-          ingredient_id: ing.id,
-          ingredient_number: ing.item_number,
-          ingredient_name: ing.name,
-          category_id: ing.category_id,
-          category_name: catMap.get(ing.category_id) || "Other",
-          unit: ing.unit,
-          opening_qty: opening,
-          purchased_qty: 0,
-          wastage_qty: 0,
-          closing_actual_qty: null,
-          calculated_used_qty: null,
-          is_counted: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-      });
-
-      await admin.from("inventory_day_items").insert(itemsToInsert);
-
-      return {
-        day: newDay,
-        items: itemsToInsert,
-        categories,
-      };
-    } catch (err) {
-      console.warn("Supabase day register retrieval failed, falling back to local store:", err);
     }
   }
 
-  // Local JSON Store Fallback
-  const store = readLocalStore();
   let day = store.days.find((d) => d.date === targetDate);
+  const dayId = day ? day.id : `day_${targetDate.replace(/-/g, "")}`;
+
+  let items: InventoryDayItem[] = [];
 
   if (day) {
-    let items = store.dayItems.filter((di) => di.inventory_day_id === day!.id);
+    items = store.dayItems.filter((di) => di.inventory_day_id === day!.id);
     const existingIngIds = new Set(items.map((i) => i.ingredient_id));
     const missing = ingredients.filter((ing) => !existingIngIds.has(ing.id));
 
     if (missing.length > 0) {
-      const catMap = new Map(categories.map((c) => [c.id, c.name]));
       const missingItems: InventoryDayItem[] = missing.map((ing) => ({
         id: `item_${day!.id}_${ing.id}`,
         inventory_day_id: day!.id,
@@ -478,7 +384,7 @@ export async function getOrCreateDayRegister(
         category_id: ing.category_id,
         category_name: catMap.get(ing.category_id) || "Other",
         unit: ing.unit,
-        opening_qty: 0,
+        opening_qty: prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0,
         purchased_qty: 0,
         wastage_qty: 0,
         closing_actual_qty: null,
@@ -488,76 +394,171 @@ export async function getOrCreateDayRegister(
         updated_at: new Date().toISOString(),
       }));
       store.dayItems.push(...missingItems);
-      day.total_active_ingredients = ingredients.length;
-      writeLocalStore(store);
       items.push(...missingItems);
+      day.total_active_ingredients = ingredients.length;
     }
 
-    return {
-      day,
-      items: items.sort((a, b) => a.ingredient_number - b.ingredient_number),
-      categories,
-    };
-  }
-
-  // Find previous day for carry forward
-  const sortedDays = [...store.days]
-    .filter((d) => d.date < targetDate)
-    .sort((a, b) => b.date.localeCompare(a.date));
-  const prevDay = sortedDays[0];
-
-  const prevClosingMap: Record<string, number> = {};
-  if (prevDay) {
-    store.dayItems
-      .filter((di) => di.inventory_day_id === prevDay.id)
-      .forEach((di) => {
-        if (di.closing_actual_qty !== null && di.closing_actual_qty !== undefined) {
-          prevClosingMap[di.ingredient_id] = di.closing_actual_qty;
+    // If day is still in DRAFT, synchronize opening balances from previous finalized day
+    if (day.status !== "FINALIZED" && prevDay) {
+      for (const item of items) {
+        if (prevClosingMap[item.ingredient_id] !== undefined) {
+          item.opening_qty = prevClosingMap[item.ingredient_id];
+          item.calculated_used_qty = calculateUsedQty(
+            item.opening_qty,
+            item.purchased_qty,
+            item.wastage_qty,
+            item.closing_actual_qty
+          );
         }
-      });
-  }
-
-  const dayId = `day_${targetDate.replace(/-/g, "")}`;
-  const catMap = new Map(categories.map((c) => [c.id, c.name]));
-
-  const newDay: InventoryDay = {
-    id: dayId,
-    date: targetDate,
-    status: "DRAFT",
-    checked_by: staffName,
-    total_active_ingredients: ingredients.length,
-    counted_ingredients: 0,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  const newItems: InventoryDayItem[] = ingredients.map((ing) => {
-    const opening = prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0;
-    return {
-      id: `item_${dayId}_${ing.id}`,
-      inventory_day_id: dayId,
-      ingredient_id: ing.id,
-      ingredient_number: ing.item_number,
-      ingredient_name: ing.name,
-      category_id: ing.category_id,
-      category_name: catMap.get(ing.category_id) || "Other",
-      unit: ing.unit,
-      opening_qty: opening,
-      purchased_qty: 0,
-      wastage_qty: 0,
-      closing_actual_qty: null,
-      calculated_used_qty: null,
-      is_counted: false,
+      }
+    }
+  } else {
+    // Create fresh day
+    const newDay: InventoryDay = {
+      id: dayId,
+      date: targetDate,
+      status: "DRAFT",
+      checked_by: staffName,
+      total_active_ingredients: ingredients.length,
+      counted_ingredients: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-  });
 
-  store.days.push(newDay);
-  store.dayItems.push(...newItems);
+    items = ingredients.map((ing) => {
+      const opening = prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0;
+      return {
+        id: `item_${dayId}_${ing.id}`,
+        inventory_day_id: dayId,
+        ingredient_id: ing.id,
+        ingredient_number: ing.item_number,
+        ingredient_name: ing.name,
+        category_id: ing.category_id,
+        category_name: catMap.get(ing.category_id) || "Other",
+        unit: ing.unit,
+        opening_qty: opening,
+        purchased_qty: 0,
+        wastage_qty: 0,
+        closing_actual_qty: null,
+        calculated_used_qty: null,
+        is_counted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    store.days.push(newDay);
+    store.dayItems.push(...items);
+    day = newDay;
+  }
+
+  // 2. Load and attach date-wise purchases and moving weighted average costs
+  const targetPurchases = store.purchases.filter((p) => p.date === targetDate);
+  const allPurchasesForIngredients = store.purchases;
+
+  let dayTotalClosing = 0;
+  let dayTotalUsed = 0;
+  let dayTotalWastage = 0;
+  let dayTotalPurchase = 0;
+  let hasIncompleteValuation = false;
+
+  for (const item of items) {
+    const itemPurchasesToday = targetPurchases.filter((p) => p.ingredient_id === item.ingredient_id);
+    const allItemPurchases = allPurchasesForIngredients.filter((p) => p.ingredient_id === item.ingredient_id);
+    const ing = ingMap.get(item.ingredient_id);
+
+    // If purchases were recorded via Add Purchase, enforce purchased_qty to match exact sum
+    if (itemPurchasesToday.length > 0) {
+      item.purchased_qty = Number(
+        itemPurchasesToday.reduce((sum, p) => sum + (p.quantity || 0), 0).toFixed(3)
+      );
+    }
+
+    item.calculated_used_qty = calculateUsedQty(
+      item.opening_qty,
+      item.purchased_qty,
+      item.wastage_qty,
+      item.closing_actual_qty
+    );
+
+    const prevCost = prevCostMap[item.ingredient_id] ?? null;
+    const costCalc = calculateWeightedAverageCost(
+      item.opening_qty,
+      prevCost,
+      item.purchased_qty,
+      itemPurchasesToday,
+      ing?.cost_per_unit ?? null
+    );
+
+    item.unit_cost = costCalc.unitCost;
+    item.opening_stock_value = costCalc.openingStockValue;
+    item.total_purchase_cost = costCalc.totalPurchaseCost;
+    item.latest_purchase_price =
+      costCalc.latestPurchasePrice ??
+      (allItemPurchases.length > 0 ? allItemPurchases[allItemPurchases.length - 1].price_per_unit : null);
+    item.purchase_entries = itemPurchasesToday;
+
+    if (item.closing_actual_qty !== null && item.unit_cost != null) {
+      item.closing_stock_value = Number((item.closing_actual_qty * item.unit_cost).toFixed(2));
+      dayTotalClosing += item.closing_stock_value;
+    } else {
+      item.closing_stock_value = null;
+      if (item.closing_actual_qty !== null && item.unit_cost == null) {
+        hasIncompleteValuation = true;
+      }
+    }
+
+    if (item.calculated_used_qty !== null && item.unit_cost != null) {
+      item.used_cost = Number((item.calculated_used_qty * item.unit_cost).toFixed(2));
+      dayTotalUsed += item.used_cost;
+    } else {
+      item.used_cost = null;
+    }
+
+    if (item.wastage_qty > 0 && item.unit_cost != null) {
+      item.wastage_cost = Number((item.wastage_qty * item.unit_cost).toFixed(2));
+      dayTotalWastage += item.wastage_cost;
+    } else {
+      item.wastage_cost = null;
+    }
+
+    if (item.total_purchase_cost) {
+      dayTotalPurchase += item.total_purchase_cost;
+    }
+  }
+
+  day.total_closing_stock_value = Number(dayTotalClosing.toFixed(2));
+  day.total_used_value = Number(dayTotalUsed.toFixed(2));
+  day.total_wastage_value = Number(dayTotalWastage.toFixed(2));
+  day.total_purchase_value = Number(dayTotalPurchase.toFixed(2));
+
   writeLocalStore(store);
 
-  return { day: newDay, items: newItems, categories };
+  // Sync to Supabase if accessible
+  if (await isSupabaseAvailable()) {
+    try {
+      const admin = getSupabaseAdminClient() as any;
+      await admin.from("inventory_days").upsert({
+        id: day.id,
+        date: day.date,
+        status: day.status,
+        checked_by: day.checked_by,
+        total_active_ingredients: day.total_active_ingredients,
+        counted_ingredients: day.counted_ingredients,
+        total_closing_stock_value: day.total_closing_stock_value,
+        total_used_value: day.total_used_value,
+        total_wastage_value: day.total_wastage_value,
+        total_purchase_value: day.total_purchase_value,
+        updated_at: new Date().toISOString(),
+      });
+    } catch {}
+  }
+
+  return {
+    day,
+    items: items.sort((a, b) => a.ingredient_number - b.ingredient_number),
+    categories,
+  };
 }
 
 // 4. Batch Update Quantities (Daily Register Rows)
@@ -567,6 +568,7 @@ export interface DayItemUpdateInput {
   purchased_qty?: number;
   wastage_qty?: number;
   closing_actual_qty?: number | null;
+  unit_cost?: number | null;
   is_counted?: boolean;
   notes?: string | null;
 }
@@ -581,7 +583,7 @@ export async function updateDayItemsBatch(
   items: InventoryDayItem[];
 }> {
   const store = readLocalStore();
-  const dayIndex = store.days.findIndex((d) => d.id === dayId);
+  let dayIndex = store.days.findIndex((d) => d.id === dayId);
   if (dayIndex === -1) {
     throw new Error(`Inventory day '${dayId}' not found.`);
   }
@@ -590,6 +592,7 @@ export async function updateDayItemsBatch(
     throw new Error("This inventory day is FINALIZED and locked. Reopening is restricted to admin.");
   }
 
+  const day = store.days[dayIndex];
   const updatedItems: InventoryDayItem[] = [];
 
   for (const up of updates) {
@@ -621,6 +624,22 @@ export async function updateDayItemsBatch(
     }
 
     const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
+    const unitCost = up.unit_cost !== undefined ? up.unit_cost : current.unit_cost;
+
+    const closingStockValue =
+      closing !== null && unitCost !== null && unitCost !== undefined
+        ? Number((closing * unitCost).toFixed(2))
+        : null;
+
+    const usedCost =
+      calculatedUsed !== null && unitCost !== null && unitCost !== undefined
+        ? Number((calculatedUsed * unitCost).toFixed(2))
+        : null;
+
+    const wastageCost =
+      wastage > 0 && unitCost !== null && unitCost !== undefined
+        ? Number((wastage * unitCost).toFixed(2))
+        : null;
 
     const updated: InventoryDayItem = {
       ...current,
@@ -629,9 +648,13 @@ export async function updateDayItemsBatch(
       wastage_qty: wastage,
       closing_actual_qty: closing,
       calculated_used_qty: calculatedUsed,
+      unit_cost: unitCost,
+      closing_stock_value: closingStockValue,
+      used_cost: usedCost,
+      wastage_cost: wastageCost,
       is_counted: isCounted,
       counted_by: isCounted ? staffName : current.counted_by,
-      counted_at: isCounted ? (current.counted_at || new Date().toISOString()) : null,
+      counted_at: isCounted ? current.counted_at || new Date().toISOString() : null,
       notes: up.notes !== undefined ? up.notes : current.notes,
       updated_at: new Date().toISOString(),
     };
@@ -650,17 +673,32 @@ export async function updateDayItemsBatch(
       ? "READY_FOR_REVIEW"
       : "COUNTING";
 
+  let totalClosing = 0;
+  let totalUsed = 0;
+  let totalWastage = 0;
+  let totalPurchase = 0;
+  for (const it of allDayItems) {
+    if (it.closing_stock_value) totalClosing += it.closing_stock_value;
+    if (it.used_cost) totalUsed += it.used_cost;
+    if (it.wastage_cost) totalWastage += it.wastage_cost;
+    if (it.total_purchase_cost) totalPurchase += it.total_purchase_cost;
+  }
+
   store.days[dayIndex] = {
-    ...store.days[dayIndex],
+    ...day,
     counted_ingredients: countedCount,
     status: newStatus,
     checked_by: staffName,
+    total_closing_stock_value: Number(totalClosing.toFixed(2)),
+    total_used_value: Number(totalUsed.toFixed(2)),
+    total_wastage_value: Number(totalWastage.toFixed(2)),
+    total_purchase_value: Number(totalPurchase.toFixed(2)),
     updated_at: new Date().toISOString(),
   };
 
   writeLocalStore(store);
 
-  // Sync to Supabase in background / if active
+  // Sync to Supabase
   if (await isSupabaseAvailable()) {
     try {
       const admin = getSupabaseAdminClient() as any;
@@ -673,6 +711,10 @@ export async function updateDayItemsBatch(
             wastage_qty: item.wastage_qty,
             closing_actual_qty: item.closing_actual_qty,
             calculated_used_qty: item.calculated_used_qty,
+            unit_cost: item.unit_cost,
+            closing_stock_value: item.closing_stock_value,
+            used_cost: item.used_cost,
+            wastage_cost: item.wastage_cost,
             is_counted: item.is_counted,
             counted_by: item.counted_by,
             counted_at: item.counted_at,
@@ -687,6 +729,10 @@ export async function updateDayItemsBatch(
           counted_ingredients: countedCount,
           status: store.days[dayIndex].status,
           checked_by: staffName,
+          total_closing_stock_value: store.days[dayIndex].total_closing_stock_value,
+          total_used_value: store.days[dayIndex].total_used_value,
+          total_wastage_value: store.days[dayIndex].total_wastage_value,
+          total_purchase_value: store.days[dayIndex].total_purchase_value,
           updated_at: store.days[dayIndex].updated_at,
         })
         .eq("id", dayId);
@@ -725,7 +771,7 @@ export async function markChecklistItemCounted(
   return found;
 }
 
-// 6. Finalize Day Register
+// 6. Finalize Day Register & Propagate Carry-Forward to Next Day
 export async function finalizeDayRegister(
   dayId: string,
   managerName: string = "Manager",
@@ -735,19 +781,73 @@ export async function finalizeDayRegister(
   const dayIndex = store.days.findIndex((d) => d.id === dayId);
   if (dayIndex === -1) throw new Error(`Inventory day '${dayId}' not found.`);
 
-  const dayItems = store.dayItems.filter((di) => di.inventory_day_id === dayId);
-  const uncounted = dayItems.filter((di) => !di.is_counted);
-
-  // If there are uncounted items, require all or set remaining to 0 if manager approves
   const finalizedAt = new Date().toISOString();
-  store.days[dayIndex] = {
-    ...store.days[dayIndex],
-    status: "FINALIZED",
-    finalized_by: managerName,
-    finalized_at: finalizedAt,
-    notes: notes || store.days[dayIndex].notes,
-    updated_at: finalizedAt,
-  };
+  const day = store.days[dayIndex];
+  day.status = "FINALIZED";
+  day.finalized_by = managerName;
+  day.finalized_at = finalizedAt;
+  if (notes) day.notes = notes;
+  day.updated_at = finalizedAt;
+
+  const dayItems = store.dayItems.filter((di) => di.inventory_day_id === dayId);
+
+  // Compute final day valuation
+  let totalClosing = 0;
+  let totalUsed = 0;
+  let totalWastage = 0;
+  let totalPurchase = 0;
+  for (const item of dayItems) {
+    if (item.closing_stock_value) totalClosing += item.closing_stock_value;
+    if (item.used_cost) totalUsed += item.used_cost;
+    if (item.wastage_cost) totalWastage += item.wastage_cost;
+    if (item.total_purchase_cost) totalPurchase += item.total_purchase_cost;
+  }
+  day.total_closing_stock_value = Number(totalClosing.toFixed(2));
+  day.total_used_value = Number(totalUsed.toFixed(2));
+  day.total_wastage_value = Number(totalWastage.toFixed(2));
+  day.total_purchase_value = Number(totalPurchase.toFixed(2));
+
+  // Carry forward to subsequent DRAFT days!
+  const subsequentDraftDays = store.days
+    .filter((d) => d.date > day.date && d.status === "DRAFT")
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (subsequentDraftDays.length > 0) {
+    const nextDay = subsequentDraftDays[0];
+    const nextDayItems = store.dayItems.filter((di) => di.inventory_day_id === nextDay.id);
+    for (const prevItem of dayItems) {
+      const nextItem = nextDayItems.find((ni) => ni.ingredient_id === prevItem.ingredient_id);
+      if (nextItem) {
+        nextItem.opening_qty = prevItem.closing_actual_qty !== null ? prevItem.closing_actual_qty : 0;
+        nextItem.calculated_used_qty = calculateUsedQty(
+          nextItem.opening_qty,
+          nextItem.purchased_qty,
+          nextItem.wastage_qty,
+          nextItem.closing_actual_qty
+        );
+        const itemPurchases = (store.purchases || []).filter(
+          (p) => p.date === nextDay.date && p.ingredient_id === nextItem.ingredient_id
+        );
+        const costCalc = calculateWeightedAverageCost(
+          nextItem.opening_qty,
+          prevItem.unit_cost,
+          nextItem.purchased_qty,
+          itemPurchases,
+          null
+        );
+        nextItem.unit_cost = costCalc.unitCost;
+        nextItem.opening_stock_value = costCalc.openingStockValue;
+        nextItem.closing_stock_value =
+          nextItem.closing_actual_qty !== null && nextItem.unit_cost != null
+            ? Number((nextItem.closing_actual_qty * nextItem.unit_cost).toFixed(2))
+            : null;
+        nextItem.used_cost =
+          nextItem.calculated_used_qty !== null && nextItem.unit_cost != null
+            ? Number((nextItem.calculated_used_qty * nextItem.unit_cost).toFixed(2))
+            : null;
+      }
+    }
+  }
 
   writeLocalStore(store);
 
@@ -760,14 +860,17 @@ export async function finalizeDayRegister(
           status: "FINALIZED",
           finalized_by: managerName,
           finalized_at: finalizedAt,
-          notes: notes || store.days[dayIndex].notes,
+          total_closing_stock_value: day.total_closing_stock_value,
+          total_used_value: day.total_used_value,
+          total_wastage_value: day.total_wastage_value,
+          total_purchase_value: day.total_purchase_value,
           updated_at: finalizedAt,
         })
         .eq("id", dayId);
     } catch {}
   }
 
-  return store.days[dayIndex];
+  return day;
 }
 
 // 7. Reopen Day Register for Corrections (Switches status back to DRAFT)
@@ -781,14 +884,13 @@ export async function reopenDayRegister(
   if (dayIndex === -1) throw new Error(`Inventory day '${dayId}' not found.`);
 
   const reopenedAt = new Date().toISOString();
-  store.days[dayIndex] = {
-    ...store.days[dayIndex],
-    status: "DRAFT",
-    updated_at: reopenedAt,
-    notes: reason
-      ? `[Reopened by ${adminName} at ${reopenedAt}]: ${reason}`
-      : store.days[dayIndex].notes,
-  };
+  store.days[dayIndex].status = "DRAFT";
+  store.days[dayIndex].finalized_at = null;
+  store.days[dayIndex].finalized_by = null;
+  store.days[dayIndex].updated_at = reopenedAt;
+  if (reason) {
+    store.days[dayIndex].notes = `[Reopened by ${adminName} at ${reopenedAt}]: ${reason}`;
+  }
 
   writeLocalStore(store);
 
@@ -812,7 +914,289 @@ export async function reopenDayRegister(
   return store.days[dayIndex];
 }
 
-// 7. Movements (Audited Purchases and Wastage)
+// 8. Purchases (Date-Wise Purchase Records & Weighted-Average Updating)
+export async function recordInventoryPurchase(
+  purchase: Omit<InventoryPurchaseRecord, "id" | "created_at">
+): Promise<{
+  purchase: InventoryPurchaseRecord;
+  dayItem: InventoryDayItem | null;
+}> {
+  const store = readLocalStore();
+  if (!store.purchases) store.purchases = [];
+
+  const id = `pur_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const totalCost = Number((purchase.quantity * purchase.price_per_unit).toFixed(2));
+
+  const newPurchase: InventoryPurchaseRecord = {
+    id,
+    ingredient_id: purchase.ingredient_id,
+    ingredient_name: purchase.ingredient_name,
+    date: purchase.date,
+    quantity: Number(purchase.quantity),
+    unit: purchase.unit,
+    price_per_unit: Number(purchase.price_per_unit),
+    total_cost: totalCost,
+    supplier: purchase.supplier || null,
+    recorded_by: purchase.recorded_by || "Admin",
+    notes: purchase.notes || null,
+    created_at: new Date().toISOString(),
+  };
+
+  store.purchases.push(newPurchase);
+
+  // Also log into movements for backwards compatibility
+  store.movements.unshift({
+    id: `mov_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    ingredient_id: purchase.ingredient_id,
+    ingredient_name: purchase.ingredient_name,
+    date: purchase.date,
+    movement_type: "PURCHASE",
+    quantity: Number(purchase.quantity),
+    unit: purchase.unit,
+    supplier: purchase.supplier || null,
+    cost: totalCost,
+    recorded_by: purchase.recorded_by || "Admin",
+    created_at: new Date().toISOString(),
+  });
+
+  // Reconcile into target date's day item
+  let updatedDayItem: InventoryDayItem | null = null;
+  const day = store.days.find((d) => d.date === purchase.date);
+  if (day) {
+    const itemIndex = store.dayItems.findIndex(
+      (di) => di.inventory_day_id === day.id && di.ingredient_id === purchase.ingredient_id
+    );
+    if (itemIndex !== -1) {
+      const allItemPurchases = store.purchases.filter(
+        (p) => p.date === purchase.date && p.ingredient_id === purchase.ingredient_id
+      );
+      const totalPurchasedQty = allItemPurchases.reduce((acc, p) => acc + p.quantity, 0);
+      store.dayItems[itemIndex].purchased_qty = Number(totalPurchasedQty.toFixed(3));
+      store.dayItems[itemIndex].calculated_used_qty = calculateUsedQty(
+        store.dayItems[itemIndex].opening_qty,
+        store.dayItems[itemIndex].purchased_qty,
+        store.dayItems[itemIndex].wastage_qty,
+        store.dayItems[itemIndex].closing_actual_qty
+      );
+
+      const ing = store.ingredients.find((i) => i.id === purchase.ingredient_id);
+      const costCalc = calculateWeightedAverageCost(
+        store.dayItems[itemIndex].opening_qty,
+        store.dayItems[itemIndex].unit_cost,
+        store.dayItems[itemIndex].purchased_qty,
+        allItemPurchases,
+        ing?.cost_per_unit
+      );
+      store.dayItems[itemIndex].unit_cost = costCalc.unitCost;
+      store.dayItems[itemIndex].latest_purchase_price = newPurchase.price_per_unit;
+      store.dayItems[itemIndex].total_purchase_cost = costCalc.totalPurchaseCost;
+
+      if (store.dayItems[itemIndex].closing_actual_qty !== null && costCalc.unitCost !== null) {
+        store.dayItems[itemIndex].closing_stock_value = Number(
+          (store.dayItems[itemIndex].closing_actual_qty! * costCalc.unitCost).toFixed(2)
+        );
+      }
+      if (store.dayItems[itemIndex].calculated_used_qty !== null && costCalc.unitCost !== null) {
+        store.dayItems[itemIndex].used_cost = Number(
+          (store.dayItems[itemIndex].calculated_used_qty! * costCalc.unitCost).toFixed(2)
+        );
+      }
+      store.dayItems[itemIndex].updated_at = new Date().toISOString();
+      updatedDayItem = store.dayItems[itemIndex];
+    }
+  }
+
+  writeLocalStore(store);
+
+  if (await isSupabaseAvailable()) {
+    try {
+      const admin = getSupabaseAdminClient() as any;
+      await admin.from("inventory_purchases").insert(newPurchase);
+    } catch {}
+  }
+
+  return { purchase: newPurchase, dayItem: updatedDayItem };
+}
+
+export async function deleteInventoryPurchase(
+  purchaseId: string
+): Promise<{ success: boolean; message?: string }> {
+  const store = readLocalStore();
+  if (!store.purchases) store.purchases = [];
+  const idx = store.purchases.findIndex((p) => p.id === purchaseId);
+  if (idx === -1) return { success: false, message: "Purchase not found" };
+
+  const [removed] = store.purchases.splice(idx, 1);
+
+  // Recalculate day item
+  const day = store.days.find((d) => d.date === removed.date);
+  if (day) {
+    const itemIndex = store.dayItems.findIndex(
+      (di) => di.inventory_day_id === day.id && di.ingredient_id === removed.ingredient_id
+    );
+    if (itemIndex !== -1) {
+      const remainingPurchases = store.purchases.filter(
+        (p) => p.date === removed.date && p.ingredient_id === removed.ingredient_id
+      );
+      const totalPurchasedQty = remainingPurchases.reduce((acc, p) => acc + p.quantity, 0);
+      store.dayItems[itemIndex].purchased_qty = Number(totalPurchasedQty.toFixed(3));
+      store.dayItems[itemIndex].calculated_used_qty = calculateUsedQty(
+        store.dayItems[itemIndex].opening_qty,
+        store.dayItems[itemIndex].purchased_qty,
+        store.dayItems[itemIndex].wastage_qty,
+        store.dayItems[itemIndex].closing_actual_qty
+      );
+      const ing = store.ingredients.find((i) => i.id === removed.ingredient_id);
+      const costCalc = calculateWeightedAverageCost(
+        store.dayItems[itemIndex].opening_qty,
+        store.dayItems[itemIndex].unit_cost,
+        store.dayItems[itemIndex].purchased_qty,
+        remainingPurchases,
+        ing?.cost_per_unit
+      );
+      store.dayItems[itemIndex].unit_cost = costCalc.unitCost;
+      store.dayItems[itemIndex].latest_purchase_price = costCalc.latestPurchasePrice;
+      store.dayItems[itemIndex].total_purchase_cost = costCalc.totalPurchaseCost;
+
+      if (store.dayItems[itemIndex].closing_actual_qty !== null && costCalc.unitCost !== null) {
+        store.dayItems[itemIndex].closing_stock_value = Number(
+          (store.dayItems[itemIndex].closing_actual_qty! * costCalc.unitCost).toFixed(2)
+        );
+      }
+      if (store.dayItems[itemIndex].calculated_used_qty !== null && costCalc.unitCost !== null) {
+        store.dayItems[itemIndex].used_cost = Number(
+          (store.dayItems[itemIndex].calculated_used_qty! * costCalc.unitCost).toFixed(2)
+        );
+      }
+      store.dayItems[itemIndex].updated_at = new Date().toISOString();
+    }
+  }
+
+  writeLocalStore(store);
+
+  if (await isSupabaseAvailable()) {
+    try {
+      const admin = getSupabaseAdminClient() as any;
+      await admin.from("inventory_purchases").delete().eq("id", purchaseId);
+    } catch {}
+  }
+
+  return { success: true };
+}
+
+export async function getInventoryPurchases(
+  ingredientId?: string,
+  date?: string
+): Promise<InventoryPurchaseRecord[]> {
+  const store = readLocalStore();
+  let list = store.purchases || [];
+  if (ingredientId) {
+    list = list.filter((p) => p.ingredient_id === ingredientId);
+  }
+  if (date) {
+    list = list.filter((p) => p.date === date);
+  }
+  return list.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+// 9. Category Management (Edit, Reorder, Archive, Move Ingredients)
+export async function archiveInventoryCategory(
+  categoryId: string
+): Promise<{ success: boolean; message?: string }> {
+  const store = readLocalStore();
+  const catIndex = store.categories.findIndex((c) => c.id === categoryId);
+  if (catIndex === -1) return { success: false, message: "Category not found" };
+
+  const activeCount = store.ingredients.filter((i) => i.is_active && i.category_id === categoryId).length;
+  if (activeCount > 0) {
+    return {
+      success: false,
+      message: `Cannot archive category: ${activeCount} active ingredient(s) are assigned to it. Please move them to another category first.`,
+    };
+  }
+
+  store.categories[catIndex].is_active = false;
+  store.categories[catIndex].updated_at = new Date().toISOString();
+  writeLocalStore(store);
+
+  if (await isSupabaseAvailable()) {
+    try {
+      const admin = getSupabaseAdminClient() as any;
+      await admin.from("inventory_categories").update({ is_active: false }).eq("id", categoryId);
+    } catch {}
+  }
+
+  return { success: true };
+}
+
+export async function moveIngredientCategory(
+  ingredientId: string,
+  newCategoryId: string
+): Promise<{ success: boolean; ingredient?: InventoryIngredient; message?: string }> {
+  const store = readLocalStore();
+  const ingIndex = store.ingredients.findIndex((i) => i.id === ingredientId);
+  if (ingIndex === -1) return { success: false, message: "Ingredient not found" };
+
+  const targetCategory = store.categories.find((c) => c.id === newCategoryId);
+  if (!targetCategory) return { success: false, message: "Target category not found" };
+
+  store.ingredients[ingIndex].category_id = newCategoryId;
+  store.ingredients[ingIndex].updated_at = new Date().toISOString();
+
+  // Update category on active daily registers
+  for (const item of store.dayItems) {
+    if (item.ingredient_id === ingredientId) {
+      item.category_id = newCategoryId;
+      item.category_name = targetCategory.name;
+    }
+  }
+
+  writeLocalStore(store);
+
+  if (await isSupabaseAvailable()) {
+    try {
+      const admin = getSupabaseAdminClient() as any;
+      await admin
+        .from("inventory_ingredients")
+        .update({ category_id: newCategoryId, updated_at: new Date().toISOString() })
+        .eq("id", ingredientId);
+      await admin
+        .from("inventory_day_items")
+        .update({ category_id: newCategoryId, category_name: targetCategory.name })
+        .eq("ingredient_id", ingredientId);
+    } catch {}
+  }
+
+  return { success: true, ingredient: store.ingredients[ingIndex] };
+}
+
+export async function updateIngredientCost(
+  ingredientId: string,
+  costPerUnit: number
+): Promise<{ success: boolean; ingredient?: InventoryIngredient }> {
+  const store = readLocalStore();
+  const ingIndex = store.ingredients.findIndex((i) => i.id === ingredientId);
+  if (ingIndex === -1) return { success: false };
+
+  store.ingredients[ingIndex].cost_per_unit = Number(costPerUnit);
+  store.ingredients[ingIndex].updated_at = new Date().toISOString();
+
+  writeLocalStore(store);
+
+  if (await isSupabaseAvailable()) {
+    try {
+      const admin = getSupabaseAdminClient() as any;
+      await admin
+        .from("inventory_ingredients")
+        .update({ cost_per_unit: Number(costPerUnit), updated_at: new Date().toISOString() })
+        .eq("id", ingredientId);
+    } catch {}
+  }
+
+  return { success: true, ingredient: store.ingredients[ingIndex] };
+}
+
+// 10. Movements (Audited Purchases and Wastage)
 export async function recordInventoryMovement(
   movement: Omit<InventoryMovement, "id" | "created_at">
 ): Promise<InventoryMovement> {
@@ -826,7 +1210,6 @@ export async function recordInventoryMovement(
 
   store.movements.unshift(newMov);
 
-  // Auto-accumulate into the corresponding day's inventory_day_items if dayId or date is present
   const targetDate = movement.date || getKolkataDateString();
   const day = store.days.find((d) => d.date === targetDate);
   if (day) {
@@ -874,7 +1257,7 @@ export async function getInventoryMovements(
   return list.slice(0, limit);
 }
 
-// 8. Dashboard Aggregation
+// 11. Dashboard Aggregation
 export async function getInventoryDashboard(dateStr?: string): Promise<InventoryDashboardData> {
   const { day, items, categories } = await getOrCreateDayRegister(dateStr);
   const ingredients = await getInventoryIngredients();
@@ -883,7 +1266,6 @@ export async function getInventoryDashboard(dateStr?: string): Promise<Inventory
   const totalCategories = categories.length;
   const countedToday = items.filter((i) => i.is_counted).length;
 
-  // Low stock check: closing_actual_qty <= min_stock_level, or opening <= min if not counted
   const ingMap = new Map(ingredients.map((ing) => [ing.id, ing]));
   let lowStockCount = 0;
 
@@ -897,7 +1279,6 @@ export async function getInventoryDashboard(dateStr?: string): Promise<Inventory
     }
   }
 
-  // Category progress
   const categoryProgress: Record<
     string,
     {
@@ -936,7 +1317,303 @@ export async function getInventoryDashboard(dateStr?: string): Promise<Inventory
   };
 }
 
-// 9. CSV Export Generator
+// 12. Inventory Analytics Data Engine
+export interface InventoryAnalyticsData {
+  startDate: string;
+  endDate: string;
+  totalFinalizedDays: number;
+  totalConsumptionCost: number; // ₹
+  totalPurchasedCost: number; // ₹
+  totalWastageCost: number; // ₹
+  latestClosingStockValue: number; // ₹
+  latestFinalizedDate: string | null;
+  missingCostItemsCount: number;
+  dailyConsumptionTrend: Array<{
+    date: string;
+    consumptionCost: number;
+    purchasedCost: number;
+    wastageCost: number;
+  }>;
+  categoryConsumption: Array<{
+    categoryId: string;
+    categoryCode: string;
+    categoryName: string;
+    consumptionCost: number;
+    purchasedCost: number;
+    closingStockValue: number;
+  }>;
+  highestConsumptionIngredients: Array<{
+    ingredientId: string;
+    ingredientName: string;
+    unit: string;
+    usedQty: number;
+    consumptionCost: number;
+    avgUnitCost: number;
+  }>;
+  mostUsedIngredients: Array<{
+    ingredientId: string;
+    ingredientName: string;
+    unit: string;
+    usedQty: number;
+  }>;
+  mostWastedIngredients: Array<{
+    ingredientId: string;
+    ingredientName: string;
+    unit: string;
+    wastageQty: number;
+    wastageCost: number;
+  }>;
+  purchasesHistory: Array<{
+    id: string;
+    date: string;
+    ingredientName: string;
+    quantity: number;
+    unit: string;
+    pricePerUnit: number;
+    totalCost: number;
+    supplier?: string | null;
+  }>;
+}
+
+export async function getInventoryAnalytics(
+  startDate: string,
+  endDate: string
+): Promise<InventoryAnalyticsData> {
+  const store = readLocalStore();
+  const categories = await getInventoryCategories();
+  const ingredients = await getInventoryIngredients();
+
+  const finalizedDays = store.days
+    .filter((d) => d.date >= startDate && d.date <= endDate && d.status === "FINALIZED")
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const latestFinalizedDay =
+    finalizedDays.length > 0 ? finalizedDays[finalizedDays.length - 1] : null;
+
+  let totalConsumptionCost = 0;
+  let totalPurchasedCost = 0;
+  let totalWastageCost = 0;
+  let latestClosingStockValue = 0;
+
+  if (latestFinalizedDay) {
+    const latestItems = store.dayItems.filter((di) => di.inventory_day_id === latestFinalizedDay.id);
+    for (const it of latestItems) {
+      if (it.closing_stock_value) {
+        latestClosingStockValue += it.closing_stock_value;
+      }
+    }
+  }
+
+  // Groupings by ingredient and category
+  const ingUsageMap: Record<
+    string,
+    {
+      ingredientId: string;
+      ingredientName: string;
+      unit: string;
+      usedQty: number;
+      consumptionCost: number;
+      unitCosts: number[];
+      wastageQty: number;
+      wastageCost: number;
+    }
+  > = {};
+
+  const catConsumptionMap: Record<
+    string,
+    {
+      categoryId: string;
+      categoryCode: string;
+      categoryName: string;
+      consumptionCost: number;
+      purchasedCost: number;
+      closingStockValue: number;
+    }
+  > = {};
+
+  for (const cat of categories) {
+    catConsumptionMap[cat.id] = {
+      categoryId: cat.id,
+      categoryCode: cat.code,
+      categoryName: cat.name,
+      consumptionCost: 0,
+      purchasedCost: 0,
+      closingStockValue: 0,
+    };
+  }
+
+  const dailyConsumptionTrend: Array<{
+    date: string;
+    consumptionCost: number;
+    purchasedCost: number;
+    wastageCost: number;
+  }> = [];
+
+  let missingCostItemsCount = 0;
+
+  for (const day of finalizedDays) {
+    const dayItems = store.dayItems.filter((di) => di.inventory_day_id === day.id);
+    let dayUsedVal = 0;
+    let dayPurchaseVal = 0;
+    let dayWastageVal = 0;
+
+    for (const it of dayItems) {
+      if (!ingUsageMap[it.ingredient_id]) {
+        ingUsageMap[it.ingredient_id] = {
+          ingredientId: it.ingredient_id,
+          ingredientName: it.ingredient_name,
+          unit: it.unit,
+          usedQty: 0,
+          consumptionCost: 0,
+          unitCosts: [],
+          wastageQty: 0,
+          wastageCost: 0,
+        };
+      }
+
+      if (it.calculated_used_qty !== null && it.calculated_used_qty > 0) {
+        ingUsageMap[it.ingredient_id].usedQty += it.calculated_used_qty;
+      }
+
+      if (it.used_cost !== null && it.used_cost !== undefined) {
+        ingUsageMap[it.ingredient_id].consumptionCost += it.used_cost;
+        dayUsedVal += it.used_cost;
+        if (catConsumptionMap[it.category_id]) {
+          catConsumptionMap[it.category_id].consumptionCost += it.used_cost;
+        }
+      } else if (it.calculated_used_qty !== null && it.calculated_used_qty > 0) {
+        missingCostItemsCount++;
+      }
+
+      if (it.unit_cost) {
+        ingUsageMap[it.ingredient_id].unitCosts.push(it.unit_cost);
+      }
+
+      if (it.wastage_qty > 0) {
+        ingUsageMap[it.ingredient_id].wastageQty += it.wastage_qty;
+        if (it.wastage_cost) {
+          ingUsageMap[it.ingredient_id].wastageCost += it.wastage_cost;
+          dayWastageVal += it.wastage_cost;
+        }
+      }
+
+      if (it.total_purchase_cost) {
+        dayPurchaseVal += it.total_purchase_cost;
+        if (catConsumptionMap[it.category_id]) {
+          catConsumptionMap[it.category_id].purchasedCost += it.total_purchase_cost;
+        }
+      }
+    }
+
+    totalConsumptionCost += dayUsedVal;
+    totalPurchasedCost += dayPurchaseVal;
+    totalWastageCost += dayWastageVal;
+
+    dailyConsumptionTrend.push({
+      date: day.date,
+      consumptionCost: Number(dayUsedVal.toFixed(2)),
+      purchasedCost: Number(dayPurchaseVal.toFixed(2)),
+      wastageCost: Number(dayWastageVal.toFixed(2)),
+    });
+  }
+
+  // In latest day, record category closing stock value
+  if (latestFinalizedDay) {
+    const latestItems = store.dayItems.filter((di) => di.inventory_day_id === latestFinalizedDay.id);
+    for (const it of latestItems) {
+      if (it.closing_stock_value && catConsumptionMap[it.category_id]) {
+        catConsumptionMap[it.category_id].closingStockValue += it.closing_stock_value;
+      }
+    }
+  }
+
+  const allUsageList = Object.values(ingUsageMap);
+
+  // Highest consumption cost
+  const highestConsumptionIngredients = [...allUsageList]
+    .filter((u) => u.consumptionCost > 0)
+    .sort((a, b) => b.consumptionCost - a.consumptionCost)
+    .slice(0, 15)
+    .map((u) => ({
+      ingredientId: u.ingredientId,
+      ingredientName: u.ingredientName,
+      unit: u.unit,
+      usedQty: Number(u.usedQty.toFixed(2)),
+      consumptionCost: Number(u.consumptionCost.toFixed(2)),
+      avgUnitCost:
+        u.unitCosts.length > 0
+          ? Number((u.unitCosts.reduce((a, b) => a + b, 0) / u.unitCosts.length).toFixed(2))
+          : 0,
+    }));
+
+  // Most used ingredients by quantity (preserving units)
+  const mostUsedIngredients = [...allUsageList]
+    .filter((u) => u.usedQty > 0)
+    .sort((a, b) => b.usedQty - a.usedQty)
+    .slice(0, 15)
+    .map((u) => ({
+      ingredientId: u.ingredientId,
+      ingredientName: u.ingredientName,
+      unit: u.unit,
+      usedQty: Number(u.usedQty.toFixed(2)),
+    }));
+
+  // Most wasted ingredients
+  const mostWastedIngredients = [...allUsageList]
+    .filter((u) => u.wastageQty > 0)
+    .sort((a, b) => b.wastageCost - a.wastageCost || b.wastageQty - a.wastageQty)
+    .slice(0, 15)
+    .map((u) => ({
+      ingredientId: u.ingredientId,
+      ingredientName: u.ingredientName,
+      unit: u.unit,
+      wastageQty: Number(u.wastageQty.toFixed(2)),
+      wastageCost: Number(u.wastageCost.toFixed(2)),
+    }));
+
+  // Filter purchases for date range
+  const purchasesHistory = (store.purchases || [])
+    .filter((p) => p.date >= startDate && p.date <= endDate)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map((p) => {
+      const ing = ingredients.find((i) => i.id === p.ingredient_id);
+      return {
+        id: p.id,
+        date: p.date,
+        ingredientName: p.ingredient_name || ing?.name || p.ingredient_id,
+        quantity: p.quantity,
+        unit: p.unit,
+        pricePerUnit: p.price_per_unit,
+        totalCost: p.total_cost,
+        supplier: p.supplier || null,
+      };
+    });
+
+  return {
+    startDate,
+    endDate,
+    totalFinalizedDays: finalizedDays.length,
+    totalConsumptionCost: Number(totalConsumptionCost.toFixed(2)),
+    totalPurchasedCost: Number(totalPurchasedCost.toFixed(2)),
+    totalWastageCost: Number(totalWastageCost.toFixed(2)),
+    latestClosingStockValue: Number(latestClosingStockValue.toFixed(2)),
+    latestFinalizedDate: latestFinalizedDay?.date || null,
+    missingCostItemsCount,
+    dailyConsumptionTrend,
+    categoryConsumption: Object.values(catConsumptionMap).map((c) => ({
+      ...c,
+      consumptionCost: Number(c.consumptionCost.toFixed(2)),
+      purchasedCost: Number(c.purchasedCost.toFixed(2)),
+      closingStockValue: Number(c.closingStockValue.toFixed(2)),
+    })),
+    highestConsumptionIngredients,
+    mostUsedIngredients,
+    mostWastedIngredients,
+    purchasesHistory,
+  };
+}
+
+// 13. CSV Export Generator
 export function generateRegisterCSV(
   day: InventoryDay,
   items: InventoryDayItem[],
@@ -946,10 +1623,12 @@ export function generateRegisterCSV(
   lines.push(`SPIRAL CAFE — DAILY INVENTORY REGISTER`);
   lines.push(`Date: ${day.date}, Status: ${day.status}, Staff: ${day.checked_by || "Staff"}`);
   lines.push(
-    `Formula: Used = Opening + Purchased - Wastage - Closing Actual`
+    `Formula: Used = Opening + Purchased - Wastage - Closing Actual | Stock Value = Closing Actual * Weighted Avg Cost`
   );
   lines.push("");
-  lines.push("Item #,Category,Ingredient,Unit,Opening,Purchased,Wastage,Closing Actual,Used,Status,Notes");
+  lines.push(
+    "Item #,Category,Ingredient,Unit,Opening,Purchased,Wastage,Closing Actual,Unit Cost (Rs),Stock Value (Rs),Used,Used Cost (Rs),Status,Notes"
+  );
 
   const catMap = new Map(categories.map((c) => [c.id, c]));
 
@@ -957,7 +1636,14 @@ export function generateRegisterCSV(
     const cat = catMap.get(item.category_id);
     const catLabel = cat ? `[${cat.code}] ${cat.name}` : item.category_name;
     const closingStr = item.closing_actual_qty !== null ? item.closing_actual_qty.toString() : "";
+    const unitCostStr = item.unit_cost !== null && item.unit_cost !== undefined ? item.unit_cost.toFixed(2) : "Not Set";
+    const stockValStr =
+      item.closing_stock_value !== null && item.closing_stock_value !== undefined
+        ? item.closing_stock_value.toFixed(2)
+        : "";
     const usedStr = item.calculated_used_qty !== null ? item.calculated_used_qty.toString() : "";
+    const usedCostStr =
+      item.used_cost !== null && item.used_cost !== undefined ? item.used_cost.toFixed(2) : "";
     const statusStr = item.is_counted ? "COUNTED" : "PENDING";
     const notesClean = (item.notes || "").replace(/"/g, '""');
 
@@ -971,7 +1657,10 @@ export function generateRegisterCSV(
         item.purchased_qty,
         item.wastage_qty,
         closingStr,
+        unitCostStr,
+        stockValStr,
         usedStr,
+        usedCostStr,
         statusStr,
         `"${notesClean}"`,
       ].join(",")

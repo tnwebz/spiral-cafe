@@ -14,6 +14,7 @@ export interface InventoryIngredient {
   name: string;
   category_id: string;
   unit: string;
+  cost_per_unit?: number | null; // Baseline/standard cost in ₹ per unit
   purchase_unit?: string | null;
   package_conversion_ratio?: number | null;
   min_stock_level: number;
@@ -22,6 +23,21 @@ export interface InventoryIngredient {
   notes?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface InventoryPurchaseRecord {
+  id: string;
+  ingredient_id: string;
+  ingredient_name?: string;
+  date: string; // YYYY-MM-DD
+  quantity: number;
+  unit: string;
+  price_per_unit: number; // ₹/unit
+  total_cost: number; // quantity * price_per_unit
+  supplier?: string | null;
+  recorded_by?: string;
+  notes?: string | null;
+  created_at?: string;
 }
 
 export type InventoryDayStatus = "DRAFT" | "COUNTING" | "READY_FOR_REVIEW" | "FINALIZED";
@@ -35,6 +51,10 @@ export interface InventoryDay {
   finalized_at?: string | null;
   total_active_ingredients: number;
   counted_ingredients: number;
+  total_closing_stock_value?: number | null;
+  total_used_value?: number | null;
+  total_wastage_value?: number | null;
+  total_purchase_value?: number | null;
   notes?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -54,6 +74,16 @@ export interface InventoryDayItem {
   wastage_qty: number;
   closing_actual_qty: number | null;
   calculated_used_qty: number | null;
+  // Moving weighted-average cost & valuation (₹)
+  unit_cost?: number | null;
+  opening_stock_value?: number | null;
+  total_purchase_cost?: number | null;
+  closing_stock_value?: number | null;
+  used_cost?: number | null;
+  wastage_cost?: number | null;
+  latest_purchase_price?: number | null;
+  avg_purchase_price?: number | null;
+  purchase_entries?: InventoryPurchaseRecord[];
   is_counted: boolean;
   counted_by?: string | null;
   counted_at?: string | null;
@@ -230,5 +260,88 @@ export function calculateUsedQty(
   }
   const rawUsed = opening + purchased - wastage - closing;
   return Number(rawUsed.toFixed(3));
+}
+
+/**
+ * Moving Weighted-Average Costing Formula:
+ * Weighted Average Cost = (Opening Stock Value + Total Purchase Cost) / (Opening Qty + Purchased Qty)
+ *
+ * Used Cost = Used Qty * Weighted Average Cost
+ * Closing Value = Closing Actual * Weighted Average Cost
+ * Wastage Cost = Wastage Qty * Weighted Average Cost
+ */
+export function calculateWeightedAverageCost(
+  openingQty: number,
+  prevUnitCost: number | null | undefined,
+  purchasedQty: number,
+  purchases: Array<{ quantity: number; price_per_unit: number; total_cost?: number }>,
+  baseCost?: number | null
+): {
+  unitCost: number | null;
+  openingStockValue: number | null;
+  totalPurchaseCost: number;
+  latestPurchasePrice: number | null;
+} {
+  const openingCost =
+    prevUnitCost !== null && prevUnitCost !== undefined && !isNaN(prevUnitCost)
+      ? Number(prevUnitCost)
+      : baseCost !== null && baseCost !== undefined && !isNaN(baseCost)
+      ? Number(baseCost)
+      : null;
+
+  const totalPurchaseCost = purchases.reduce(
+    (acc, p) => acc + (p.total_cost !== undefined ? p.total_cost : (p.quantity || 0) * (p.price_per_unit || 0)),
+    0
+  );
+
+  const totalPurchasedQty = purchases.reduce((acc, p) => acc + (p.quantity || 0), 0);
+  const effectivePurchasedQty = totalPurchasedQty > 0 ? totalPurchasedQty : (purchasedQty || 0);
+
+  const latestPurchase = purchases.length > 0 ? purchases[purchases.length - 1] : null;
+  const latestPurchasePrice = latestPurchase ? latestPurchase.price_per_unit : null;
+
+  const openingStockValue = openingCost !== null ? openingQty * openingCost : null;
+  const totalAvailableQty = openingQty + effectivePurchasedQty;
+
+  if (totalAvailableQty > 0) {
+    if (openingStockValue !== null && totalPurchaseCost > 0) {
+      const avg = (openingStockValue + totalPurchaseCost) / totalAvailableQty;
+      return {
+        unitCost: Number(avg.toFixed(2)),
+        openingStockValue: Number(openingStockValue.toFixed(2)),
+        totalPurchaseCost: Number(totalPurchaseCost.toFixed(2)),
+        latestPurchasePrice,
+      };
+    } else if (totalPurchaseCost > 0 && openingQty === 0) {
+      const avg = totalPurchaseCost / effectivePurchasedQty;
+      return {
+        unitCost: Number(avg.toFixed(2)),
+        openingStockValue: 0,
+        totalPurchaseCost: Number(totalPurchaseCost.toFixed(2)),
+        latestPurchasePrice,
+      };
+    } else if (openingCost !== null) {
+      return {
+        unitCost: Number(openingCost.toFixed(2)),
+        openingStockValue: openingStockValue !== null ? Number(openingStockValue.toFixed(2)) : null,
+        totalPurchaseCost: Number(totalPurchaseCost.toFixed(2)),
+        latestPurchasePrice,
+      };
+    }
+  } else if (openingCost !== null) {
+    return {
+      unitCost: Number(openingCost.toFixed(2)),
+      openingStockValue: 0,
+      totalPurchaseCost: 0,
+      latestPurchasePrice,
+    };
+  }
+
+  return {
+    unitCost: null,
+    openingStockValue: null,
+    totalPurchaseCost: Number(totalPurchaseCost.toFixed(2)),
+    latestPurchasePrice,
+  };
 }
 

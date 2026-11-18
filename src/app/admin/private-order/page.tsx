@@ -20,12 +20,34 @@ import {
   Layers,
   ChefHat,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { menuData } from "@/data/menu";
 import { DynamicMenuItem } from "@/lib/db";
 import FoodIcon from "@/components/FoodIcon";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
 import PrinterStatusModal from "@/components/Admin/PrinterStatusModal";
+import { PrinterClient, CustomerBillPayload } from "@/services/printerClient";
+
+interface TableStatusSummary {
+  tableNumber: string;
+  isOccupied: boolean;
+  color: string;
+  statusLabel: string;
+  orderNumber?: string;
+  totalAmount?: number;
+  itemsCount?: number;
+  elapsedMinutes?: number;
+}
+
+const DEFAULT_TABLES: TableStatusSummary[] = [
+  "A1", "A2", "B1", "B2", "B3", "B4", "B5", "B6", "C1", "C2", "C3", "F1", "F2", "F3", "F4",
+].map((num) => ({
+  tableNumber: num,
+  isOccupied: false,
+  color: "WHITE",
+  statusLabel: "AVAILABLE",
+}));
 
 interface CartItem {
   id: string;
@@ -53,11 +75,61 @@ export default function PrivateOrderPage() {
   // Private Order Details
   const [purpose, setPurpose] = useState<PrivatePurpose>("STAFF");
   const [privateNote, setPrivateNote] = useState("");
+  const [selectedTable, setSelectedTable] = useState<string>("COUNTER");
+  const [tablesList, setTablesList] = useState<TableStatusSummary[]>(DEFAULT_TABLES);
+
+  // Poll live tables status from /api/tables (every 8s) to track occupied/busy tables
+  const fetchTables = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tables");
+      const d = await res.json();
+      if (d.success && Array.isArray(d.tables) && d.tables.length > 0) {
+        const mapped: TableStatusSummary[] = d.tables.map((t: any) => {
+          const isOccupied =
+            t.color !== "WHITE" ||
+            t.statusLabel !== "AVAILABLE" ||
+            Boolean(t.activeOrder) ||
+            Boolean(t.orderNumber);
+
+          return {
+            tableNumber: t.tableNumber,
+            isOccupied,
+            color: t.color || "WHITE",
+            statusLabel: t.statusLabel || "AVAILABLE",
+            orderNumber: t.orderNumber || t.activeOrder?.orderNumber,
+            totalAmount: t.totalAmount ?? t.activeOrder?.grandTotal,
+            itemsCount: t.itemsCount ?? t.activeOrder?.items?.length,
+            elapsedMinutes: t.elapsedMinutes,
+          };
+        });
+        setTablesList(mapped);
+      }
+    } catch {
+      // Keep existing list on failure
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTables();
+    const interval = setInterval(fetchTables, 8000);
+    return () => clearInterval(interval);
+  }, [fetchTables]);
+
+  // Derived current selected table metadata
+  const currentSelectedTableInfo = useMemo(() => {
+    if (selectedTable === "COUNTER") return null;
+    return (
+      tablesList.find(
+        (t) => t.tableNumber.toUpperCase() === selectedTable.toUpperCase()
+      ) || null
+    );
+  }, [tablesList, selectedTable]);
 
   // Cart
   const [cart, setCart] = useState<Map<string, CartItem>>(new Map());
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [printBillOnConfirm, setPrintBillOnConfirm] = useState(false);
 
   // Placed Order Result Modal
   const [placedOrder, setPlacedOrder] = useState<any | null>(null);
@@ -69,6 +141,13 @@ export default function PrivateOrderPage() {
   const [kotPrintWarning, setKotPrintWarning] = useState<string | null>(null);
   const [kotPrintSuccess, setKotPrintSuccess] = useState<string | null>(null);
   const [manualSentNotice, setManualSentNotice] = useState<string | null>(null);
+
+  // Counter 58mm Bill Printing State
+  const [printingCounterBill, setPrintingCounterBill] = useState(false);
+  const [counterBillStatus, setCounterBillStatus] = useState<{
+    success?: boolean;
+    message?: string;
+  } | null>(null);
 
   // Kitchen Printer Live Status Hook (TCP 9100 CN811-UEWB)
   const printer = usePrinterStatus(8000);
@@ -205,7 +284,7 @@ export default function PrivateOrderPage() {
   );
 
   // Submit Private Order
-  const handlePlacePrivateOrder = async () => {
+  const handlePlacePrivateOrder = async (withCounterBill = false) => {
     if (cartList.length === 0) return;
 
     setSubmitting(true);
@@ -216,6 +295,8 @@ export default function PrivateOrderPage() {
         body: JSON.stringify({
           purpose,
           privateNote,
+          tableNumber: selectedTable === "COUNTER" ? "GIVE ON COUNTER" : selectedTable,
+          destination: selectedTable === "COUNTER" ? "GIVE ON COUNTER" : `TABLE ${selectedTable}`,
           items: cartList.map((it) => ({
             productId: it.id,
             name: it.name,
@@ -234,6 +315,11 @@ export default function PrivateOrderPage() {
         setIsDrawerOpen(false);
         // Automatically attempt to dispatch kitchen KOT
         dispatchPrivateKot(json.order.id);
+
+        // If counter bill requested or toggle active, print bill at counter
+        if (withCounterBill || printBillOnConfirm) {
+          handlePrintCounterBill(json.order, false);
+        }
       } else {
         alert(json.error || "Failed to create private order");
       }
@@ -242,6 +328,75 @@ export default function PrivateOrderPage() {
       alert("Network error: Could not place private order.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Print Internal Customer Bill Slip on 58mm Counter USB Printer
+  const handlePrintCounterBill = async (orderToPrint?: any, isReprint = false) => {
+    const target = orderToPrint || placedOrder;
+    if (!target) return;
+
+    setPrintingCounterBill(true);
+    setCounterBillStatus(null);
+    try {
+      const destTable =
+        target.tableNumber === "COUNTER" || target.tableNumber === "GIVE ON COUNTER"
+          ? "COUNTER"
+          : target.tableNumber;
+
+      const billPayload: CustomerBillPayload = {
+        visitId: `INTERNAL-${target.id || Date.now()}`,
+        billNumber: target.orderNumber
+          ? target.orderNumber.replace(/^(ORD-|#)/, "")
+          : String(Date.now()).slice(-4),
+        orderNumber: target.orderNumber,
+        tableNumber: destTable,
+        paymentMode: `INTERNAL (${target.privatePurpose || purpose})`,
+        dateStr: new Date(target.createdAt || Date.now()).toLocaleDateString("en-IN"),
+        timeStr: new Date(target.createdAt || Date.now()).toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        terminalName: "Billing 1",
+        items: (target.items || cartList).map((it: any) => ({
+          name: it.name,
+          quantity: it.quantity || 1,
+          price: it.price || 0,
+          lineTotal: (it.price || 0) * (it.quantity || 1),
+        })),
+        totalItems: (target.items || cartList).length,
+        totalQuantity: (target.items || cartList).reduce(
+          (acc: number, it: any) => acc + (it.quantity || 1),
+          0
+        ),
+        subtotal: target.subtotal || target.grandTotal || totalCartAmount,
+        tax: 0,
+        packagingFee: 0,
+        grandTotal: target.grandTotal || totalCartAmount,
+        isDuplicate: isReprint,
+      };
+
+      const res = await PrinterClient.printCustomerBill(billPayload);
+      if (res.success) {
+        setCounterBillStatus({
+          success: true,
+          message: "Internal 58mm bill slip printed successfully on Counter USB printer!",
+        });
+      } else {
+        setCounterBillStatus({
+          success: false,
+          message:
+            res.message ||
+            "Could not print to Counter USB printer. Check connection and paper.",
+        });
+      }
+    } catch (err: any) {
+      setCounterBillStatus({
+        success: false,
+        message: err.message || "Print connector unreachable on port 4318.",
+      });
+    } finally {
+      setPrintingCounterBill(false);
     }
   };
 
@@ -327,7 +482,7 @@ export default function PrivateOrderPage() {
             </div>
           </div>
 
-          {/* Prominent Counter Destination Pill & Kitchen Printer Status */}
+          {/* Prominent Counter Destination Pill & Dual Printer Status */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
             {/* Kitchen Printer Live Status Pill */}
             <button
@@ -344,18 +499,64 @@ export default function PrivateOrderPage() {
                     : "bg-red-500"
                 }`}
               />
-              <Printer size={15} />
+              <Printer size={14} className="text-zinc-600" />
               <span className="hidden sm:inline">
                 {printer.status === "CONNECTED"
-                  ? "Kitchen Printer Ready"
+                  ? "Kitchen Ready"
                   : printer.status === "WARNING"
-                  ? "Printer Warning"
-                  : "Printer Disconnected"}
+                  ? "Kitchen Warning"
+                  : "Kitchen Disconnected"}
               </span>
             </button>
 
-            <div className="px-3.5 py-1.5 rounded-2xl bg-emerald-600 text-white font-black text-xs sm:text-sm tracking-wide shadow-sm flex items-center gap-1.5 animate-pulse">
-              <span>📍 GIVE ON COUNTER</span>
+            {/* Counter 58mm Bill Printer Status Pill */}
+            <button
+              onClick={() => setPrinterModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-black/10 text-xs font-bold text-zinc-700 hover:bg-zinc-50 transition-colors shadow-xs cursor-pointer"
+              title="Counter 58mm USB Bill Printer (POS-58-Series)"
+            >
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  printer.counter?.ready
+                    ? "bg-emerald-500 animate-pulse"
+                    : "bg-zinc-400"
+                }`}
+              />
+              <Printer size={14} className="text-[#3A1710]" />
+              <span className="hidden sm:inline">
+                {printer.counter?.ready
+                  ? "Counter 58mm Ready"
+                  : `Counter: ${printer.counter?.status || "USB"}`}
+              </span>
+            </button>
+
+            <div className="flex items-center gap-1.5 p-1 bg-white border border-black/10 rounded-2xl shadow-xs">
+              <button
+                type="button"
+                onClick={() => setSelectedTable("COUNTER")}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  selectedTable === "COUNTER"
+                    ? "bg-emerald-600 text-white shadow-2xs"
+                    : "text-zinc-600 hover:bg-zinc-100"
+                }`}
+              >
+                📍 Counter Pickup
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedTable === "COUNTER") setSelectedTable(tablesList[0]?.tableNumber || "A1");
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  selectedTable !== "COUNTER"
+                    ? currentSelectedTableInfo?.isOccupied
+                      ? "bg-amber-600 text-white shadow-2xs"
+                      : "bg-[#3A1710] text-white shadow-2xs"
+                    : "text-zinc-600 hover:bg-zinc-100"
+                }`}
+              >
+                🪑 {selectedTable !== "COUNTER" ? `Table ${selectedTable}` : "Floor Table"}
+              </button>
             </div>
           </div>
         </div>
@@ -406,6 +607,105 @@ export default function PrivateOrderPage() {
                 className="mt-1 w-full px-3 py-1.5 bg-[#FAF7F2] border border-black/10 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#3A1710]"
               />
             </div>
+          </div>
+
+          {/* Destination / Floor Table Selection */}
+          <div className="pt-3 border-t border-black/5">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-bold text-zinc-400 tracking-wider uppercase">
+                2. Service Destination / Table Selection
+              </span>
+              <span className="text-xs font-bold text-[#3A1710] flex items-center gap-1.5">
+                {selectedTable === "COUNTER" ? (
+                  "📍 Counter Pickup"
+                ) : (
+                  <>
+                    <span>🪑 Seated at Table {selectedTable}</span>
+                    {currentSelectedTableInfo?.isOccupied ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold uppercase">
+                        Occupied Table
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
+                        Available Table
+                      </span>
+                    )}
+                  </>
+                )}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedTable("COUNTER")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  selectedTable === "COUNTER"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-[#FAF7F2] text-zinc-600 hover:bg-zinc-100 border border-black/5"
+                }`}
+              >
+                <span>📍 Give on Counter</span>
+              </button>
+              <div className="h-4 w-px bg-zinc-300 mx-1 hidden sm:block" />
+              {tablesList.map((t) => {
+                const isSelected = selectedTable === t.tableNumber;
+                return (
+                  <button
+                    key={t.tableNumber}
+                    type="button"
+                    onClick={() => setSelectedTable(t.tableNumber)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? t.isOccupied
+                          ? "bg-amber-600 text-white shadow-xs border border-amber-700"
+                          : "bg-[#3A1710] text-white shadow-xs border border-[#3A1710]"
+                        : t.isOccupied
+                        ? "bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100"
+                        : "bg-[#FAF7F2] text-zinc-600 hover:bg-zinc-100 border border-black/5"
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        t.isOccupied ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                      }`}
+                    />
+                    <span>{t.tableNumber}</span>
+                    {t.isOccupied && (
+                      <span
+                        className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${
+                          isSelected
+                            ? "bg-white/20 text-white"
+                            : "bg-amber-200 text-amber-900"
+                        }`}
+                      >
+                        Busy
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Occupied Table Warning Banner */}
+            {currentSelectedTableInfo?.isOccupied && (
+              <div className="mt-2.5 p-3 rounded-2xl bg-amber-50 border border-amber-300 flex items-start gap-2.5 text-xs text-amber-950">
+                <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-amber-900">
+                      ⚠️ Table {selectedTable} is currently OCCUPIED by Dining Guests
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-extrabold uppercase">
+                      {currentSelectedTableInfo.statusLabel || "Action Needed"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    Table {selectedTable} has active guest ticket <strong>#{currentSelectedTableInfo.orderNumber || "ORD-ACTIVE"}</strong> ({currentSelectedTableInfo.itemsCount ? `${currentSelectedTableInfo.itemsCount} items • ` : ""}Total ₹{currentSelectedTableInfo.totalAmount || 0}).
+                    Placing an internal ticket for this table will send food directly to where guests are currently seated.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
@@ -633,7 +933,7 @@ export default function PrivateOrderPage() {
                     🔒 Private Order
                   </span>
                   <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
-                    GIVE ON COUNTER
+                    {selectedTable === "COUNTER" ? "GIVE ON COUNTER" : `TABLE ${selectedTable}`}
                   </span>
                 </div>
                 <h2 className="font-heading font-extrabold text-base text-[#1a120c] mt-1">
@@ -657,6 +957,91 @@ export default function PrivateOrderPage() {
               {privateNote && (
                 <div className="text-right max-w-[200px] truncate text-zinc-500">
                   Note: <span className="font-semibold text-zinc-800">{privateNote}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Destination / Floor Table Selection in Drawer */}
+            <div className="px-4 sm:px-5 py-2.5 bg-[#FFFBF7] border-b border-black/5 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-zinc-500">Destination / Table:</span>
+                <span className="font-heading font-extrabold text-[#3A1710] flex items-center gap-1.5">
+                  {selectedTable === "COUNTER" ? (
+                    "📍 Give on Counter"
+                  ) : (
+                    <>
+                      <span>🪑 Table {selectedTable}</span>
+                      {currentSelectedTableInfo?.isOccupied ? (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-extrabold uppercase">
+                          Occupied
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">
+                          Free
+                        </span>
+                      )}
+                    </>
+                  )}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTable("COUNTER")}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    selectedTable === "COUNTER"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50"
+                  }`}
+                >
+                  <span>📍</span>
+                  <span>Give on Counter</span>
+                </button>
+                {tablesList.map((t) => {
+                  const isSelected = selectedTable === t.tableNumber;
+                  return (
+                    <button
+                      key={t.tableNumber}
+                      type="button"
+                      onClick={() => setSelectedTable(t.tableNumber)}
+                      className={`px-2 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? t.isOccupied
+                            ? "bg-amber-600 text-white shadow-xs border border-amber-700"
+                            : "bg-[#3A1710] text-white shadow-xs"
+                          : t.isOccupied
+                          ? "bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100"
+                          : "bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50"
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          t.isOccupied ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                        }`}
+                      />
+                      <span>{t.tableNumber}</span>
+                      {t.isOccupied && (
+                        <span
+                          className={`text-[9px] px-1 py-0.2 rounded font-extrabold uppercase ${
+                            isSelected ? "bg-white/20 text-white" : "bg-amber-200 text-amber-900"
+                          }`}
+                        >
+                          Busy
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {currentSelectedTableInfo?.isOccupied && (
+                <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-2 text-xs text-amber-950">
+                  <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] text-amber-800">
+                    <span className="font-bold text-amber-950">⚠️ Table {selectedTable} has active dining guests:</span>{" "}
+                    Order #{currentSelectedTableInfo.orderNumber || "ORD-ACTIVE"} (₹{currentSelectedTableInfo.totalAmount || 0}).
+                    Please confirm this ticket is intended for Table {selectedTable}.
+                  </div>
                 </div>
               )}
             </div>
@@ -701,11 +1086,25 @@ export default function PrivateOrderPage() {
                     </button>
                   </div>
 
-                  <div className="text-right w-16">
+                  <div className="text-right min-w-[55px]">
                     <span className="font-heading font-extrabold text-xs sm:text-sm text-[#CA340A]">
                       ₹{item.price * item.quantity}
                     </span>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateQuantity(
+                        menuItems.find((m) => m.id === item.id) || (item as any),
+                        -item.quantity
+                      )
+                    }
+                    className="p-1.5 rounded-lg text-red-500 hover:text-white hover:bg-red-600 bg-red-50 border border-red-200/60 transition-all cursor-pointer"
+                    title={`Remove ${item.name}`}
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -719,86 +1118,182 @@ export default function PrivateOrderPage() {
                 </span>
               </div>
 
-              {/* Kitchen Printer Live Status Bar inside drawer */}
-              <div
-                className={`text-xs p-3 rounded-2xl border transition-all ${
-                  printer.status === "CONNECTED"
-                    ? "bg-white border-black/5 text-zinc-700"
-                    : "bg-amber-50 border-amber-300 text-amber-950 shadow-xs"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        printer.status === "CONNECTED"
-                          ? "bg-emerald-500 animate-pulse"
+              {/* Dual Printer Live Status Bar inside drawer */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {/* Kitchen Printer (CN811-UEWB TCP) */}
+                <div
+                  className={`p-2.5 rounded-xl border transition-all ${
+                    printer.status === "CONNECTED"
+                      ? "bg-white border-black/5 text-zinc-700"
+                      : "bg-amber-50 border-amber-300 text-amber-950"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          printer.status === "CONNECTED"
+                            ? "bg-emerald-500 animate-pulse"
+                            : printer.status === "WARNING"
+                            ? "bg-amber-500"
+                            : "bg-red-500 animate-pulse"
+                        }`}
+                      />
+                      <span className="font-bold text-[11px]">
+                        Kitchen:{" "}
+                        {printer.status === "CONNECTED"
+                          ? "Online"
                           : printer.status === "WARNING"
-                          ? "bg-amber-500"
-                          : "bg-red-500 animate-pulse"
-                      }`}
-                    />
-                    <Printer
-                      size={15}
-                      className={printer.status === "CONNECTED" ? "text-zinc-600" : "text-amber-700"}
-                    />
-                    <span className="text-xs font-bold">
-                      Kitchen Printer:{" "}
-                      {printer.status === "CONNECTED"
-                        ? "Online (CN811-UEWB)"
-                        : printer.status === "WARNING"
-                        ? "Warning"
-                        : "Disconnected"}
-                    </span>
+                          ? "Warning"
+                          : "Disconnected"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPrinterModalOpen(true)}
+                      className="text-[10px] text-[#CA340A] font-bold hover:underline cursor-pointer"
+                    >
+                      Info
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPrinterModalOpen(true)}
-                    className="text-[11px] text-[#CA340A] font-bold hover:underline cursor-pointer"
-                  >
-                    Printer Info
-                  </button>
                 </div>
-                {printer.status !== "CONNECTED" && (
-                  <p className="text-[11px] text-amber-800 mt-1.5 pl-4">
-                    Kitchen printer is currently unreachable. You can still confirm the order; you can retry KOT or mark manually sent on the next step.
-                  </p>
-                )}
+
+                {/* Counter 58mm USB Printer */}
+                <div
+                  className={`p-2.5 rounded-xl border transition-all ${
+                    printer.counter?.ready
+                      ? "bg-white border-black/5 text-zinc-700"
+                      : "bg-amber-50 border-amber-300 text-amber-950"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          printer.counter?.ready
+                            ? "bg-emerald-500 animate-pulse"
+                            : "bg-zinc-400"
+                        }`}
+                      />
+                      <span className="font-bold text-[11px]">
+                        Counter: {printer.counter?.ready ? "Ready (58mm)" : printer.counter?.status || "USB"}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-400 font-mono">USB</span>
+                  </div>
+                </div>
               </div>
+
+              {/* Counter 58mm Bill Slip Option Checkbox */}
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-black/10 cursor-pointer hover:bg-stone-50 select-none transition-colors">
+                <input
+                  type="checkbox"
+                  checked={printBillOnConfirm}
+                  onChange={(e) => setPrintBillOnConfirm(e.target.checked)}
+                  className="w-4 h-4 text-[#3A1710] rounded border-zinc-300 focus:ring-[#3A1710] accent-[#3A1710] cursor-pointer"
+                />
+                <div className="flex-1 flex items-center justify-between text-xs">
+                  <span className="font-bold text-zinc-800 flex items-center gap-1.5">
+                    <Printer size={13} className="text-[#3A1710]" />
+                    <span>Print 58mm Bill at Counter on confirm</span>
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      printer.counter?.ready
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-zinc-100 text-zinc-600"
+                    }`}
+                  >
+                    {printer.counter?.ready ? "POS-58 Ready" : "USB Queue"}
+                  </span>
+                </div>
+              </label>
 
               <p className="text-[10px] text-zinc-500">
                 Notice: This order is isolated and will only appear in Private Sales Analytics. It will
                 not affect customer floor tables or tax billing.
               </p>
 
-              <button
-                onClick={handlePlacePrivateOrder}
-                disabled={submitting}
-                className="w-full py-3.5 rounded-2xl bg-[#CA340A] text-white font-extrabold text-sm hover:bg-[#B73F1D] transition-all shadow-md shadow-[#CA340A]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {submitting ? (
-                  <>
-                    <RefreshCw size={16} className="animate-spin" />
-                    <span>Sending KOT to Kitchen...</span>
-                  </>
-                ) : (
-                  <>
-                    <Printer size={16} />
-                    <span>Confirm & Send KOT</span>
-                  </>
-                )}
-              </button>
+              {/* Dual Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handlePlacePrivateOrder(true)}
+                  disabled={submitting}
+                  className="flex-1 py-3 px-3 rounded-2xl bg-[#3A1710] text-white font-extrabold text-xs hover:bg-[#2C1710] transition-all shadow-md shadow-[#3A1710]/15 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      <span>Placing & Printing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Printer size={15} />
+                      <span>Confirm & Print Bill (58mm)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePlacePrivateOrder(false)}
+                  disabled={submitting}
+                  className="flex-1 py-3 px-3 rounded-2xl bg-[#CA340A] text-white font-extrabold text-xs hover:bg-[#B73F1D] transition-all shadow-md shadow-[#CA340A]/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      <span>Transmitting KOT...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChefHat size={15} />
+                      <span>Confirm & Send KOT</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Post-Order Success & Kitchen KOT Modal */}
+      {/* Post-Order Success & Kitchen KOT / Counter Bill Modal */}
       {placedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4 border border-black/10 text-center">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center">
-              <CheckCircle2 size={36} />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setPlacedOrder(null);
+              setKotPrintStatus(null);
+              setKotPrintWarning(null);
+              setKotPrintSuccess(null);
+              setManualSentNotice(null);
+              setCounterBillStatus(null);
+            }
+          }}
+        >
+          <div className="relative bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4 border border-black/10 text-center max-h-[90vh] overflow-y-auto">
+            {/* Top Close 'X' Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setPlacedOrder(null);
+                setKotPrintStatus(null);
+                setKotPrintWarning(null);
+                setKotPrintSuccess(null);
+                setManualSentNotice(null);
+                setCounterBillStatus(null);
+              }}
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center">
+              <CheckCircle2 size={32} />
             </div>
 
             <div>
@@ -809,7 +1304,10 @@ export default function PrivateOrderPage() {
                 Private Order Placed!
               </h2>
               <div className="inline-block mt-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-black text-xs">
-                📍 Destination: GIVE ON COUNTER
+                📍 Destination:{" "}
+                {placedOrder.tableNumber === "COUNTER" || placedOrder.tableNumber === "GIVE ON COUNTER"
+                  ? "GIVE ON COUNTER"
+                  : `TABLE ${placedOrder.tableNumber}`}
               </div>
               <p className="text-xs text-zinc-500 mt-2">
                 Purpose: <strong className="text-zinc-800">{placedOrder.privatePurpose}</strong> • Value:{" "}
@@ -817,9 +1315,77 @@ export default function PrivateOrderPage() {
               </p>
             </div>
 
+            {/* Counter 58mm USB Bill Printing Card */}
+            <div className="p-3.5 bg-stone-50 text-stone-900 rounded-2xl text-xs space-y-2 border border-stone-200 text-left">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      printer.counter?.ready ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
+                    }`}
+                  />
+                  <Printer size={15} className="text-[#3A1710]" />
+                  <span className="font-bold text-[#1a120c]">
+                    Counter Bill Printer ({printer.counter?.printerName || "POS-58-Series"})
+                  </span>
+                </div>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    printer.counter?.ready
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-zinc-100 text-zinc-600"
+                  }`}
+                >
+                  {printer.counter?.ready ? "Ready" : printer.counter?.status || "USB"}
+                </span>
+              </div>
+
+              {/* Counter Bill Feedback */}
+              {counterBillStatus && (
+                <div
+                  className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
+                    counterBillStatus.success
+                      ? "bg-emerald-50 text-emerald-950 border border-emerald-200"
+                      : "bg-red-50 text-red-950 border border-red-200"
+                  }`}
+                >
+                  {counterBillStatus.success ? (
+                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle size={16} className="text-red-600 shrink-0" />
+                  )}
+                  <span className="text-[11px] font-medium">{counterBillStatus.message}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handlePrintCounterBill(placedOrder, Boolean(counterBillStatus?.success))}
+                disabled={printingCounterBill}
+                className="w-full py-2.5 px-3 bg-[#3A1710] hover:bg-[#2C1710] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {printingCounterBill ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Printing 58mm Bill at Counter...</span>
+                  </>
+                ) : (
+                  <>
+                    <Printer size={13} />
+                    <span>
+                      {counterBillStatus?.success
+                        ? "Reprint Counter Bill (58mm)"
+                        : "Print Bill at Counter (58mm USB)"}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Kitchen KOT Section */}
             {/* Printing In Progress */}
             {printingKot && !kotPrintWarning && !kotPrintSuccess && (
-              <div className="p-3.5 bg-stone-50 text-stone-800 rounded-2xl text-xs flex items-center justify-center gap-2 border border-stone-200">
+              <div className="p-3 bg-stone-50 text-stone-800 rounded-2xl text-xs flex items-center justify-center gap-2 border border-stone-200">
                 <RefreshCw size={14} className="animate-spin text-[#CA340A]" />
                 <span className="font-medium text-stone-600">Transmitting KOT to Kitchen CN811-UEWB...</span>
               </div>
@@ -827,8 +1393,8 @@ export default function PrivateOrderPage() {
 
             {/* KOT Printing Success Notice */}
             {kotPrintSuccess && (
-              <div className="p-3.5 bg-emerald-50 text-emerald-950 rounded-2xl text-xs flex items-center gap-2.5 border border-emerald-200 text-left">
-                <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+              <div className="p-3 bg-emerald-50 text-emerald-950 rounded-2xl text-xs flex items-center gap-2.5 border border-emerald-200 text-left">
+                <CheckCircle2 size={17} className="shrink-0 text-emerald-600" />
                 <div>
                   <p className="font-bold">KOT Sent to Kitchen ✅</p>
                   <p className="text-[11px] text-emerald-800 mt-0.5">{kotPrintSuccess}</p>
@@ -838,8 +1404,8 @@ export default function PrivateOrderPage() {
 
             {/* Manual Sent Notice */}
             {manualSentNotice && (
-              <div className="p-3.5 bg-stone-100 text-stone-900 rounded-2xl text-xs flex items-center gap-2.5 border border-stone-200 text-left">
-                <ChefHat size={18} className="shrink-0 text-[#CA340A]" />
+              <div className="p-3 bg-stone-100 text-stone-900 rounded-2xl text-xs flex items-center gap-2.5 border border-stone-200 text-left">
+                <ChefHat size={17} className="shrink-0 text-[#CA340A]" />
                 <div>
                   <p className="font-bold text-stone-950">Manual KOT Recorded</p>
                   <p className="text-[11px] text-stone-600 mt-0.5">{manualSentNotice}</p>
@@ -849,7 +1415,7 @@ export default function PrivateOrderPage() {
 
             {/* Warning / Disconnection Banner matching Image 2 */}
             {kotPrintWarning && (
-              <div className="p-4 bg-amber-50 text-amber-900 rounded-2xl text-xs space-y-2 border border-amber-300 shadow-xs text-left">
+              <div className="p-3.5 bg-amber-50 text-amber-900 rounded-2xl text-xs space-y-2 border border-amber-300 shadow-xs text-left">
                 <div className="flex items-start gap-2">
                   <AlertTriangle size={17} className="text-amber-600 shrink-0 mt-0.5" />
                   <div>
@@ -883,16 +1449,33 @@ export default function PrivateOrderPage() {
             )}
 
             {/* Navigation Actions */}
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => {
                   setPlacedOrder(null);
                   setKotPrintStatus(null);
                   setKotPrintWarning(null);
                   setKotPrintSuccess(null);
                   setManualSentNotice(null);
+                  setCounterBillStatus(null);
                 }}
-                className="flex-1 py-3 rounded-2xl bg-zinc-100 text-zinc-800 font-bold text-xs hover:bg-zinc-200 transition-colors cursor-pointer"
+                className="py-3 px-4 rounded-2xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPlacedOrder(null);
+                  setKotPrintStatus(null);
+                  setKotPrintWarning(null);
+                  setKotPrintSuccess(null);
+                  setManualSentNotice(null);
+                  setCounterBillStatus(null);
+                }}
+                className="flex-1 py-3 rounded-2xl bg-[#3A1710] text-white font-bold text-xs hover:bg-[#2C1710] transition-colors cursor-pointer"
               >
                 New Private Order
               </button>

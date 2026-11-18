@@ -11,7 +11,6 @@ import {
   TrendingUp,
   ShoppingBag,
   Clock,
-  ChefHat,
   CheckCircle2,
   Banknote,
   CreditCard,
@@ -24,7 +23,6 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
@@ -317,20 +315,15 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* 3. PENDING / PREPARING / READY */}
+          {/* 3. ORDER PIPELINE */}
           <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#CA340A]/15 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-[#CA340A]/30 transition-all">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-extrabold text-[#52525b] uppercase tracking-wider">
-                Pending / Preparing / Ready
+                Order Pipeline
               </span>
-              <Link
-                href="/kitchen"
-                target="_blank"
-                className="w-7 h-7 rounded-lg bg-orange-50 text-[#CA340A] hover:bg-[#CA340A] hover:text-white flex items-center justify-center transition-colors"
-                title="Launch Kitchen KDS"
-              >
-                <ChefHat size={14} />
-              </Link>
+              <div className="w-7 h-7 rounded-lg bg-orange-50 text-[#CA340A] flex items-center justify-center">
+                <Clock size={14} />
+              </div>
             </div>
 
             {/* 3 Status Counters */}
@@ -370,14 +363,9 @@ export default function AdminDashboardPage() {
               <span className="text-[#52525b] text-[10px]">
                 Total Active: <strong className="text-[#2C1710]">{pendingCount + preparingCount + readyCount}</strong>
               </span>
-              <Link
-                href="/kitchen"
-                target="_blank"
-                className="text-[10px] font-bold text-[#CA340A] hover:underline flex items-center gap-0.5"
-              >
-                <span>Kitchen Screen</span>
-                <ExternalLink size={10} />
-              </Link>
+              <span className="text-[10px] font-bold text-zinc-400">
+                Live Queue
+              </span>
             </div>
           </div>
         </div>

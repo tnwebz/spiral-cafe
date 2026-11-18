@@ -19,6 +19,7 @@ export interface KotData {
   }>;
   totalItems: number;
   totalQuantity: number;
+  specialInstructions?: string;
 }
 
 /**
@@ -77,6 +78,13 @@ export class KotReceiptEngine {
 
     lines.push(divider);
     lines.push(this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`));
+
+    if (data.specialInstructions && data.specialInstructions.trim()) {
+      const cleanInst = data.specialInstructions.trim().replace(/^"+|"+$/g, "");
+      lines.push(divider);
+      lines.push("SPECIAL REQUEST:");
+      lines.push(`"${cleanInst}"`);
+    }
 
     return lines.join("\n");
   }
@@ -153,6 +161,18 @@ export class KotReceiptEngine {
     commands += `${this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`)}\n`;
     commands += `${ESC}E\x00`; // Bold OFF
 
+    // Special instructions in BOLD with double quotes
+    if (data.specialInstructions && data.specialInstructions.trim()) {
+      const cleanInst = data.specialInstructions.trim().replace(/^"+|"+$/g, "");
+      commands += `${divider}\n`;
+      commands += `${ESC}E\x01`; // Bold ON
+      commands += `SPECIAL REQUEST:\n`;
+      commands += `${ESC}!\x10`; // Double-height
+      commands += `"${cleanInst}"\n`;
+      commands += `${ESC}!\x00`; // Normal font
+      commands += `${ESC}E\x00`; // Bold OFF
+    }
+
     // 9. Extra line feeds (4 lines) and paper cut
     commands += `\n\n\n\n`;
     commands += `${GS}V\x00`; // ESC/POS standard full cut
@@ -215,6 +235,11 @@ export function buildKotData(
   );
   const isPrivateOrder = Boolean(options?.isPrivateOrder || (order as any).isPrivate);
 
+  const cleanSpecialInstructions = (order.notes || "")
+    .replace(/\[[^\]]+\]/g, "")
+    .replace(/\|/g, "")
+    .trim();
+
   return {
     kotId,
     orderId: order.id,
@@ -226,6 +251,7 @@ export function buildKotData(
     timeStr,
     isTakeaway,
     isPrivateOrder,
+    specialInstructions: cleanSpecialInstructions || undefined,
     items: itemsToPrint.map((it) => {
       let itemName = it.name;
       if (isTakeaway && !itemName.toLowerCase().includes("(parcel)")) {

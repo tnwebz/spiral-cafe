@@ -8,12 +8,14 @@ const ADMIN_SECRET = process.env.PRINT_CONNECTOR_SECRET || "spiral_kot_sig_7f8a9
 
 export async function GET() {
   try {
+    const cutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabaseAdmin
       .from("orders")
       .select("*, order_items(*)")
-      .eq("table_number", "TAKEAWAY")
+      .ilike("table_number", "%takeaway%")
       .neq("status", "CANCELLED")
       .neq("payment_status", "PAID")
+      .gte("created_at", cutoffIso)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -123,19 +125,52 @@ export async function POST(req: NextRequest) {
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         printedKot = true;
+        const confirmedNotes = `${createdOrder.notes || ""} [KOT_CONFIRMED:ROUND_1_AT_${Date.now()}]`.trim();
+        await supabaseAdmin
+          .from("orders" as any)
+          .update({
+            notes: confirmedNotes,
+            status: "PREPARING",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", createdOrder.id);
+        createdOrder.notes = confirmedNotes;
+        createdOrder.status = "PREPARING";
       } else {
-        kotWarning = json.error || "Kitchen printer offline or busy.";
+        kotWarning = json.error || json.message || "Kitchen printer is currently disconnected or busy.";
+        const pendingNotes = `${createdOrder.notes || ""} [KOT_PENDING_PRINTER_OFFLINE_AT_${Date.now()}]`.trim();
+        await supabaseAdmin
+          .from("orders" as any)
+          .update({
+            notes: pendingNotes,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", createdOrder.id);
+        createdOrder.notes = pendingNotes;
       }
     } catch (err: any) {
-      kotWarning = "Local print connector not reached. Order saved in queue.";
+      kotWarning = "Kitchen printer is not reachable (connector offline or disconnected).";
+      const pendingNotes = `${createdOrder.notes || ""} [KOT_PENDING_PRINTER_OFFLINE_AT_${Date.now()}]`.trim();
+      await supabaseAdmin
+        .from("orders" as any)
+        .update({
+          notes: pendingNotes,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", createdOrder.id);
+      createdOrder.notes = pendingNotes;
     }
+
+    const feedbackMsg = printedKot
+      ? `${isTakeaway ? "Take Away" : `Table ${tableNumber}`} Order #${createdOrder.orderNumber} placed & Kitchen KOT printed! ✅`
+      : `${isTakeaway ? "Take Away" : `Table ${tableNumber}`} Order #${createdOrder.orderNumber} placed! ⚠️ Kitchen printer offline — KOT pending dispatch.`;
 
     return NextResponse.json({
       success: true,
       order: createdOrder,
       printedKot,
       kotWarning,
-      message: `${isTakeaway ? "Take Away" : `Table ${tableNumber}`} Order #${createdOrder.orderNumber} placed successfully!`,
+      message: feedbackMsg,
     });
   } catch (err: any) {
     console.error("Takeaway API POST error:", err);

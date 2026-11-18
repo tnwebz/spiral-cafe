@@ -42,11 +42,16 @@ export async function POST(req: NextRequest) {
     const totalItems = items.length;
     const kotId = `PRV-KOT-${order.orderNumber}-${Date.now().toString().slice(-4)}`;
 
+    const dest =
+      order.tableNumber && order.tableNumber !== "COUNTER" && order.tableNumber !== "GIVE ON COUNTER"
+        ? `TABLE ${order.tableNumber.toUpperCase()}`
+        : "GIVE ON COUNTER";
+
     const kotPayload = {
       kotId,
       orderNumber: order.orderNumber,
       purpose: order.privatePurpose || "STAFF",
-      destination: "GIVE ON COUNTER",
+      destination: dest,
       terminalName: "Billing 1",
       dateStr: new Date().toLocaleDateString("en-IN"),
       timeStr: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),

@@ -32,6 +32,12 @@ import {
   FileText,
   ArrowLeftRight,
   ChevronDown,
+  Trash2,
+  Plus,
+  Minus,
+  Loader2,
+  Info,
+  X,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -116,6 +122,13 @@ export default function TableDetailPage() {
     totalVisitValue: number;
   } | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
+
+  const isPrivateOrder = orders.some(
+    (o) =>
+      o.orderType === "PRIVATE" ||
+      (o.notes || "").includes("[ORDER_TYPE:PRIVATE]") ||
+      (o.orderNumber || "").startsWith("PRV-")
+  );
   const [kotState, setKotState] = useState<{
     kotStatus: KotStatus;
     confirmedRounds: number[];
@@ -159,6 +172,7 @@ export default function TableDetailPage() {
   >({});
   const [expandedSlipOrderId, setExpandedSlipOrderId] = useState<string | null>(null);
   const [isReconciling, setIsReconciling] = useState(false);
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
 
   // Modals
   const [printerModalOpen, setPrinterModalOpen] = useState(false);
@@ -175,6 +189,15 @@ export default function TableDetailPage() {
   const [isPrintingBillDirect, setIsPrintingBillDirect] = useState(false);
   const [billPrintDirectNotice, setBillPrintDirectNotice] = useState<string | null>(null);
   const [actionBanner, setActionBanner] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const bannerTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const showNotification = useCallback((type: "success" | "error" | "info", message: string) => {
+    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    setActionBanner({ type, message });
+    bannerTimerRef.current = setTimeout(() => {
+      setActionBanner(null);
+    }, 3800);
+  }, []);
 
   const openManualTransferModal = async () => {
     setTransferError(null);
@@ -338,6 +361,100 @@ export default function TableDetailPage() {
       setLoading(false);
     }
   }, [tableId]);
+
+  // Handler: Update Item Quantity in Active Order
+  const handleUpdateItemQty = async (orderId: string, item: OrderItem, newQty: number) => {
+    if (newQty <= 0) {
+      return handleDeleteOrderItem(orderId, item);
+    }
+    const itemKey = item.id || item.name;
+    setUpdatingItemId(itemKey);
+
+    // Optimistic UI update
+    setOrders((prev) =>
+      prev.map((ord) => {
+        if (ord.id !== orderId) return ord;
+        const newItems = ord.items.map((it) => {
+          if ((item.id && it.id === item.id) || it.name === item.name) {
+            return { ...it, quantity: newQty, lineTotal: it.price * newQty };
+          }
+          return it;
+        });
+        const newSubtotal = newItems.reduce((acc, it) => acc + (it.lineTotal || it.price * it.quantity), 0);
+        const newTax = Math.round(newSubtotal * 0.05);
+        return {
+          ...ord,
+          items: newItems,
+          subtotal: newSubtotal,
+          tax: newTax,
+          grandTotal: newSubtotal + newTax + (ord.packagingFee || 0) + (ord.serviceCharge || 0),
+        };
+      })
+    );
+
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id, itemName: item.name, quantity: newQty }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setActionBanner({ type: "error", message: data.error || "Failed to update item quantity." });
+      }
+      await fetchTableData();
+    } catch (err: any) {
+      setActionBanner({ type: "error", message: err.message || "Failed to update item quantity." });
+      await fetchTableData();
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  // Handler: Delete Entire Product from Order
+  const handleDeleteOrderItem = async (orderId: string, item: OrderItem) => {
+    const itemKey = item.id || item.name;
+    setUpdatingItemId(itemKey);
+
+    // Optimistic UI update
+    setOrders((prev) =>
+      prev.map((ord) => {
+        if (ord.id !== orderId) return ord;
+        const newItems = ord.items.filter((it) => (item.id ? it.id !== item.id : it.name !== item.name));
+        const newSubtotal = newItems.reduce((acc, it) => acc + (it.lineTotal || it.price * it.quantity), 0);
+        const newTax = Math.round(newSubtotal * 0.05);
+        return {
+          ...ord,
+          items: newItems,
+          subtotal: newSubtotal,
+          tax: newTax,
+          grandTotal: newSubtotal + newTax + (ord.packagingFee || 0) + (ord.serviceCharge || 0),
+          status: newItems.length === 0 ? "CANCELLED" : ord.status,
+        };
+      })
+    );
+
+    // Immediate professional in-app feedback (no browser popup)
+    showNotification("success", `"${item.name}" removed from order.`);
+
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/items`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id, itemName: item.name }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        showNotification("error", data.error || "Failed to delete item.");
+      }
+      await fetchTableData();
+    } catch (err: any) {
+      showNotification("error", err.message || "Failed to delete item.");
+      await fetchTableData();
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
 
   // Handler: ADMIN OVERRIDE RELEASE TABLE
   const handleReleaseTable = async () => {
@@ -713,15 +830,15 @@ export default function TableDetailPage() {
               </button>
             )}
 
-            {isReserved && (
+            {(isReserved || isPrivateOrder) && (
               <button
                 onClick={handleReleaseTable}
                 disabled={isReleasing}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 shadow-xs transition-all cursor-pointer"
-                title="Admin override to release this reserved table immediately"
+                title="Release this table immediately"
               >
                 <RotateCcw size={14} className={isReleasing ? "animate-spin" : ""} />
-                <span>Release Table</span>
+                <span>{isPrivateOrder ? "Free Table" : "Release Table"}</span>
               </button>
             )}
 
@@ -768,23 +885,26 @@ export default function TableDetailPage() {
         {/* Action Status Banner */}
         {actionBanner && (
           <div
-            className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between shadow-xs transition-all ${
+            className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between shadow-xs transition-all duration-200 animate-in fade-in slide-in-from-top-1 ${
               actionBanner.type === "success"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                ? "bg-emerald-50 border-emerald-300 text-emerald-800"
                 : actionBanner.type === "error"
-                ? "bg-red-50 border-red-200 text-red-800"
-                : "bg-blue-50 border-blue-200 text-blue-800"
+                ? "bg-red-50 border-red-300 text-red-800"
+                : "bg-blue-50 border-blue-300 text-blue-800"
             }`}
           >
-            <div className="flex items-center gap-2">
-              <span>{actionBanner.type === "success" ? "✅" : actionBanner.type === "error" ? "⚠️" : "ℹ️"}</span>
+            <div className="flex items-center gap-2.5">
+              {actionBanner.type === "success" && <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />}
+              {actionBanner.type === "error" && <AlertTriangle size={16} className="text-red-600 shrink-0" />}
+              {actionBanner.type === "info" && <Info size={16} className="text-blue-600 shrink-0" />}
               <span>{actionBanner.message}</span>
             </div>
             <button
               onClick={() => setActionBanner(null)}
-              className="text-zinc-500 hover:text-zinc-800 p-1"
+              className="text-zinc-400 hover:text-zinc-800 p-1 rounded-lg transition-colors cursor-pointer"
+              title="Close"
             >
-              ✕
+              <X size={14} />
             </button>
           </div>
         )}
@@ -973,12 +1093,14 @@ export default function TableDetailPage() {
                     <div className="space-y-3.5">
                       {ord.items.map((item, idx) => {
                         const cleanNote = (item.notes || "").replace(/\[[^\]]+\]/g, "").trim();
+                        const isUpdatingThis = updatingItemId === (item.id || item.name);
+
                         return (
                           <div
                             key={item.id || idx}
-                            className="p-3.5 rounded-2xl bg-[#FFF9F5] border border-[#CA340A]/10 flex items-center justify-between gap-4 transition-all hover:border-[#CA340A]/30"
+                            className="p-3.5 rounded-2xl bg-[#FFF9F5] border border-[#CA340A]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-all hover:border-[#CA340A]/30"
                           >
-                            <div className="flex items-center gap-3.5">
+                            <div className="flex items-center gap-3.5 min-w-0">
                               {/* Item Thumbnail Image */}
                               <div className="relative w-16 h-16 rounded-2xl bg-zinc-200 overflow-hidden shrink-0 shadow-xs">
                                 {item.image ? (
@@ -997,16 +1119,13 @@ export default function TableDetailPage() {
                               </div>
 
                               {/* Details */}
-                              <div>
-                                <h4 className="font-heading font-extrabold text-sm text-[#2C1710]">
+                              <div className="min-w-0">
+                                <h4 className="font-heading font-extrabold text-sm text-[#2C1710] truncate">
                                   {item.name}
                                 </h4>
 
                                 <p className="text-xs font-bold text-[#52525b] mt-0.5">
-                                  Quantity:{" "}
-                                  <span className="text-[#CA340A] font-extrabold text-sm">
-                                    {item.quantity}
-                                  </span>
+                                  Price: <span className="text-[#2C1710]">₹{item.price} each</span>
                                 </p>
 
                                 {cleanNote && (
@@ -1017,14 +1136,59 @@ export default function TableDetailPage() {
                               </div>
                             </div>
 
-                            {/* Price Breakdown */}
-                            <div className="text-right shrink-0">
-                              <span className="text-xs text-zinc-500 font-semibold block">
-                                ₹{item.price} each
-                              </span>
-                              <span className="text-sm font-heading font-extrabold text-[#2C1710]">
-                                ₹{item.lineTotal || item.price * (item.quantity || 1)}
-                              </span>
+                            {/* Quantity Adjuster, Total, and Delete Button */}
+                            <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
+                              {/* Stepper (- / qty / +) */}
+                              <div className="flex items-center gap-1.5 bg-white border border-zinc-200 rounded-xl p-1 shadow-2xs">
+                                <button
+                                  type="button"
+                                  disabled={isUpdatingThis}
+                                  onClick={() => handleUpdateItemQty(ord.id, item, item.quantity - 1)}
+                                  className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-50"
+                                  title="Decrease quantity"
+                                >
+                                  <Minus size={13} />
+                                </button>
+
+                                <span className="font-heading font-extrabold text-xs text-[#CA340A] min-w-[24px] text-center px-1">
+                                  {isUpdatingThis ? (
+                                    <Loader2 size={12} className="animate-spin inline text-[#CA340A]" />
+                                  ) : (
+                                    item.quantity
+                                  )}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  disabled={isUpdatingThis}
+                                  onClick={() => handleUpdateItemQty(ord.id, item, item.quantity + 1)}
+                                  className="w-7 h-7 rounded-lg bg-[#CA340A] hover:bg-[#B73F1D] text-white flex items-center justify-center cursor-pointer transition-colors disabled:opacity-50"
+                                  title="Increase quantity"
+                                >
+                                  <Plus size={13} />
+                                </button>
+                              </div>
+
+                              {/* Price Breakdown */}
+                              <div className="text-right min-w-[65px]">
+                                <span className="text-xs text-zinc-500 font-semibold block">
+                                  Total
+                                </span>
+                                <span className="text-sm font-heading font-extrabold text-[#2C1710]">
+                                  ₹{item.lineTotal || item.price * (item.quantity || 1)}
+                                </span>
+                              </div>
+
+                              {/* Delete Whole Item Button */}
+                              <button
+                                type="button"
+                                disabled={isUpdatingThis}
+                                onClick={() => handleDeleteOrderItem(ord.id, item)}
+                                className="p-2 rounded-xl text-red-500 hover:text-white hover:bg-red-600 bg-red-50 border border-red-200/60 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                                title={`Remove ${item.name} from order`}
+                              >
+                                <Trash2 size={15} />
+                              </button>
                             </div>
                           </div>
                         );
@@ -1369,16 +1533,34 @@ export default function TableDetailPage() {
                     <span>{isPrintingBillDirect ? "Printing Bill..." : "PRINT BILL (58MM COUNTER)"}</span>
                   </button>
 
-                  <button
-                    onClick={() => setPaymentModalOpen(true)}
-                    className="w-full py-3.5 px-4 rounded-2xl bg-[#15803D] text-white font-bold text-xs hover:bg-[#166534] shadow-md shadow-[#15803D]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Banknote size={17} />
-                    <span>RECEIVE PAYMENT (CASH / ONLINE)</span>
-                  </button>
-                  <p className="text-[11px] text-zinc-500 text-center mt-1">
-                    Settles all orders for Table {tableId} and returns table to Available.
-                  </p>
+                  {isPrivateOrder ? (
+                    <div>
+                      <button
+                        onClick={handleReleaseTable}
+                        disabled={isReleasing}
+                        className="w-full py-3.5 px-4 rounded-2xl bg-[#3A1710] text-white font-bold text-xs hover:bg-[#2C1710] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <CheckCircle2 size={17} />
+                        <span>COMPLETE & FREE TABLE {tableId}</span>
+                      </button>
+                      <p className="text-[11px] text-zinc-500 text-center mt-1">
+                        Completes this internal/staff ticket and marks Table {tableId} available.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <button
+                        onClick={() => setPaymentModalOpen(true)}
+                        className="w-full py-3.5 px-4 rounded-2xl bg-[#15803D] text-white font-bold text-xs hover:bg-[#166534] shadow-md shadow-[#15803D]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Banknote size={17} />
+                        <span>RECEIVE PAYMENT (CASH / ONLINE)</span>
+                      </button>
+                      <p className="text-[11px] text-zinc-500 text-center mt-1">
+                        Settles all orders for Table {tableId} and returns table to Available.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

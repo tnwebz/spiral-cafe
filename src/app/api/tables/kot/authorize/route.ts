@@ -98,6 +98,11 @@ export async function POST(req: NextRequest) {
       hour12: true,
     });
 
+    const cleanInstructions = (order.notes || "")
+      .replace(/\[[^\]]+\]/g, "")
+      .replace(/\|/g, "")
+      .trim();
+
     const kotPayload = {
       kotId,
       orderNumber,
@@ -109,7 +114,7 @@ export async function POST(req: NextRequest) {
       items,
       totalItems,
       totalQuantity,
-      specialInstructions: order.notes || undefined,
+      specialInstructions: cleanInstructions || undefined,
     };
 
     const timestamp = Date.now();

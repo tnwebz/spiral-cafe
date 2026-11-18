@@ -26,6 +26,7 @@ import {
   Radio,
   FileSpreadsheet,
   ClipboardCheck,
+  BarChart3,
   ShieldCheck,
   Bell,
   Search,
@@ -115,17 +116,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return <>{children}</>;
   }
 
-  const navItems = [
+  const navItems: Array<{
+    label: string;
+    href: string;
+    icon: any;
+    targetBlank?: boolean;
+  }> = [
     { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { label: "Tables", href: "/admin/tables", icon: Grid2X2 },
     { label: "Sales & Analytics", href: "/admin/analytics", icon: TrendingUp },
     { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
     { label: "Menu Management", href: "/admin/menu", icon: UtensilsCrossed },
     { label: "Inventory", href: "/admin/inventory", icon: FileSpreadsheet },
-    { label: "Stock Checklist", href: "/admin/stock-checklist", icon: ClipboardCheck },
     { label: "Customers", href: "/admin/customers", icon: Users },
     { label: "Kitchen Printer", href: "/admin/printer", icon: Printer },
-    { label: "Kitchen KDS", href: "/kitchen", icon: ChefHat, targetBlank: true },
     { label: "Settings & Audit", href: "/admin/settings", icon: Settings },
   ];
 
@@ -314,15 +318,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <span>Install POS App</span>
               </button>
             )}
-
-            <Link
-              href="/kitchen"
-              target="_blank"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#CA340A]/30 bg-[#FFF9F5] text-[#CA340A] text-xs font-bold hover:bg-[#CA340A] hover:text-white transition-all shadow-xs"
-            >
-              <ChefHat size={15} />
-              <span>Launch KDS Screen</span>
-            </Link>
 
             <Link
               href="/menu"

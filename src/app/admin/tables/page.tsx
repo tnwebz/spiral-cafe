@@ -7,6 +7,7 @@ import AdminLayout from "@/components/Admin/AdminLayout";
 import CreateTableModal from "@/components/Admin/CreateTableModal";
 import PrinterStatusModal from "@/components/Admin/PrinterStatusModal";
 import AdminOrderModal from "@/components/Admin/AdminOrderModal";
+import TakeawayDetailModal from "@/components/Admin/TakeawayDetailModal";
 import { TableCardStatus } from "@/lib/tables";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
 import { PrinterClient } from "@/services/printerClient";
@@ -56,6 +57,7 @@ export default function AdminTablesPage() {
   const [manualOrderModalTable, setManualOrderModalTable] = useState<string | null>(null);
   const [availablePromptTable, setAvailablePromptTable] = useState<TableCardStatus | null>(null);
   const [activeTakeaways, setActiveTakeaways] = useState<any[]>([]);
+  const [selectedTakeawayOrder, setSelectedTakeawayOrder] = useState<any | null>(null);
 
   // Table Transfers State
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
@@ -402,7 +404,7 @@ export default function AdminTablesPage() {
                 return (
                   <div
                     key={ord.id}
-                    onClick={() => router.push(`/admin/tables/TAKEAWAY`)}
+                    onClick={() => setSelectedTakeawayOrder(ord)}
                     className="min-w-[240px] max-w-[280px] p-3.5 bg-[#FFFBF7] hover:bg-amber-50/70 border border-[#EBDAD0] hover:border-amber-400 rounded-2xl shadow-xs transition-all cursor-pointer shrink-0 flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between text-xs mb-2">
@@ -885,6 +887,17 @@ export default function AdminTablesPage() {
         onClose={() => setManualOrderModalTable(null)}
         defaultTableNumber={manualOrderModalTable || "A1"}
         onOrderCreated={() => {
+          fetchTables();
+          fetchTakeaways();
+        }}
+      />
+
+      {/* Takeaway Order Detail & Action Inspector Modal */}
+      <TakeawayDetailModal
+        isOpen={Boolean(selectedTakeawayOrder)}
+        order={selectedTakeawayOrder}
+        onClose={() => setSelectedTakeawayOrder(null)}
+        onOrderUpdated={() => {
           fetchTables();
           fetchTakeaways();
         }}

@@ -26,6 +26,12 @@ import {
   Sparkles,
   Info,
   RotateCcw,
+  BarChart3,
+  History,
+  Edit2,
+  Archive,
+  DollarSign,
+  X,
 } from "lucide-react";
 import {
   InventoryCategory,
@@ -33,6 +39,7 @@ import {
   InventoryDay,
   InventoryDayItem,
   InventoryMovement,
+  InventoryPurchaseRecord,
   getKolkataDateString,
   calculateUsedQty,
 } from "@/types/inventory";
@@ -78,11 +85,48 @@ export default function AdminInventoryPage() {
   const [showLogMovementModal, setShowLogMovementModal] = useState<boolean>(false);
   const [showFinalizeModal, setShowFinalizeModal] = useState<boolean>(false);
 
+  // Purchase Modals & States
+  const [showAddPurchaseModal, setShowAddPurchaseModal] = useState<boolean>(false);
+  const [selectedItemForPurchase, setSelectedItemForPurchase] = useState<InventoryDayItem | null>(null);
+  const [purchaseForm, setPurchaseForm] = useState({
+    date: todayDate,
+    quantity: "1",
+    price_per_unit: "",
+    supplier: "",
+    notes: "",
+  });
+
+  const [showPurchaseHistoryModal, setShowPurchaseHistoryModal] = useState<boolean>(false);
+  const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryDayItem | null>(null);
+  const [ingredientPurchases, setIngredientPurchases] = useState<InventoryPurchaseRecord[]>([]);
+  const [loadingPurchases, setLoadingPurchases] = useState<boolean>(false);
+
+  // Category Edit Modal
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState<boolean>(false);
+  const [editingCategory, setEditingCategory] = useState<InventoryCategory | null>(null);
+  const [editCategoryForm, setEditCategoryForm] = useState({
+    name: "",
+    display_order: 1,
+  });
+
+  // Ingredient Edit Modal (Moves categories, updates unit cost, min stock)
+  const [showEditIngredientModal, setShowEditIngredientModal] = useState<boolean>(false);
+  const [editingIngredient, setEditingIngredient] = useState<InventoryIngredient | null>(null);
+  const [editIngForm, setEditIngForm] = useState({
+    name: "",
+    category_id: "",
+    unit: "kg",
+    cost_per_unit: "",
+    min_stock_level: 0,
+    notes: "",
+  });
+
   // New Ingredient Form
   const [newIngForm, setNewIngForm] = useState({
     name: "",
     category_id: "",
     unit: "kg",
+    cost_per_unit: "",
     min_stock_level: 0,
     notes: "",
   });
@@ -149,17 +193,18 @@ export default function AdminInventoryPage() {
     } catch {}
   };
 
+  // Initial Data Fetch
   useEffect(() => {
     fetchDayData(selectedDate);
     fetchIngredientsMaster();
     fetchMovements();
   }, [selectedDate]);
 
-  // Handle inline changes in daily register
+  // Fix zero input bug & sanitize input changes
   const handleCellChange = (
     itemId: string,
     field: "opening_qty" | "purchased_qty" | "wastage_qty" | "closing_actual_qty" | "notes",
-    rawVal: string
+    rawVal: any
   ) => {
     setDraftChanges((prev) => {
       const existing = prev[itemId] || {};
@@ -171,7 +216,12 @@ export default function AdminInventoryPage() {
         // Empty string means uncounted for closing, or 0 for purchased/wastage
         val = field === "closing_actual_qty" ? null : 0;
       } else {
-        const num = parseFloat(rawVal);
+        let cleaned = String(rawVal);
+        // If user typed e.g. "5" when input had "0", replace leading zero
+        if (cleaned.length > 1 && cleaned.startsWith("0") && !cleaned.startsWith("0.")) {
+          cleaned = cleaned.replace(/^0+/, "");
+        }
+        const num = parseFloat(cleaned);
         val = isNaN(num) ? (field === "closing_actual_qty" ? null : 0) : Math.max(0, num);
       }
 
@@ -243,6 +293,7 @@ export default function AdminInventoryPage() {
       setShowFinalizeModal(false);
       setSaveSuccessMessage("Day finalized and locked! Closing actuals carried forward to next day.");
       setTimeout(() => setSaveSuccessMessage(null), 4000);
+      fetchDayData(selectedDate);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to finalize day");
     } finally {
@@ -279,6 +330,207 @@ export default function AdminInventoryPage() {
     }
   };
 
+  // -------------------------------------------------------------
+  // PURCHASES: RECORD & HISTORY
+  // -------------------------------------------------------------
+  const openAddPurchaseModal = (item: InventoryDayItem) => {
+    setSelectedItemForPurchase(item);
+    setPurchaseForm({
+      date: selectedDate,
+      quantity: "1",
+      price_per_unit: item.unit_cost ? String(item.unit_cost) : "",
+      supplier: "",
+      notes: "",
+    });
+    setShowAddPurchaseModal(true);
+  };
+
+  const handleRecordPurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItemForPurchase) return;
+    setSaving(true);
+    setErrorMessage(null);
+
+    try {
+      const qty = parseFloat(purchaseForm.quantity);
+      const price = parseFloat(purchaseForm.price_per_unit);
+
+      if (isNaN(qty) || qty <= 0) throw new Error("Please enter a valid purchase quantity (> 0)");
+      if (isNaN(price) || price <= 0) throw new Error("Please enter a valid purchase price per unit (₹)");
+
+      const res = await fetch("/api/admin/inventory/purchases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ingredient_id: selectedItemForPurchase.ingredient_id,
+          date: purchaseForm.date || selectedDate,
+          quantity: qty,
+          unit: selectedItemForPurchase.unit,
+          price_per_unit: price,
+          supplier: purchaseForm.supplier || null,
+          notes: purchaseForm.notes || null,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to record purchase");
+
+      setShowAddPurchaseModal(false);
+      setSaveSuccessMessage(`✅ Purchase recorded for ${selectedItemForPurchase.ingredient_name}! Purchased qty & weighted-average cost updated.`);
+      setTimeout(() => setSaveSuccessMessage(null), 4000);
+      fetchDayData(selectedDate);
+      fetchMovements();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to record purchase");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPurchaseHistory = async (item: InventoryDayItem) => {
+    setSelectedItemForHistory(item);
+    setShowPurchaseHistoryModal(true);
+    setLoadingPurchases(true);
+    try {
+      const res = await fetch(`/api/admin/inventory/purchases?ingredientId=${item.ingredient_id}`);
+      const json = await res.json();
+      if (json.success) {
+        setIngredientPurchases(json.purchases || []);
+      }
+    } catch (err: any) {
+      console.error("Error loading purchase history:", err);
+    } finally {
+      setLoadingPurchases(false);
+    }
+  };
+
+  const handleDeletePurchase = async (purchaseId: string) => {
+    if (!confirm("Are you sure you want to delete this purchase entry? This will recompute weighted average costs.")) return;
+    try {
+      const res = await fetch(`/api/admin/inventory/purchases?id=${purchaseId}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to delete purchase");
+
+      setIngredientPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
+      fetchDayData(selectedDate);
+      setSaveSuccessMessage("Purchase entry deleted and costs recomputed.");
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+    } catch (err: any) {
+      alert(err.message || "Failed to delete purchase");
+    }
+  };
+
+  // -------------------------------------------------------------
+  // CATEGORY & INGREDIENT MANAGEMENT (MASTER TAB)
+  // -------------------------------------------------------------
+  const handleOpenEditCategory = (cat: InventoryCategory) => {
+    setEditingCategory(cat);
+    setEditCategoryForm({
+      name: cat.name,
+      display_order: cat.display_order,
+    });
+    setShowEditCategoryModal(true);
+  };
+
+  const handleSaveCategoryEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    try {
+      const res = await fetch("/api/admin/inventory/categories", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingCategory.id,
+          name: editCategoryForm.name.trim(),
+          display_order: Number(editCategoryForm.display_order),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to update category");
+
+      setShowEditCategoryModal(false);
+      setSaveSuccessMessage("Category updated successfully!");
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      fetchDayData(selectedDate);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to update category");
+    }
+  };
+
+  const handleArchiveCategory = async (cat: InventoryCategory) => {
+    const activeIngs = (ingredients.length > 0 ? ingredients : items).filter(
+      (i: any) => (i.category_id === cat.id || i.category === cat.id) && (i.is_active ?? true)
+    );
+
+    if (activeIngs.length > 0) {
+      alert(
+        `Cannot archive category "${cat.name}": ${activeIngs.length} active ingredient(s) are assigned to it. Please edit those ingredients and move them to another category first.`
+      );
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to archive category "${cat.name}"?`)) return;
+
+    try {
+      const res = await fetch(`/api/admin/inventory/categories?id=${cat.id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to archive category");
+
+      setSaveSuccessMessage(`Category "${cat.name}" archived.`);
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      fetchDayData(selectedDate);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to archive category");
+    }
+  };
+
+  const handleOpenEditIngredient = (ing: any) => {
+    setEditingIngredient(ing);
+    setEditIngForm({
+      name: ing.name,
+      category_id: ing.category_id,
+      unit: ing.unit,
+      cost_per_unit: ing.cost_per_unit !== null && ing.cost_per_unit !== undefined ? String(ing.cost_per_unit) : "",
+      min_stock_level: ing.min_stock_level || 0,
+      notes: ing.notes || "",
+    });
+    setShowEditIngredientModal(true);
+  };
+
+  const handleSaveIngredientEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingIngredient) return;
+    try {
+      const res = await fetch("/api/admin/inventory/ingredients", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingIngredient.id,
+          name: editIngForm.name.trim(),
+          category_id: editIngForm.category_id,
+          unit: editIngForm.unit.trim(),
+          cost_per_unit: editIngForm.cost_per_unit ? parseFloat(editIngForm.cost_per_unit) : null,
+          min_stock_level: Number(editIngForm.min_stock_level) || 0,
+          notes: editIngForm.notes || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to update ingredient");
+
+      setShowEditIngredientModal(false);
+      setSaveSuccessMessage("Ingredient updated successfully!");
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      fetchDayData(selectedDate);
+      fetchIngredientsMaster();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to update ingredient");
+    }
+  };
+
   // Handle Add Ingredient Submit
   const handleAddIngredient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,13 +538,16 @@ export default function AdminInventoryPage() {
       const res = await fetch("/api/admin/inventory/ingredients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newIngForm),
+        body: JSON.stringify({
+          ...newIngForm,
+          cost_per_unit: newIngForm.cost_per_unit ? parseFloat(newIngForm.cost_per_unit) : null,
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || "Failed to add ingredient");
 
       setShowAddIngredientModal(false);
-      setNewIngForm({ name: "", category_id: "", unit: "kg", min_stock_level: 0, notes: "" });
+      setNewIngForm({ name: "", category_id: "", unit: "kg", cost_per_unit: "", min_stock_level: 0, notes: "" });
       setSaveSuccessMessage("✅ Ingredient added successfully!");
       setTimeout(() => setSaveSuccessMessage(null), 3000);
       fetchDayData(selectedDate);
@@ -383,7 +638,6 @@ export default function AdminInventoryPage() {
       if (map.has(item.category_id)) {
         map.get(item.category_id)!.items.push(item);
       } else {
-        // Fallback for custom or unknown category
         const fallbackCat: InventoryCategory = {
           id: item.category_id,
           code: "?",
@@ -398,12 +652,29 @@ export default function AdminInventoryPage() {
     return Array.from(map.values()).filter((g) => g.items.length > 0);
   }, [categories, filteredItems]);
 
-  // Calculations for stats
+  // Calculations for stats & valuation
   const totalCounted = useMemo(() => items.filter((i) => i.is_counted).length, [items]);
   const totalIngredientsCount = items.length;
   const isFinalized = day?.status === "FINALIZED";
-
   const hasUnsavedChanges = Object.keys(draftChanges).length > 0;
+
+  // Valuation computations
+  const { totalValuedStock, missingCostCount } = useMemo(() => {
+    let sum = 0;
+    let missing = 0;
+    for (const item of items) {
+      const draft = draftChanges[item.id] || {};
+      const closing = draft.closing_actual_qty !== undefined ? draft.closing_actual_qty : item.closing_actual_qty;
+      if (closing !== null && closing !== undefined) {
+        if (item.unit_cost !== null && item.unit_cost !== undefined) {
+          sum += closing * item.unit_cost;
+        } else {
+          missing++;
+        }
+      }
+    }
+    return { totalValuedStock: sum, missingCostCount: missing };
+  }, [items, draftChanges]);
 
   return (
     <AdminLayout>
@@ -440,16 +711,16 @@ export default function AdminInventoryPage() {
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center gap-2.5">
               <Link
-                href="/admin/stock-checklist"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 text-xs font-bold transition shadow-sm"
+                href="/admin/inventory/analytics"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#CA340A] hover:bg-[#b02d08] text-white text-xs font-bold transition shadow-md"
               >
-                <ClipboardCheck size={16} />
-                <span>Open Mobile Checklist</span>
+                <BarChart3 size={16} />
+                <span>Inventory Analytics & Reports</span>
               </Link>
 
               <button
                 onClick={() => setShowAddIngredientModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/15 text-xs font-bold transition"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/15 text-xs font-bold transition cursor-pointer"
               >
                 <Plus size={16} />
                 <span>Add Ingredient</span>
@@ -457,7 +728,7 @@ export default function AdminInventoryPage() {
 
               <button
                 onClick={() => setShowAddCategoryModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/15 text-xs font-bold transition"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/15 text-xs font-bold transition cursor-pointer"
               >
                 <Plus size={16} />
                 <span>New Category</span>
@@ -507,35 +778,13 @@ export default function AdminInventoryPage() {
 
             <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
               <span className="text-[11px] uppercase tracking-wider text-[#E2C7BA] font-semibold">
-                Register Status
+                Est. Stock Value (₹)
               </span>
-              <div className="mt-1 flex items-center gap-2 flex-wrap">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-black tracking-wide ${
-                    isFinalized
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      : day?.status === "READY_FOR_REVIEW"
-                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
-                      : day?.status === "COUNTING"
-                      ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
-                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                  }`}
-                >
-                  {day?.status || "DRAFT"}
-                </span>
-
-                {isFinalized && (
-                  <button
-                    type="button"
-                    onClick={reopenDay}
-                    disabled={saving}
-                    className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition flex items-center gap-1 cursor-pointer"
-                    title="Reopen for Corrections"
-                  >
-                    <RotateCcw size={11} className={saving ? "animate-spin" : ""} />
-                    <span>Reopen</span>
-                  </button>
-                )}
+              <div className="text-2xl sm:text-3xl font-extrabold text-[#FFF9F5] font-mono mt-1">
+                ₹{totalValuedStock.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-[10px] text-[#E2C7BA] mt-0.5">
+                {missingCostCount > 0 ? `(${missingCostCount} unpriced items excluded)` : "Based on weighted avg"}
               </div>
             </div>
           </div>
@@ -572,13 +821,24 @@ export default function AdminInventoryPage() {
           </div>
         )}
 
+        {/* INCOMPLETE VALUATION WARNING BANNER */}
+        {missingCostCount > 0 && activeTab === "register" && (
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3 shadow-xs">
+            <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <span className="font-bold">Incomplete Stock Valuation: </span>
+              {missingCostCount} counted item(s) do not have purchase prices recorded. Their closing stock value cannot be calculated and is excluded from the total until cost is set.
+            </div>
+          </div>
+        )}
+
         {/* CONTROLS: TABS & DATE SELECTOR */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white/70 backdrop-blur-md p-3 rounded-2xl border border-[#CA340A]/10 shadow-xs">
           {/* Main Tab Nav */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             <button
               onClick={() => setActiveTab("register")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                 activeTab === "register"
                   ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
                   : "text-[#52525b] hover:bg-[#2C1710]/5"
@@ -590,7 +850,7 @@ export default function AdminInventoryPage() {
 
             <button
               onClick={() => setActiveTab("overview")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                 activeTab === "overview"
                   ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
                   : "text-[#52525b] hover:bg-[#2C1710]/5"
@@ -602,7 +862,7 @@ export default function AdminInventoryPage() {
 
             <button
               onClick={() => setActiveTab("movements")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                 activeTab === "movements"
                   ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
                   : "text-[#52525b] hover:bg-[#2C1710]/5"
@@ -614,15 +874,23 @@ export default function AdminInventoryPage() {
 
             <button
               onClick={() => setActiveTab("master")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                 activeTab === "master"
                   ? "bg-[#2C1710] text-[#FFF9F5] shadow-sm"
                   : "text-[#52525b] hover:bg-[#2C1710]/5"
               }`}
             >
               <Package size={15} />
-              <span>Ingredients Master</span>
+              <span>Master Catalog</span>
             </button>
+
+            <Link
+              href="/admin/inventory/analytics"
+              className="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap text-[#CA340A] hover:bg-[#CA340A]/10 border border-[#CA340A]/20"
+            >
+              <BarChart3 size={15} />
+              <span>Analytics & Trends</span>
+            </Link>
           </div>
 
           {/* Date Picker & Refresh */}
@@ -639,67 +907,67 @@ export default function AdminInventoryPage() {
 
             <button
               onClick={() => fetchDayData(selectedDate)}
-              title="Refresh register"
-              className="p-2 rounded-xl bg-white hover:bg-neutral-100 text-[#2C1710] border border-[#CA340A]/15 transition"
+              className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:border-zinc-300 transition cursor-pointer"
+              title="Refresh Register"
             >
-              <RefreshCw size={15} />
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* TAB 1: DAILY REGISTER (THE PHYSICAL NOTEBOOK SHEET - MOCKUP 2)           */}
+        {/* TAB 1: DAILY INVENTORY REGISTER (Notebook Style with Stock Value Col)     */}
         {/* ========================================================================= */}
         {activeTab === "register" && (
           <div className="space-y-6">
-            {/* Filter & Search Bar */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white/60 p-3 rounded-2xl border border-[#CA340A]/10">
-              {/* Category Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+            {/* REGISTER CONTROLS: CATEGORY PILLS & SEARCH */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Category Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
                 <button
                   onClick={() => setSelectedCategoryFilter("ALL")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                     selectedCategoryFilter === "ALL"
-                      ? "bg-[#CA340A] text-white"
-                      : "bg-white text-zinc-700 hover:bg-neutral-100 border border-neutral-200"
+                      ? "bg-[#CA340A] text-white shadow-xs"
+                      : "bg-white text-zinc-600 border border-zinc-200 hover:border-zinc-300"
                   }`}
                 >
                   All Categories
                 </button>
-                {categories.map((cat) => (
+                {categories.map((c) => (
                   <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategoryFilter(cat.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
-                      selectedCategoryFilter === cat.id
-                        ? "bg-[#CA340A] text-white"
-                        : "bg-white text-zinc-700 hover:bg-neutral-100 border border-neutral-200"
+                    key={c.id}
+                    onClick={() => setSelectedCategoryFilter(c.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                      selectedCategoryFilter === c.id
+                        ? "bg-[#CA340A] text-white shadow-xs"
+                        : "bg-white text-zinc-600 border border-zinc-200 hover:border-zinc-300"
                     }`}
                   >
-                    {cat.code}. {cat.name}
+                    {c.code}. {c.name}
                   </button>
                 ))}
               </div>
 
-              {/* Search Box */}
-              <div className="relative min-w-[220px]">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              {/* Search Bar */}
+              <div className="relative w-full md:w-64 shrink-0">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
                   placeholder="Search ingredient..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 bg-white rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  className="w-full pl-9 pr-3 py-1.5 bg-white rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-[#CA340A]"
                 />
               </div>
             </div>
 
-            {/* Notebook Instructions & Formula Bar */}
-            <div className="bg-[#FAF9F5] border-l-4 border-[#CA340A] p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-zinc-700">
+            {/* Notebook Formula Note */}
+            <div className="bg-[#FFF9F5] border-l-4 border-[#CA340A] p-4 rounded-r-2xl text-xs text-[#2C1710] flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
               <div className="flex items-center gap-2">
                 <Info size={16} className="text-[#CA340A] shrink-0" />
                 <span>
-                  <strong>Manual Register:</strong> Enter quantities directly into rows.{" "}
+                  <strong>Manual Register:</strong> Enter physical counts into rows.{" "}
                   <code className="bg-white px-2 py-0.5 rounded border border-zinc-200 text-[#CA340A] font-bold">
                     Used = Opening + Purchased − Wastage − Closing Actual
                   </code>
@@ -717,46 +985,63 @@ export default function AdminInventoryPage() {
               </div>
             ) : groupedItemsByCategory.length === 0 ? (
               <div className="py-16 text-center bg-white rounded-2xl border border-dashed border-zinc-300 text-zinc-500">
-                No ingredients found matching the filter.
+                <p className="text-sm font-semibold">No ingredients match the selected filter.</p>
               </div>
             ) : (
               groupedItemsByCategory.map((group) => {
-                const cat = group.category;
+                // Category subtotal of closing stock value
+                let catValuationSum = 0;
+                for (const it of group.items) {
+                  const draft = draftChanges[it.id] || {};
+                  const cl = draft.closing_actual_qty !== undefined ? draft.closing_actual_qty : it.closing_actual_qty;
+                  if (cl !== null && cl !== undefined && it.unit_cost) {
+                    catValuationSum += cl * it.unit_cost;
+                  }
+                }
+
                 return (
                   <div
-                    key={cat.id}
+                    key={group.category.id}
                     className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs overflow-hidden"
                   >
-                    {/* Category Header (Matches Notebook) */}
-                    <div className="bg-[#FAF9F5] px-5 py-3.5 border-b border-zinc-200 flex items-center justify-between">
+                    {/* Category Header */}
+                    <div className="px-5 py-3.5 bg-zinc-50/90 border-b border-zinc-200/80 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
-                        <span className="w-7 h-7 rounded-lg bg-[#2C1710] text-white flex items-center justify-center font-bold text-xs">
-                          {cat.code}
+                        <span className="w-6 h-6 rounded-lg bg-[#FAF9F5] border border-zinc-200 text-[#2C1710] flex items-center justify-center font-black text-xs">
+                          {group.category.code}
                         </span>
                         <div>
-                          <h2 className="text-sm font-bold text-zinc-900">{cat.name}</h2>
-                          <p className="text-[11px] text-zinc-500">
-                            Enter quantities like the physical register
+                          <h2 className="text-sm font-extrabold text-zinc-950">
+                            {group.category.name}
+                          </h2>
+                          <p className="text-[11px] text-zinc-400">
+                            Enter physical counts like the handwritten notebook
                           </p>
                         </div>
                       </div>
-                      <span className="text-xs text-zinc-400 font-medium">
-                        {group.items.length} items
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono font-bold text-zinc-700 bg-white px-2.5 py-1 rounded-lg border border-zinc-200">
+                          Cat Value: ₹{catValuationSum.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-xs text-zinc-400 font-medium">
+                          {group.items.length} items
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Table */}
+                    {/* Table: Ingredient | Opening | Purchased | Wastage | Closing Actual | Stock Value (₹) | Used | Status */}
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="bg-zinc-50/70 border-b border-zinc-200 text-zinc-600 font-bold tracking-wide uppercase text-[10px]">
                             <th className="py-3 px-4 w-12 text-center">#</th>
-                            <th className="py-3 px-4 min-w-[180px]">Ingredient</th>
-                            <th className="py-3 px-3 w-28 text-center">Opening</th>
-                            <th className="py-3 px-3 w-28 text-center">Purchased</th>
-                            <th className="py-3 px-3 w-28 text-center">Wastage</th>
-                            <th className="py-3 px-3 w-32 text-center">Closing Actual</th>
-                            <th className="py-3 px-4 w-28 text-center">Used</th>
+                            <th className="py-3 px-4 min-w-[220px]">Ingredient</th>
+                            <th className="py-3 px-3 w-24 text-center">Opening</th>
+                            <th className="py-3 px-3 w-32 text-center">Purchased</th>
+                            <th className="py-3 px-3 w-24 text-center">Wastage</th>
+                            <th className="py-3 px-3 w-28 text-center">Closing Actual</th>
+                            <th className="py-3 px-3 w-32 text-right">Stock Value (₹)</th>
+                            <th className="py-3 px-4 w-24 text-center">Used</th>
                             <th className="py-3 px-4 w-20 text-center">Status</th>
                           </tr>
                         </thead>
@@ -775,6 +1060,12 @@ export default function AdminInventoryPage() {
                             const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
                             const isCounted = closing !== null && closing !== undefined;
 
+                            // Calculate closing stock value
+                            const closingStockVal =
+                              isCounted && item.unit_cost !== null && item.unit_cost !== undefined
+                                ? Number((closing! * item.unit_cost).toFixed(2))
+                                : null;
+
                             return (
                               <tr
                                 key={item.id}
@@ -787,14 +1078,43 @@ export default function AdminInventoryPage() {
                                   {item.ingredient_number}
                                 </td>
 
-                                {/* Ingredient Name & Unit */}
+                                {/* Ingredient Name, Unit & Price Pill */}
                                 <td className="py-3 px-4">
                                   <div className="font-bold text-zinc-950 text-xs sm:text-sm">
                                     {item.ingredient_name}
                                   </div>
-                                  <span className="inline-block px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 font-mono text-[10px] mt-0.5">
-                                    {item.unit}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                    <span className="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 font-mono text-[10px]">
+                                      {item.unit}
+                                    </span>
+
+                                    {item.unit_cost !== null && item.unit_cost !== undefined ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openPurchaseHistory(item)}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 hover:bg-orange-100 text-[#CA340A] text-[10px] font-bold font-mono transition border border-orange-200/60 cursor-pointer"
+                                        title="Click to view purchase history"
+                                      >
+                                        <span>Avg ₹{item.unit_cost.toFixed(2)}</span>
+                                        {item.latest_purchase_price && (
+                                          <span className="text-zinc-400 font-normal">
+                                            · Latest ₹{item.latest_purchase_price}
+                                          </span>
+                                        )}
+                                        <History size={10} className="ml-0.5 text-[#CA340A]" />
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => openAddPurchaseModal(item)}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold transition border border-amber-200 cursor-pointer"
+                                        title="Set purchase price for this ingredient"
+                                      >
+                                        <span>Cost Not Set</span>
+                                        <Plus size={10} />
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
 
                                 {/* Opening (Carry-forward balance) */}
@@ -806,31 +1126,43 @@ export default function AdminInventoryPage() {
                                       type="number"
                                       step="any"
                                       min="0"
-                                      value={opening}
+                                      value={opening === 0 ? "0" : opening}
+                                      onFocus={(e) => e.target.select()}
                                       onChange={(e) =>
                                         handleCellChange(item.id, "opening_qty", e.target.value)
                                       }
-                                      className="w-20 text-center py-1.5 px-2 bg-zinc-50 rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                                      className="w-18 text-center py-1.5 px-2 bg-zinc-50 rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
                                     />
                                   )}
                                 </td>
 
-                                {/* Purchased Input */}
+                                {/* Purchased (Reflects purchases + Add button) */}
                                 <td className="py-3 px-3 text-center">
-                                  {isFinalized ? (
-                                    <span className="font-semibold text-zinc-800">{purchased}</span>
-                                  ) : (
-                                    <input
-                                      type="number"
-                                      step="any"
-                                      min="0"
-                                      value={purchased === 0 ? "0" : purchased}
-                                      onChange={(e) =>
-                                        handleCellChange(item.id, "purchased_qty", e.target.value)
-                                      }
-                                      className="w-20 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
-                                    />
-                                  )}
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {isFinalized ? (
+                                      <span className="font-semibold text-zinc-800">{purchased}</span>
+                                    ) : (
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        value={purchased === 0 ? "0" : purchased}
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) =>
+                                          handleCellChange(item.id, "purchased_qty", e.target.value)
+                                        }
+                                        className="w-16 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                                      />
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => openAddPurchaseModal(item)}
+                                      className="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#CA340A] transition border border-orange-200/60 cursor-pointer"
+                                      title="Add purchase / delivery"
+                                    >
+                                      <Plus size={12} />
+                                    </button>
+                                  </div>
                                 </td>
 
                                 {/* Wastage Input */}
@@ -843,10 +1175,11 @@ export default function AdminInventoryPage() {
                                       step="any"
                                       min="0"
                                       value={wastage === 0 ? "0" : wastage}
+                                      onFocus={(e) => e.target.select()}
                                       onChange={(e) =>
                                         handleCellChange(item.id, "wastage_qty", e.target.value)
                                       }
-                                      className="w-20 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                                      className="w-16 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
                                     />
                                   )}
                                 </td>
@@ -864,10 +1197,11 @@ export default function AdminInventoryPage() {
                                       min="0"
                                       placeholder="Count"
                                       value={closing === null || closing === undefined ? "" : closing}
+                                      onFocus={(e) => e.target.select()}
                                       onChange={(e) =>
                                         handleCellChange(item.id, "closing_actual_qty", e.target.value)
                                       }
-                                      className={`w-24 text-center py-1.5 px-2 rounded-lg border text-xs font-bold focus:outline-hidden ${
+                                      className={`w-20 text-center py-1.5 px-2 rounded-lg border text-xs font-bold focus:outline-hidden ${
                                         isCounted
                                           ? "bg-emerald-50 border-emerald-300 text-emerald-900 focus:border-emerald-500"
                                           : "bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400 focus:border-[#CA340A]"
@@ -876,18 +1210,46 @@ export default function AdminInventoryPage() {
                                   )}
                                 </td>
 
+                                {/* Stock Value (₹) Column (Closing Actual * Weighted Avg Cost) */}
+                                <td className="py-3 px-3 text-right">
+                                  {isCounted ? (
+                                    closingStockVal !== null ? (
+                                      <span className="font-mono font-bold text-zinc-950 text-xs">
+                                        ₹{closingStockVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => openAddPurchaseModal(item)}
+                                        className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 hover:bg-amber-100 cursor-pointer"
+                                      >
+                                        Cost Not Set
+                                      </button>
+                                    )
+                                  ) : (
+                                    <span className="text-zinc-300 font-mono">—</span>
+                                  )}
+                                </td>
+
                                 {/* Used (Calculated Output) */}
                                 <td className="py-3 px-4 text-center">
                                   {calculatedUsed !== null ? (
-                                    <span
-                                      className={`font-black text-sm ${
-                                        calculatedUsed < 0
-                                          ? "text-red-600"
-                                          : "text-[#CA340A]"
-                                      }`}
-                                    >
-                                      {calculatedUsed}
-                                    </span>
+                                    <div>
+                                      <span
+                                        className={`font-black text-sm ${
+                                          calculatedUsed < 0
+                                            ? "text-red-600"
+                                            : "text-[#CA340A]"
+                                        }`}
+                                      >
+                                        {calculatedUsed}
+                                      </span>
+                                      {item.unit_cost && calculatedUsed > 0 && (
+                                        <div className="text-[10px] text-zinc-400 font-mono">
+                                          ₹{(calculatedUsed * item.unit_cost).toFixed(0)}
+                                        </div>
+                                      )}
+                                    </div>
                                   ) : (
                                     <span className="text-zinc-300 font-bold">—</span>
                                   )}
@@ -918,15 +1280,13 @@ export default function AdminInventoryPage() {
             )}
 
             {/* STICKY SAVE & FINALIZE BAR */}
-            <div className="sticky bottom-4 z-30 bg-[#2C1710] text-[#FFF9F5] p-4 rounded-2xl shadow-2xl border border-[#CA340A]/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="sticky bottom-4 z-40 bg-[#2C1710] text-[#FFF9F5] p-4 rounded-2xl shadow-2xl border border-[#CA340A]/30 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <span
-                  className={`w-3 h-3 rounded-full ${
-                    hasUnsavedChanges ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
-                  }`}
-                />
+                <span className="p-2 rounded-xl bg-[#CA340A] text-white">
+                  <FileSpreadsheet size={18} />
+                </span>
                 <div>
-                  <div className="text-xs font-bold text-[#FFF9F5]">
+                  <div className="text-xs font-bold">
                     {hasUnsavedChanges
                       ? `${Object.keys(draftChanges).length} unsaved change(s)`
                       : "All daily entries saved to database"}
@@ -942,7 +1302,7 @@ export default function AdminInventoryPage() {
                   <button
                     onClick={saveRegisterChanges}
                     disabled={saving}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#CA340A] hover:bg-[#b02d08] text-white text-xs font-bold transition shadow-md disabled:opacity-50"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#CA340A] hover:bg-[#b02d08] text-white text-xs font-bold transition shadow-md disabled:opacity-50 cursor-pointer"
                   >
                     <Save size={15} />
                     <span>{saving ? "Saving..." : "Save Register Changes"}</span>
@@ -952,7 +1312,7 @@ export default function AdminInventoryPage() {
                 {!isFinalized && (
                   <button
                     onClick={() => setShowFinalizeModal(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/20 text-xs font-bold transition"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFF9F5] border border-white/20 text-xs font-bold transition cursor-pointer"
                   >
                     <Lock size={15} />
                     <span>Finalize Day Register</span>
@@ -982,7 +1342,7 @@ export default function AdminInventoryPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: CATEGORY OVERVIEW & PROGRESS (MOCKUP 1 BOTTOM HALF)               */}
+        {/* TAB 2: CATEGORY OVERVIEW & PROGRESS                                      */}
         {/* ========================================================================= */}
         {activeTab === "overview" && (
           <div className="space-y-4">
@@ -991,7 +1351,7 @@ export default function AdminInventoryPage() {
                 Today&apos;s Category Progress
               </h2>
               <p className="text-xs text-zinc-500 mb-6">
-                Progress tracking for physical daily counting across all 8 standard sections
+                Progress tracking for physical daily counting across all sections
               </p>
 
               <div className="divide-y divide-zinc-100">
@@ -1059,7 +1419,7 @@ export default function AdminInventoryPage() {
 
               <button
                 onClick={() => setShowLogMovementModal(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-xs"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-xs cursor-pointer"
               >
                 <Plus size={16} />
                 <span>Log Movement</span>
@@ -1107,16 +1467,14 @@ export default function AdminInventoryPage() {
                             <td className="py-3 px-4 font-bold text-zinc-900">
                               {mov.ingredient_name || ing?.ingredient_name || mov.ingredient_id}
                             </td>
-                            <td className="py-3 px-4 text-center font-bold text-zinc-900">
+                            <td className="py-3 px-4 text-center font-mono font-bold text-zinc-800">
                               {mov.quantity} {mov.unit}
                             </td>
-                            <td className="py-3 px-4 text-zinc-600">
-                              {mov.supplier || mov.reason || "—"}
-                            </td>
-                            <td className="py-3 px-4 text-right font-mono text-zinc-800">
+                            <td className="py-3 px-4 text-zinc-600">{mov.supplier || mov.reason || "—"}</td>
+                            <td className="py-3 px-4 text-right font-mono font-bold text-zinc-800">
                               {mov.cost ? `₹${mov.cost}` : "—"}
                             </td>
-                            <td className="py-3 px-4 text-zinc-500">{mov.recorded_by}</td>
+                            <td className="py-3 px-4 text-zinc-500 text-[11px]">{mov.recorded_by}</td>
                           </tr>
                         );
                       })
@@ -1129,75 +1487,576 @@ export default function AdminInventoryPage() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 4: INGREDIENTS MASTER                                                */}
+        {/* TAB 4: MASTER CATALOG (CATEGORIES & INGREDIENTS MANAGEMENT)               */}
         {/* ========================================================================= */}
         {activeTab === "master" && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-zinc-900">Ingredients Catalog</h2>
-                <p className="text-xs text-zinc-500">
-                  Master list of standard ingredients, stock thresholds, and counting units
-                </p>
+          <div className="space-y-8">
+            {/* SECTION 1: CATEGORY MANAGEMENT */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-zinc-900">Category Management</h2>
+                  <p className="text-xs text-zinc-500">
+                    Edit category names, adjust display order, create new categories, or archive unused sections.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setShowAddCategoryModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2C1710] text-[#FFF9F5] text-xs font-bold hover:bg-black transition shadow-xs cursor-pointer"
+                >
+                  <Plus size={15} />
+                  <span>+ New Category</span>
+                </button>
               </div>
 
-              <button
-                onClick={() => setShowAddIngredientModal(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-xs"
-              >
-                <Plus size={16} />
-                <span>+ Add Ingredient</span>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {categories.map((cat) => {
+                  const activeIngs = (ingredients.length > 0 ? ingredients : items).filter(
+                    (i: any) => (i.category_id === cat.id || i.category === cat.id) && (i.is_active ?? true)
+                  );
+
+                  return (
+                    <div
+                      key={cat.id}
+                      className="bg-white rounded-2xl p-4 border border-zinc-200/80 shadow-xs flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="w-8 h-8 rounded-xl bg-[#FAF9F5] border border-zinc-200 text-[#2C1710] font-black text-xs flex items-center justify-center">
+                            {cat.code}
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-100">
+                            Order #{cat.display_order}
+                          </span>
+                        </div>
+                        <h3 className="font-bold text-zinc-950 text-sm">{cat.name}</h3>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          {activeIngs.length} active ingredient(s)
+                        </p>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditCategory(cat)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-100 transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit2 size={12} />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveCategory(cat)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Archive size={12} />
+                          <span>Archive</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold uppercase text-[10px]">
-                      <th className="py-3 px-4 w-12 text-center">#</th>
-                      <th className="py-3 px-4">Ingredient Name</th>
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4 text-center">Counting Unit</th>
-                      <th className="py-3 px-4 text-center">Min Stock Alert</th>
-                      <th className="py-3 px-4">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {(ingredients.length > 0 ? ingredients : items.map(i => ({
-                      id: i.ingredient_id,
-                      item_number: i.ingredient_number,
-                      name: i.ingredient_name,
-                      category_id: i.category_id,
-                      unit: i.unit,
-                      min_stock_level: 0,
-                      display_order: i.ingredient_number,
-                      is_active: true,
-                      notes: i.notes || null
-                    }))).map((ing) => {
-                      const cat = categories.find((c) => c.id === ing.category_id);
-                      return (
-                        <tr key={ing.id} className="hover:bg-zinc-50">
-                          <td className="py-3 px-4 text-center font-mono text-zinc-400">
-                            {ing.item_number}
-                          </td>
-                          <td className="py-3 px-4 font-bold text-zinc-900">{ing.name}</td>
-                          <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 text-[11px] font-medium">
-                              {cat ? `${cat.code}. ${cat.name}` : ing.category_id}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono text-zinc-700">{ing.unit}</td>
-                          <td className="py-3 px-4 text-center font-mono text-zinc-700">
-                            {ing.min_stock_level || 0} {ing.unit}
-                          </td>
-                          <td className="py-3 px-4 text-zinc-400 text-[11px]">{ing.notes || "—"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {/* SECTION 2: INGREDIENTS MASTER */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-zinc-900">Ingredients Catalog</h2>
+                  <p className="text-xs text-zinc-500">
+                    Master list of standard ingredients. Click &quot;Edit&quot; to change category, update baseline purchase prices, or modify thresholds.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setShowAddIngredientModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-xs cursor-pointer"
+                >
+                  <Plus size={16} />
+                  <span>+ Add Ingredient</span>
+                </button>
               </div>
+
+              <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold uppercase text-[10px]">
+                        <th className="py-3 px-4 w-12 text-center">#</th>
+                        <th className="py-3 px-4">Ingredient Name</th>
+                        <th className="py-3 px-4">Category</th>
+                        <th className="py-3 px-4 text-center">Counting Unit</th>
+                        <th className="py-3 px-4 text-center">Base Price / Unit</th>
+                        <th className="py-3 px-4 text-center">Min Stock Alert</th>
+                        <th className="py-3 px-4">Notes</th>
+                        <th className="py-3 px-4 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {(ingredients.length > 0 ? ingredients : items.map((i) => ({
+                        id: i.ingredient_id,
+                        item_number: i.ingredient_number,
+                        name: i.ingredient_name,
+                        category_id: i.category_id,
+                        unit: i.unit,
+                        cost_per_unit: i.unit_cost || null,
+                        min_stock_level: 0,
+                        display_order: i.ingredient_number,
+                        is_active: true,
+                        notes: i.notes || null,
+                      }))).map((ing) => {
+                        const cat = categories.find((c) => c.id === ing.category_id);
+                        return (
+                          <tr key={ing.id} className="hover:bg-zinc-50">
+                            <td className="py-3 px-4 text-center font-mono text-zinc-400">
+                              {ing.item_number}
+                            </td>
+                            <td className="py-3 px-4 font-bold text-zinc-900">{ing.name}</td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 text-[11px] font-medium">
+                                {cat ? `${cat.code}. ${cat.name}` : ing.category_id}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono text-zinc-700">{ing.unit}</td>
+                            <td className="py-3 px-4 text-center font-mono font-bold text-zinc-800">
+                              {ing.cost_per_unit ? `₹${ing.cost_per_unit}` : "—"}
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono text-zinc-700">
+                              {ing.min_stock_level || 0} {ing.unit}
+                            </td>
+                            <td className="py-3 px-4 text-zinc-400 text-[11px]">{ing.notes || "—"}</td>
+                            <td className="py-3 px-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditIngredient(ing)}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-200 transition cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: ADD PURCHASE / DELIVERY                                            */}
+        {/* ========================================================================= */}
+        {showAddPurchaseModal && selectedItemForPurchase && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-zinc-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-orange-50 text-[#CA340A]">
+                    <Truck size={18} />
+                  </span>
+                  <h3 className="text-lg font-bold text-zinc-900">Record Stock Purchase</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddPurchaseModal(false)}
+                  className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <p className="text-xs text-zinc-500 mb-5">
+                Log vendor deliveries and actual invoice costs for{" "}
+                <strong className="text-zinc-900">{selectedItemForPurchase.ingredient_name}</strong>.
+                Updates today&apos;s Purchased quantity and moving weighted average price.
+              </p>
+
+              <form onSubmit={handleRecordPurchase} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Purchase Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={purchaseForm.date}
+                      onChange={(e) => setPurchaseForm({ ...purchaseForm, date: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Quantity ({selectedItemForPurchase.unit})
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.001"
+                      required
+                      placeholder="e.g. 5"
+                      value={purchaseForm.quantity}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setPurchaseForm({ ...purchaseForm, quantity: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Price / {selectedItemForPurchase.unit} (₹)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.01"
+                      required
+                      placeholder="e.g. 260"
+                      value={purchaseForm.price_per_unit}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setPurchaseForm({ ...purchaseForm, price_per_unit: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Total Cost (₹)</label>
+                    <div className="w-full px-3 py-2 bg-zinc-100 rounded-xl border border-zinc-200 text-xs font-black font-mono text-[#CA340A]">
+                      ₹
+                      {(
+                        (parseFloat(purchaseForm.quantity) || 0) *
+                        (parseFloat(purchaseForm.price_per_unit) || 0)
+                      ).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Supplier / Vendor Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Local Meat Market, Metro Cash & Carry"
+                    value={purchaseForm.supplier}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Notes / Invoice No. (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Inv #8491, fresh delivery"
+                    value={purchaseForm.notes}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPurchaseModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md disabled:opacity-50 cursor-pointer"
+                  >
+                    {saving ? "Saving..." : "Record Purchase"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: PURCHASE HISTORY                                                   */}
+        {/* ========================================================================= */}
+        {showPurchaseHistoryModal && selectedItemForHistory && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-zinc-200 max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 rounded-xl bg-orange-50 text-[#CA340A]">
+                    <History size={18} />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-bold text-zinc-900">Purchase History</h3>
+                    <p className="text-xs text-zinc-500">
+                      {selectedItemForHistory.ingredient_name} ({selectedItemForHistory.unit})
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPurchaseHistoryModal(false)}
+                  className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-3 my-3 bg-[#FAF9F5] rounded-xl border border-zinc-200/80 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-zinc-400 block text-[10px] uppercase font-bold">Current Avg Cost</span>
+                  <span className="text-sm font-black font-mono text-[#2C1710]">
+                    {selectedItemForHistory.unit_cost ? `₹${selectedItemForHistory.unit_cost.toFixed(2)}/${selectedItemForHistory.unit}` : "Not Set"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPurchaseHistoryModal(false);
+                    openAddPurchaseModal(selectedItemForHistory);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus size={13} />
+                  <span>+ Add Purchase</span>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                {loadingPurchases ? (
+                  <div className="py-12 text-center text-zinc-400 text-xs">
+                    Loading purchases...
+                  </div>
+                ) : ingredientPurchases.length === 0 ? (
+                  <div className="py-12 text-center text-zinc-400 text-xs">
+                    No purchase history found for this ingredient. Click &quot;+ Add Purchase&quot; to log invoices.
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3 text-center">Qty</th>
+                        <th className="py-2.5 px-3 text-center">Price / Unit</th>
+                        <th className="py-2.5 px-3 text-right">Total (₹)</th>
+                        <th className="py-2.5 px-3">Supplier</th>
+                        <th className="py-2.5 px-2 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {ingredientPurchases.map((p) => (
+                        <tr key={p.id} className="hover:bg-zinc-50 transition">
+                          <td className="py-2.5 px-3 font-mono text-zinc-500 text-[11px]">{p.date}</td>
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-zinc-800">
+                            {p.quantity} {p.unit}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-zinc-600">
+                            ₹{p.price_per_unit.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-700">
+                            ₹{p.total_cost.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-zinc-600 text-[11px]">{p.supplier || "—"}</td>
+                          <td className="py-2.5 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePurchase(p.id)}
+                              className="p-1 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 transition"
+                              title="Delete purchase"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: EDIT CATEGORY                                                      */}
+        {/* ========================================================================= */}
+        {showEditCategoryModal && editingCategory && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-zinc-200">
+              <h3 className="text-lg font-bold text-zinc-900 mb-1">
+                Edit Category ({editingCategory.code})
+              </h3>
+              <p className="text-xs text-zinc-500 mb-5">
+                Update category display name or ordering position.
+              </p>
+
+              <form onSubmit={handleSaveCategoryEdit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Category Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editCategoryForm.name}
+                    onChange={(e) => setEditCategoryForm({ ...editCategoryForm, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Display Order</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editCategoryForm.display_order}
+                    onChange={(e) =>
+                      setEditCategoryForm({ ...editCategoryForm, display_order: parseInt(e.target.value) || 1 })
+                    }
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditCategoryModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#2C1710] text-[#FFF9F5] text-xs font-bold hover:bg-black transition shadow-md cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: EDIT INGREDIENT (MOVE CATEGORY, BASELINE PRICE)                    */}
+        {/* ========================================================================= */}
+        {showEditIngredientModal && editingIngredient && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-zinc-200">
+              <h3 className="text-lg font-bold text-zinc-900 mb-1">Edit Ingredient</h3>
+              <p className="text-xs text-zinc-500 mb-5">
+                Move between categories, set baseline unit price, or adjust min stock alert.
+              </p>
+
+              <form onSubmit={handleSaveIngredientEdit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Ingredient Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editIngForm.name}
+                    onChange={(e) => setEditIngForm({ ...editIngForm, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Category</label>
+                    <select
+                      required
+                      value={editIngForm.category_id}
+                      onChange={(e) => setEditIngForm({ ...editIngForm, category_id: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.code}. {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">Counting Unit</label>
+                    <select
+                      value={editIngForm.unit}
+                      onChange={(e) => setEditIngForm({ ...editIngForm, unit: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    >
+                      <option value="kg">kg</option>
+                      <option value="L">L</option>
+                      <option value="pcs">pcs</option>
+                      <option value="g">g</option>
+                      <option value="pack">pack</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Baseline Price / Unit (₹)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="e.g. 260"
+                      value={editIngForm.cost_per_unit}
+                      onChange={(e) => setEditIngForm({ ...editIngForm, cost_per_unit: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Min Stock Alert ({editIngForm.unit})
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={editIngForm.min_stock_level}
+                      onChange={(e) =>
+                        setEditIngForm({ ...editIngForm, min_stock_level: parseFloat(e.target.value) || 0 })
+                      }
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">Notes</label>
+                  <input
+                    type="text"
+                    placeholder="Optional notes..."
+                    value={editIngForm.notes}
+                    onChange={(e) => setEditIngForm({ ...editIngForm, notes: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditIngredientModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
@@ -1210,7 +2069,7 @@ export default function AdminInventoryPage() {
             <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-zinc-200">
               <h3 className="text-lg font-bold text-zinc-900 mb-1">Add New Ingredient</h3>
               <p className="text-xs text-zinc-500 mb-5">
-                Add a new ingredient to the daily register and physical stock checklist.
+                Add a new ingredient to the daily register and master catalog.
               </p>
 
               <form onSubmit={handleAddIngredient} className="space-y-4">
@@ -1260,33 +2119,50 @@ export default function AdminInventoryPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Minimum Stock Level (Alert Threshold)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={newIngForm.min_stock_level}
-                    onChange={(e) =>
-                      setNewIngForm({ ...newIngForm, min_stock_level: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Purchase Cost / Unit (₹ Optional)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="e.g. 260"
+                      value={newIngForm.cost_per_unit}
+                      onChange={(e) => setNewIngForm({ ...newIngForm, cost_per_unit: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Min Stock Alert
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={newIngForm.min_stock_level}
+                      onChange={(e) =>
+                        setNewIngForm({ ...newIngForm, min_stock_level: parseFloat(e.target.value) || 0 })
+                      }
+                      className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2.5 pt-3">
                   <button
                     type="button"
                     onClick={() => setShowAddIngredientModal(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md"
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md cursor-pointer"
                   >
                     Save Ingredient
                   </button>
@@ -1335,13 +2211,13 @@ export default function AdminInventoryPage() {
                   <button
                     type="button"
                     onClick={() => setShowAddCategoryModal(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md"
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md cursor-pointer"
                   >
                     Create Category
                   </button>
@@ -1412,6 +2288,7 @@ export default function AdminInventoryPage() {
                       min="0.001"
                       required
                       value={newMovForm.quantity}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) =>
                         setNewMovForm({ ...newMovForm, quantity: parseFloat(e.target.value) || 0 })
                       }
@@ -1427,6 +2304,7 @@ export default function AdminInventoryPage() {
                       min="0"
                       placeholder="e.g. 450"
                       value={newMovForm.cost}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setNewMovForm({ ...newMovForm, cost: e.target.value })}
                       className="w-full px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 text-xs font-medium text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
                     />
@@ -1460,13 +2338,13 @@ export default function AdminInventoryPage() {
                   <button
                     type="button"
                     onClick={() => setShowLogMovementModal(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md"
+                    className="px-5 py-2 rounded-xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition shadow-md cursor-pointer"
                   >
                     Record Movement
                   </button>
@@ -1500,13 +2378,16 @@ export default function AdminInventoryPage() {
                   <strong>Counted:</strong> {totalCounted} (
                   {totalIngredientsCount - totalCounted} uncounted)
                 </div>
+                <div>
+                  <strong>Estimated Closing Stock Value:</strong> ₹{totalValuedStock.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowFinalizeModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition"
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1514,7 +2395,7 @@ export default function AdminInventoryPage() {
                   type="button"
                   onClick={finalizeDay}
                   disabled={saving}
-                  className="px-5 py-2 rounded-xl bg-[#2C1710] text-[#FFF9F5] text-xs font-bold hover:bg-black transition shadow-md disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-[#2C1710] text-[#FFF9F5] text-xs font-bold hover:bg-black transition shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {saving ? "Finalizing..." : "Confirm & Lock Day"}
                 </button>

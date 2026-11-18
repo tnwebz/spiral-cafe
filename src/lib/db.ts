@@ -404,6 +404,22 @@ export async function updateConfig(
 // ----------------------------------------------------
 
 export async function getAllOrders(): Promise<Order[]> {
+  // Auto-expire abandoned pending orders older than 16 hours without confirmed KOT
+  try {
+    const staleCutoff = new Date(Date.now() - ACTIVE_DINEIN_MAX_AGE_MS).toISOString();
+    await supabaseAdmin
+      .from("orders")
+      .update({
+        status: "CANCELLED",
+        notes: `[AUTO_EXPIRED_SHIFT_END] Abandoned pending order from previous shift`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("status", "PENDING")
+      .neq("payment_status", "PAID")
+      .not("notes", "ilike", "%[KOT_CONFIRMED%")
+      .lt("created_at", staleCutoff);
+  } catch {}
+
   const { data, error } = await supabaseAdmin
     .from("orders")
     .select("*, order_items(*)")
@@ -430,6 +446,7 @@ export async function getPrivateOrders(): Promise<Order[]> {
 export async function createPrivateOrder(params: {
   purpose: PrivatePurpose;
   privateNote?: string;
+  tableNumber?: string;
   items: Array<{
     productId: string;
     name: string;
@@ -490,12 +507,16 @@ export async function createPrivateOrder(params: {
   const grandTotal = subtotal;
 
   const purpose = params.purpose || "STAFF";
+  const rawTable = (params.tableNumber || "GIVE ON COUNTER").trim().toUpperCase();
+  const isCounter = !rawTable || rawTable === "COUNTER" || rawTable === "GIVE ON COUNTER";
+  const cleanTable = isCounter ? "GIVE ON COUNTER" : rawTable;
+  const destTag = isCounter ? "GIVE_ON_COUNTER" : `TABLE_${cleanTable}`;
   const noteTag = params.privateNote ? `[PRIVATE_NOTE:${params.privateNote.trim()}] ` : "";
   const instr = params.specialInstructions ? ` ${params.specialInstructions.trim()}` : "";
-  const notesStr = `[ORDER_TYPE:PRIVATE] [PRIVATE_PURPOSE:${purpose}] [DESTINATION:GIVE_ON_COUNTER] ${noteTag}${instr}`.trim();
+  const notesStr = `[ORDER_TYPE:PRIVATE] [PRIVATE_PURPOSE:${purpose}] [DESTINATION:${destTag}] ${noteTag}${instr}`.trim();
 
   // Ensure internal dummy session exists to satisfy foreign key constraint
-  const dummySession = "INTERNAL_COUNTER_SESSION";
+  const dummySession = `INTERNAL_SESSION_${cleanTable.replace(/\s+/g, "_")}`;
   let validSessionId: string | null = dummySession;
   try {
     const { error: sessErr } = await supabaseAdmin
@@ -504,7 +525,7 @@ export async function createPrivateOrder(params: {
         {
           id: dummySession,
           session_token: dummySession,
-          table_number: "GIVE ON COUNTER",
+          table_number: cleanTable,
           started_at: now,
           last_active_at: now,
         },
@@ -522,7 +543,7 @@ export async function createPrivateOrder(params: {
   const orderPayload = {
     id: orderId,
     order_number: orderNumber,
-    table_number: "GIVE ON COUNTER",
+    table_number: cleanTable,
     customer_session_id: validSessionId,
     customer_id: null,
     customer_phone: null,
@@ -569,7 +590,7 @@ export async function createPrivateOrder(params: {
   return {
     id: orderId,
     orderNumber,
-    tableNumber: "GIVE ON COUNTER",
+    tableNumber: cleanTable,
     orderType: "PRIVATE",
     privatePurpose: purpose,
     privateNote: params.privateNote,
@@ -653,22 +674,41 @@ export async function getActiveOrderForTable(tableNumber: string): Promise<Order
   const cleanTable = normalizeTableNumber(tableNumber);
   const cutoffIso = new Date(Date.now() - ACTIVE_DINEIN_MAX_AGE_MS).toISOString();
 
-  const { data, error } = await supabaseAdmin
+  // 1. First check for active dining customer order (unpaid & non-cancelled)
+  const { data: customerOrder, error } = await supabaseAdmin
     .from("orders")
     .select("*, order_items(*)")
     .eq("table_number", cleanTable)
     .neq("status", "CANCELLED")
+    .neq("status", "COMPLETED")
     .neq("payment_status", "PAID")
     .gte("created_at", cutoffIso)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (error || !data) {
-    return null;
+  if (!error && customerOrder) {
+    return mapDbOrderToOrder(customerOrder);
   }
 
-  return mapDbOrderToOrder(data);
+  // 2. Check for active internal/private order holding this floor table (non-cancelled & non-completed)
+  const { data: privateOrder } = await supabaseAdmin
+    .from("orders")
+    .select("*, order_items(*)")
+    .eq("table_number", cleanTable)
+    .neq("status", "CANCELLED")
+    .neq("status", "COMPLETED")
+    .or("notes.ilike.%[ORDER_TYPE:PRIVATE]%,order_number.ilike.PRV-%")
+    .gte("created_at", cutoffIso)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (privateOrder) {
+    return mapDbOrderToOrder(privateOrder);
+  }
+
+  return null;
 }
 
 export async function getActiveVisitOrdersForTable(tableNumber: string): Promise<{
@@ -677,13 +717,25 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
 }> {
   const cleanTable = normalizeTableNumber(tableNumber);
 
-  // 1. Fetch the latest active unpaid order for this table
+  // 1. Fetch the latest active unpaid or private order for this table
   const latestActive = await getActiveOrderForTable(cleanTable);
   if (!latestActive) {
     return { visitId: null, orders: [] };
   }
 
-  // 2. Extract visit ID from notes or property
+  // If this is an internal private order holding the floor table
+  const isPrivate =
+    latestActive.orderType === "PRIVATE" ||
+    (latestActive.notes || "").includes("[ORDER_TYPE:PRIVATE]");
+
+  if (isPrivate) {
+    return {
+      visitId: `INTERNAL-${cleanTable}-${latestActive.orderNumber}`,
+      orders: [latestActive],
+    };
+  }
+
+  // 2. Extract visit ID from notes or property for customer visits
   const visitId =
     latestActive.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
     (latestActive as any).visit_id ||
@@ -697,6 +749,7 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
       .select("*, order_items(*)")
       .ilike("notes", `%[VISIT_ID:${visitId}]%`)
       .neq("status", "CANCELLED")
+      .neq("status", "COMPLETED")
       .neq("payment_status", "PAID")
       .order("created_at", { ascending: false });
 
@@ -715,6 +768,7 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
         .select("*, order_items(*)")
         .eq("table_number", cleanTable)
         .neq("status", "CANCELLED")
+        .neq("status", "COMPLETED")
         .neq("payment_status", "PAID")
         .order("created_at", { ascending: false });
 
@@ -729,13 +783,13 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
     visitOrders = [latestActive];
   }
 
-  // Strict hygiene: filter strictly to cleanTable and unpaid, non-cancelled
-  visitOrders = visitOrders.filter(
-    (o) =>
-      normalizeTableNumber(o.tableNumber) === cleanTable &&
-      o.paymentStatus !== "PAID" &&
-      o.status !== "CANCELLED"
-  );
+  // Strict hygiene: filter strictly to cleanTable and active
+  visitOrders = visitOrders.filter((o) => {
+    const isThisTable = normalizeTableNumber(o.tableNumber) === cleanTable;
+    if (!isThisTable || o.status === "CANCELLED" || o.status === "COMPLETED") return false;
+    if (o.orderType === "PRIVATE") return true;
+    return o.paymentStatus !== "PAID";
+  });
 
   // Sort newest first (created_at DESC)
   visitOrders.sort(
@@ -951,6 +1005,159 @@ export async function mergeAddonToCooking(orderId: string, addonRound?: number):
     cookingRounds: targetRounds,
     updatedAt: now,
   };
+}
+
+export async function updateOrderItemQuantityOrDelete(params: {
+  orderId: string;
+  itemId?: string;
+  itemName?: string;
+  newQuantity: number;
+  adminUser?: string;
+}): Promise<Order> {
+  const current = await getOrderById(params.orderId);
+  if (!current) {
+    throw new Error(`Order not found: ${params.orderId}`);
+  }
+
+  // Find target item from current order
+  const targetItem = (current.items || []).find((it) => {
+    if (params.itemId && it.id === params.itemId) return true;
+    if (params.itemId && it.productId === params.itemId) return true;
+    if (params.itemName && it.name.trim().toLowerCase() === params.itemName.trim().toLowerCase()) return true;
+    return false;
+  });
+
+  if (!targetItem) {
+    throw new Error(`Item "${params.itemName || params.itemId}" not found in order ${current.orderNumber}`);
+  }
+
+  const now = new Date().toISOString();
+  const adminUser = params.adminUser || "admin";
+
+  if (params.newQuantity <= 0) {
+    // Delete item row completely from order_items
+    let deleteQuery = supabaseAdmin.from("order_items").delete().eq("order_id", current.id);
+    if (targetItem.id) {
+      deleteQuery = deleteQuery.eq("id", targetItem.id);
+    } else {
+      deleteQuery = deleteQuery.eq("name", targetItem.name);
+    }
+    const { error: delErr } = await deleteQuery;
+    if (delErr) {
+      // Fallback delete by name if id match failed
+      await supabaseAdmin.from("order_items").delete().eq("order_id", current.id).eq("name", targetItem.name);
+    }
+
+    try {
+      await recordAuditLog(
+        adminUser,
+        "DELETE_ORDER_ITEM",
+        "ORDER",
+        current.id,
+        `Deleted product "${targetItem.name}" from order ${current.orderNumber}`
+      );
+    } catch (auditErr) {
+      console.warn("Audit log warning on item delete:", auditErr);
+    }
+  } else {
+    // Update quantity and line_total
+    const updatedLineTotal = targetItem.price * params.newQuantity;
+    let updateQuery = supabaseAdmin
+      .from("order_items")
+      .update({
+        quantity: params.newQuantity,
+        line_total: updatedLineTotal,
+      })
+      .eq("order_id", current.id);
+
+    if (targetItem.id) {
+      updateQuery = updateQuery.eq("id", targetItem.id);
+    } else {
+      updateQuery = updateQuery.eq("name", targetItem.name);
+    }
+    const { error: updErr } = await updateQuery;
+    if (updErr) {
+      // Fallback by name
+      await supabaseAdmin
+        .from("order_items")
+        .update({
+          quantity: params.newQuantity,
+          line_total: updatedLineTotal,
+        })
+        .eq("order_id", current.id)
+        .eq("name", targetItem.name);
+    }
+
+    try {
+      await recordAuditLog(
+        adminUser,
+        "UPDATE_ORDER_ITEM_QTY",
+        "ORDER",
+        current.id,
+        `Changed quantity of "${targetItem.name}" to ${params.newQuantity} in order ${current.orderNumber}`
+      );
+    } catch (auditErr) {
+      console.warn("Audit log warning on item qty update:", auditErr);
+    }
+  }
+
+  // Fetch updated remaining items for this order
+  const { data: remainingItemsData } = await supabaseAdmin
+    .from("order_items")
+    .select("*")
+    .eq("order_id", current.id);
+
+  const remaining = remainingItemsData || [];
+
+  if (remaining.length === 0) {
+    // All items removed -> mark order as CANCELLED
+    await supabaseAdmin
+      .from("orders")
+      .update({
+        subtotal: 0,
+        tax: 0,
+        grand_total: 0,
+        status: "CANCELLED",
+        cancelled_at: now,
+        updated_at: now,
+      })
+      .eq("id", current.id);
+
+    try {
+      await recordAuditLog(
+        adminUser,
+        "CANCEL_ORDER",
+        "ORDER",
+        current.id,
+        `All items removed; order ${current.orderNumber} automatically marked CANCELLED`
+      );
+    } catch {}
+  } else {
+    const newSubtotal = remaining.reduce((acc: number, it: any) => acc + Number(it.line_total || 0), 0);
+    const isPrivate =
+      current.orderType === "PRIVATE" ||
+      current.tableNumber === "COUNTER" ||
+      current.tableNumber === "GIVE ON COUNTER" ||
+      (current.notes || "").includes("[ORDER_TYPE:PRIVATE]");
+    const newTax = isPrivate ? 0 : Math.round(newSubtotal * 0.05);
+    const newGrandTotal = newSubtotal + newTax + (current.packagingFee || 0) + (current.serviceCharge || 0);
+
+    await supabaseAdmin
+      .from("orders")
+      .update({
+        subtotal: newSubtotal,
+        tax: newTax,
+        grand_total: newGrandTotal,
+        updated_at: now,
+      })
+      .eq("id", current.id);
+  }
+
+  const updated = await getOrderById(current.id);
+  if (!updated) {
+    throw new Error(`Failed to reload order ${current.id} after item modification`);
+  }
+  return updated;
 }
 
 export async function getTablesStatus(): Promise<

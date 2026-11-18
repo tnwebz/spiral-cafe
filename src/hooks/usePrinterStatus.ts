@@ -61,6 +61,7 @@ export function usePrinterStatus(pollIntervalMs = 4000): ExtendedPrinterHookStat
   const mountedRef = useRef(true);
   const inFlightRef = useRef(false);
   const sequenceRef = useRef(0);
+  const pollFailuresRef = useRef(0);
 
   const executeCheck = useCallback(async (force = false) => {
     // 1. Prevent overlapping requests
@@ -85,6 +86,9 @@ export function usePrinterStatus(pollIntervalMs = 4000): ExtendedPrinterHookStat
         return;
       }
 
+      // Reset failure debounce counter on successful poll
+      pollFailuresRef.current = 0;
+
       setState({
         connectorOnline: dualResult.connectorOnline,
         version: health.version,
@@ -93,7 +97,9 @@ export function usePrinterStatus(pollIntervalMs = 4000): ExtendedPrinterHookStat
         counter: dualResult.counter,
       });
     } catch (err: any) {
-      if (mountedRef.current && currentSeq === sequenceRef.current) {
+      pollFailuresRef.current++;
+      // Debounce: require 2 consecutive poll failures from browser before marking connector offline
+      if (pollFailuresRef.current >= 2 && mountedRef.current && currentSeq === sequenceRef.current) {
         setState((prev) => ({
           ...prev,
           connectorOnline: false,
@@ -114,7 +120,8 @@ export function usePrinterStatus(pollIntervalMs = 4000): ExtendedPrinterHookStat
 
   useEffect(() => {
     mountedRef.current = true;
-    executeCheck(true);
+    // Routine mount probe: non-disruptive availability check (force = false)
+    executeCheck(false);
 
     const timer = setInterval(() => {
       // Background poll only when page/tab is visible

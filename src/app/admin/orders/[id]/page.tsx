@@ -20,6 +20,7 @@ import {
   User,
   Utensils,
   Share2,
+  X,
 } from "lucide-react";
 
 export default function OrderDetailPage({
@@ -37,6 +38,7 @@ export default function OrderDetailPage({
   const [showCashModal, setShowCashModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const fetchOrder = async () => {
     try {
@@ -190,6 +192,33 @@ export default function OrderDetailPage({
           </div>
         </div>
 
+        {/* Notice Banner */}
+        {notice && (
+          <div
+            className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between mb-4 shadow-xs transition-all duration-200 animate-in fade-in slide-in-from-top-1 ${
+              notice.type === "success"
+                ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                : "bg-red-50 border-red-300 text-red-800"
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              {notice.type === "success" ? (
+                <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle size={16} className="text-red-600 shrink-0" />
+              )}
+              <span>{notice.message}</span>
+            </div>
+            <button
+              onClick={() => setNotice(null)}
+              className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg"
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* 2-Column Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* LEFT 2 COLUMNS: ITEMS & TOTALS */}
@@ -202,24 +231,34 @@ export default function OrderDetailPage({
               </h3>
 
               <div className="divide-y divide-zinc-100">
-                {(order.items || []).map((it) => (
-                  <div key={it.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-sm text-[#2C1710]">{it.name}</h4>
-                      <p className="text-xs text-[#52525b]">
-                        ₹{it.price} × {it.quantity}
-                      </p>
-                      {it.notes && (
-                        <p className="text-[11px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md mt-1 inline-block">
-                          Note: {it.notes}
+                {(order.items || []).map((it) => {
+                  return (
+                    <div key={it.id} className="py-3 flex items-center justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-sm text-[#2C1710]">{it.name}</h4>
+                        <p className="text-xs text-[#52525b]">
+                          ₹{it.price} each
                         </p>
-                      )}
+                        {it.notes && (
+                          <p className="text-[11px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md mt-1 inline-block">
+                            Note: {it.notes}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {/* Read-Only Quantity Badge */}
+                        <span className="font-heading font-extrabold text-xs text-[#CA340A] bg-[#FFF9F5] border border-[#CA340A]/20 px-2.5 py-1 rounded-lg">
+                          Qty: {it.quantity}
+                        </span>
+
+                        <div className="font-heading font-extrabold text-sm text-[#2C1710] min-w-[60px] text-right">
+                          ₹{it.lineTotal || (it.price * it.quantity)}
+                        </div>
+                      </div>
                     </div>
-                    <div className="font-heading font-extrabold text-sm text-[#2C1710]">
-                      ₹{it.lineTotal}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Order Notes */}

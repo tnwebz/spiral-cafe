@@ -1368,6 +1368,35 @@ export async function releaseTableReservation(
       .eq("status", "ACTIVE");
   } catch {}
 
+  // Also cancel any unconfirmed pending orders for this released table
+  try {
+    await supabaseAdmin
+      .from("orders" as any)
+      .update({
+        status: "CANCELLED",
+        notes: `[CANCELLED_ON_RELEASE] Table released by ${adminUser} at ${now}`,
+        updated_at: now,
+      })
+      .eq("table_number", norm)
+      .eq("status", "PENDING")
+      .neq("payment_status", "PAID");
+  } catch {}
+
+  // Also complete/release any active private orders holding this floor table
+  try {
+    await supabaseAdmin
+      .from("orders" as any)
+      .update({
+        status: "COMPLETED",
+        notes: `[TABLE_RELEASED] Private order completed on table release by ${adminUser} at ${now}`,
+        updated_at: now,
+      })
+      .eq("table_number", norm)
+      .neq("status", "CANCELLED")
+      .neq("status", "COMPLETED")
+      .or("notes.ilike.%[ORDER_TYPE:PRIVATE]%,order_number.ilike.PRV-%");
+  } catch {}
+
   const local = readLocalReservations().map((r) => {
     if (r.tableNumber === norm && r.status === "ACTIVE") {
       return {
@@ -1589,13 +1618,40 @@ export async function getTablesOverview(
 
   // Fetch active, unpaid orders from the active dining window (last 16 hours)
   const activeCutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
-  const { data: rawOrders } = await supabaseAdmin
-    .from("orders" as any)
-    .select("*, order_items(*)")
-    .neq("status", "CANCELLED")
-    .neq("payment_status", "PAID")
-    .gte("created_at", activeCutoffIso)
-    .order("created_at", { ascending: false });
+
+  // Safely auto-expire abandoned unconfirmed orders from prior shifts (older than 16 hours)
+  try {
+    await supabaseAdmin
+      .from("orders" as any)
+      .update({
+        status: "CANCELLED",
+        notes: `[AUTO_EXPIRED_SHIFT_END] Abandoned pending order from previous shift`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("status", "PENDING")
+      .neq("payment_status", "PAID")
+      .not("notes", "ilike", "%[KOT_CONFIRMED%")
+      .lt("created_at", activeCutoffIso);
+  } catch {}
+
+  const [{ data: rawOrders }, { data: rawPrivateOrders }] = await Promise.all([
+    supabaseAdmin
+      .from("orders" as any)
+      .select("*, order_items(*)")
+      .neq("status", "CANCELLED")
+      .neq("status", "COMPLETED")
+      .neq("payment_status", "PAID")
+      .gte("created_at", activeCutoffIso)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("orders" as any)
+      .select("*, order_items(*)")
+      .neq("status", "CANCELLED")
+      .neq("status", "COMPLETED")
+      .or("notes.ilike.%[ORDER_TYPE:PRIVATE]%,order_number.ilike.PRV-%")
+      .gte("created_at", activeCutoffIso)
+      .order("created_at", { ascending: false }),
+  ]);
 
   // Resolve customer's single active visit table to prevent multi-table attribution
   let customerActiveTable: string | null = null;
@@ -1662,6 +1718,70 @@ export async function getTablesOverview(
     if (!activeOrdersByTable.has(norm)) {
       activeOrdersByTable.set(norm, [orderObj]);
     } else {
+      activeOrdersByTable.get(norm)!.push(orderObj);
+    }
+  }
+
+  // Populate active private orders that are assigned to floor tables (holding the table)
+  for (const row of (rawPrivateOrders as any[]) || []) {
+    const rawTable = (row.table_number || "").trim().toUpperCase();
+    if (
+      !rawTable ||
+      rawTable === "COUNTER" ||
+      rawTable === "GIVE ON COUNTER" ||
+      rawTable === "TAKEAWAY"
+    ) {
+      continue;
+    }
+    const norm = normalizeTableLabel(rawTable);
+
+    const items = (row.order_items || []).map((it: any) => ({
+      id: it.id,
+      orderId: it.order_id,
+      productId: it.product_id,
+      name: it.name,
+      price: Number(it.price) || 0,
+      quantity: Number(it.quantity) || 1,
+      lineTotal: Number(it.line_total) || 0,
+      image: it.image || "",
+      notes: it.notes || "",
+      round: it.round || 1,
+    }));
+
+    const purposeMatch = row.notes?.match(/\[PRIVATE_PURPOSE:([^\]]+)\]/);
+    const privatePurpose = purposeMatch ? purposeMatch[1].trim() : "STAFF";
+
+    const orderObj: Order = {
+      id: row.id,
+      orderNumber: row.order_number,
+      tableNumber: norm,
+      customerSessionId: row.customer_session_id,
+      customerId: row.customer_id,
+      customerPhone: row.customer_phone,
+      orderType: "PRIVATE",
+      privatePurpose: privatePurpose as any,
+      items,
+      subtotal: Number(row.subtotal) || 0,
+      tax: Number(row.tax) || 0,
+      packagingFee: Number(row.packaging_fee) || 0,
+      serviceCharge: Number(row.service_charge) || 0,
+      grandTotal: Number(row.grand_total) || 0,
+      status: row.status,
+      paymentStatus: row.payment_status,
+      paymentMethod: row.payment_method,
+      paymentTxnId: row.payment_txn_id,
+      paymentProvider: row.payment_provider,
+      invoiceId: row.invoice_id,
+      invoiceNumber: row.invoice_number,
+      notes: row.notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+
+    if (!activeOrdersByTable.has(norm)) {
+      activeOrdersByTable.set(norm, [orderObj]);
+    } else {
+      // Prioritize customer orders over private orders if both exist, otherwise append
       activeOrdersByTable.get(norm)!.push(orderObj);
     }
   }

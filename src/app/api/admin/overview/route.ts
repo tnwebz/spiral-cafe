@@ -16,8 +16,29 @@ export async function GET(req: NextRequest) {
     // Exclude private orders strictly from normal customer overview metrics
     const orders = allOrdersRaw.filter((o) => o.orderType !== "PRIVATE");
 
-    const todayStr = new Date().toISOString().split("T")[0];
-    const todayOrders = orders.filter((o) => o.createdAt.startsWith(todayStr));
+    // Accurate Kolkata date for today's cafe business shift
+    const todayKolkata = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+    const isToday = (dateStr: string) => {
+      try {
+        const orderDateKolkata = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(dateStr));
+        return orderDateKolkata === todayKolkata;
+      } catch {
+        return false;
+      }
+    };
+
+    const todayOrders = orders.filter((o) => isToday(o.createdAt));
 
     // KPI Metrics
     const todayPaidOrders = todayOrders.filter((o) => o.paymentStatus === "PAID");
@@ -37,21 +58,43 @@ export async function GET(req: NextRequest) {
       .filter((o) => o.paymentMethod === "ONLINE")
       .reduce((sum, o) => sum + o.grandTotal, 0);
 
+    // Real average settled ticket value:
     const avgOrderValue = todayPaidOrders.length > 0
       ? Math.round(todaySales / todayPaidOrders.length)
-      : (todayOrders.length > 0 ? Math.round(todayOrders.reduce((s, o) => s + o.grandTotal, 0) / todayOrders.length) : 0);
+      : 0;
 
+    // Active dining tables strictly for today's active dine-in orders:
     const activeTablesSet = new Set(
-      orders
-        .filter((o) => o.status === "PENDING" || o.status === "PREPARING" || o.status === "READY")
+      todayOrders
+        .filter(
+          (o) =>
+            (o.status === "PENDING" || o.status === "PREPARING" || o.status === "READY") &&
+            o.paymentStatus !== "PAID" &&
+            o.tableNumber &&
+            !o.tableNumber.toUpperCase().includes("TAKEAWAY")
+        )
         .map((o) => o.tableNumber)
     );
 
-    // Sales & Orders by Hour
+    // Sales & Orders by Hour in Kolkata timezone
     const hourlyData: Array<{ hour: string; count: number; sales: number }> = [];
     for (let h = 0; h < 24; h++) {
       const hourStr = `${h.toString().padStart(2, "0")}:00`;
-      const hourOrders = todayOrders.filter((o) => new Date(o.createdAt).getHours() === h);
+      const hourOrders = todayOrders.filter((o) => {
+        try {
+          const orderHour = parseInt(
+            new Intl.DateTimeFormat("en-IN", {
+              timeZone: "Asia/Kolkata",
+              hour: "numeric",
+              hour12: false,
+            }).format(new Date(o.createdAt)),
+            10
+          );
+          return orderHour === h;
+        } catch {
+          return false;
+        }
+      });
       const hourSales = hourOrders
         .filter((o) => o.paymentStatus === "PAID")
         .reduce((sum, o) => sum + o.grandTotal, 0);
@@ -85,12 +128,13 @@ export async function GET(req: NextRequest) {
       unpaid: pendingPaymentsAmount,
     };
 
-    const pendingOrders = orders.filter((o) => o.status === "PENDING").length;
-    const preparingOrders = orders.filter((o) => o.status === "PREPARING").length;
-    const readyOrders = orders.filter((o) => o.status === "READY").length;
+    // Kitchen & Order Pipeline counts strictly for today:
+    const pendingOrders = todayOrders.filter((o) => o.status === "PENDING").length;
+    const preparingOrders = todayOrders.filter((o) => o.status === "PREPARING").length;
+    const readyOrders = todayOrders.filter((o) => o.status === "READY").length;
 
-    // Current / Active orders: in kitchen pipeline OR unpaid / awaiting cash settlement
-    const currentOrders = orders.filter(
+    // Current / Active orders strictly for today awaiting settlement or fulfillment
+    const currentOrders = todayOrders.filter(
       (o) => !(o.status === "COMPLETED" && o.paymentStatus === "PAID") && o.status !== "CANCELLED"
     );
 
