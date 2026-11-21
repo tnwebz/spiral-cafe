@@ -6,6 +6,7 @@ import { MapPin, ArrowLeftRight, Clock, Footprints } from "lucide-react";
 interface ActiveTableBannerProps {
   currentTable: string;
   hasActiveOrders: boolean;
+  isViewOnlyMenu?: boolean;
   pendingTransfer?: {
     fromTable: string;
     toTable: string;
@@ -18,6 +19,7 @@ interface ActiveTableBannerProps {
 export function ActiveTableBanner({
   currentTable,
   hasActiveOrders,
+  isViewOnlyMenu,
   pendingTransfer,
   motionEnabled,
   onToggleMotion,
@@ -39,11 +41,15 @@ export function ActiveTableBanner({
               Table {displayTable}
             </span>
 
-            {hasActiveOrders && (
+            {isViewOnlyMenu ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold shrink-0">
+                📖 Digital Menu (Host Ordering)
+              </span>
+            ) : hasActiveOrders ? (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
                 Dining Active
               </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -77,16 +83,6 @@ export function ActiveTableBanner({
               </span>
             </button>
           )}
-
-          {/* Change Table Button */}
-          <button
-            type="button"
-            onClick={onRequestChangeTable}
-            className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#FFF8F3] text-[#B73F1D] border border-[#B73F1D]/30 text-[11px] font-heading font-extrabold shadow-2xs flex items-center gap-1 transition-all cursor-pointer active:scale-95"
-          >
-            <ArrowLeftRight size={12} />
-            <span>Change Table</span>
-          </button>
         </div>
       </div>
     </div>

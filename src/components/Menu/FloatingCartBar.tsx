@@ -7,10 +7,11 @@ import { useCart } from "@/context/CartContext";
 
 export default function FloatingCartBar() {
   const pathname = usePathname();
-  const { totalItems, grandTotal, openCart } = useCart();
+  const { totalItems, grandTotal, openCart, isViewOnlyMenu } = useCart();
 
-  // Do not show on admin, kitchen, or invoice screen
+  // Do not show on view-only guest menu, admin, kitchen, or invoice screen
   if (
+    isViewOnlyMenu ||
     pathname?.startsWith("/admin") ||
     pathname?.startsWith("/kitchen") ||
     pathname?.startsWith("/invoice")

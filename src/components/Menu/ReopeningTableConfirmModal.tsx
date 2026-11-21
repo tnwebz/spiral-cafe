@@ -93,16 +93,11 @@ export function ReopeningTableConfirmModal({
               className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-heading font-extrabold text-sm rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
             >
               <Check size={16} />
-              <span>Yes, Still Sitting at Table {displayTable}</span>
+              <span>Continue Your Food with Table {displayTable}</span>
             </button>
-
-            <button
-              onClick={onRequestTransfer}
-              className="w-full py-2.5 bg-white hover:bg-[#FFF8F3] text-[#B73F1D] border border-[#B73F1D]/30 font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <MapPin size={13} />
-              <span>No, I Changed Seats (Transfer Table)</span>
-            </button>
+            <p className="text-[11px] text-center text-[#8C5E51] mt-1">
+              Kindly stay at your table. For table changes, please contact staff.
+            </p>
           </div>
         </motion.div>
       </div>

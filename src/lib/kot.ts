@@ -12,6 +12,7 @@ export interface KotData {
   timeStr: string;
   isPrivateOrder?: boolean;
   isTakeaway?: boolean;
+  isMixed?: boolean;
   items: Array<{
     name: string;
     quantity: number;
@@ -37,18 +38,25 @@ export class KotReceiptEngine {
   static formatPlainSlip(data: KotData): string {
     const divider = "-".repeat(this.LINE_WIDTH);
 
+    const hasParcelItem = data.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
+    const hasDineInItem = data.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
+    const isMixedOrder = Boolean(data.isMixed || (hasParcelItem && hasDineInItem));
+
     let headerTitle = `TABLE ${data.tableNumber.toUpperCase()}`;
     if (data.isPrivateOrder) {
       headerTitle = "*** PRIVATE ORDER ***";
+    } else if (isMixedOrder) {
+      headerTitle = `*** DINE IN & TAKE AWAY ***\nTABLE ${data.tableNumber.toUpperCase()}`;
     } else if (data.tableNumber === "TAKEAWAY") {
       headerTitle = "*** TAKE AWAY ***";
-    } else if (data.isTakeaway) {
+    } else if (data.isTakeaway || hasParcelItem) {
       headerTitle = `TABLE ${data.tableNumber.toUpperCase()} (PARCEL)`;
     }
 
+    const cleanOrderNum = (data.orderNumber || "").replace(/^#/, "");
     const lines: string[] = [
       headerTitle,
-      `Order: #${data.orderNumber} | ${data.timeStr}`,
+      `Order: ${cleanOrderNum} | ${data.timeStr}`,
     ];
 
     if (data.round && data.round > 1) {
@@ -107,11 +115,18 @@ export class KotReceiptEngine {
     // 2. Set character code page to standard PC437
     commands += `${ESC}t\x00`;
 
+    const hasParcelItem = data.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
+    const hasDineInItem = data.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
+    const isMixedOrder = Boolean(data.isMixed || (hasParcelItem && hasDineInItem));
+
     // 3. Double-width & Double-height for Table / Type Header
     commands += `${ESC}!\x30`; // double width + double height + bold
     if (data.isPrivateOrder) {
       commands += `*** PRIVATE ORDER ***\n`;
-    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway) {
+    } else if (isMixedOrder) {
+      commands += `*** DINE IN & TAKE AWAY ***\n`;
+      commands += `TABLE ${data.tableNumber.toUpperCase()}\n`;
+    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway || (hasParcelItem && !hasDineInItem)) {
       commands += `*** TAKE AWAY ***\n`;
     } else {
       commands += `TABLE ${data.tableNumber.toUpperCase()}\n`;
@@ -121,7 +136,8 @@ export class KotReceiptEngine {
     commands += `${ESC}!\x00`;
 
     // 5. Compact Order & Time line (no redundant terminal/hash clutter)
-    commands += `Order: #${data.orderNumber}  |  ${data.timeStr}\n`;
+    const cleanOrderNum = (data.orderNumber || "").replace(/^#/, "");
+    commands += `Order: ${cleanOrderNum}  |  ${data.timeStr}\n`;
     if (data.round && data.round > 1) {
       commands += `Round: ${data.round} (Add-on Order)\n`;
     }
@@ -239,6 +255,10 @@ export function buildKotData(
   );
   const isPrivateOrder = Boolean(options?.isPrivateOrder || (order as any).isPrivate);
 
+  const hasParcel = itemsToPrint.some((it) => it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel"));
+  const hasDineIn = itemsToPrint.some((it) => !it.name.toLowerCase().includes("(parcel)") && !(it.notes || "").toLowerCase().includes("parcel"));
+  const isMixed = Boolean((hasParcel && hasDineIn) || (order.notes || "").includes("DINE_IN_AND_TAKEAWAY"));
+
   const cleanSpecialInstructions = (order.notes || "")
     .replace(/\[[^\]]+\]/g, "")
     .replace(/\|/g, "")
@@ -255,10 +275,12 @@ export function buildKotData(
     timeStr,
     isTakeaway,
     isPrivateOrder,
+    isMixed,
     specialInstructions: cleanSpecialInstructions || undefined,
     items: itemsToPrint.map((it) => {
       let itemName = it.name;
-      if (isTakeaway && !itemName.toLowerCase().includes("(parcel)")) {
+      const isItemParcel = itemName.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel");
+      if ((isTakeaway || isItemParcel) && !itemName.toLowerCase().includes("(parcel)")) {
         itemName = `${itemName} - (parcel)`;
       }
       return {

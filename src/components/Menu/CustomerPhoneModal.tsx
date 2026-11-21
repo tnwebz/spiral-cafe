@@ -42,6 +42,8 @@ export default function CustomerPhoneModal({
     setFoodPreference,
     customerProfile,
     setCustomerProfile,
+    isViewOnlyMenu,
+    isTableBookedByOther,
   } = useCart();
 
   const pathname = usePathname();
@@ -134,20 +136,46 @@ export default function CustomerPhoneModal({
     setIsOpen(false);
   };
 
+  // Close modal immediately if table is in view-only digital menu mode (booked by host)
+  useEffect(() => {
+    if (isViewOnlyMenu || isTableBookedByOther) {
+      setIsOpen(false);
+    }
+  }, [isViewOnlyMenu, isTableBookedByOther]);
+
   // Check customer session on load - prompt entry flow (Phone -> Veg/Non-Veg -> Dine In/Takeaway)
   useEffect(() => {
     if (pathname?.startsWith("/admin") || pathname?.startsWith("/kitchen")) {
       return;
     }
+    if (isViewOnlyMenu || isTableBookedByOther) {
+      setIsOpen(false);
+      return;
+    }
     try {
       const savedPhone = localStorage.getItem("spiral_customer_phone");
 
-      const checkAndTrigger = () => {
-        // If customer has already completed the entry flow in this tab/session, don't interrupt
+      const checkAndTrigger = async () => {
+        // If customer has already completed the entry flow in this tab/session or viewing booked table, don't interrupt
         const alreadyEntered = sessionStorage.getItem("spiral_entered") === "true";
-        if (alreadyEntered) {
+        if (alreadyEntered || isViewOnlyMenu || isTableBookedByOther) {
           setIsOpen(false);
           return;
+        }
+
+        // Check if table in URL or storage is already booked by another host
+        const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+        const targetTable = urlParams?.get("table") || currentTable || tableNumber || (typeof window !== "undefined" ? localStorage.getItem("spiral_table_session") : null);
+        if (targetTable && targetTable !== "TAKEAWAY") {
+          try {
+            const sid = (typeof window !== "undefined" ? localStorage.getItem("spiral_customer_session_id") : "") || customerSessionId;
+            const res = await fetch(`/api/tables/session?table=${encodeURIComponent(targetTable)}&sessionId=${encodeURIComponent(sid)}&phone=${encodeURIComponent(savedPhone || "")}`);
+            const data = await res.json();
+            if (data.success && (data.isViewOnlyMenu || data.isTableBookedByOther || (data.status === "OCCUPIED" && !data.isMyActiveTable) || (data.status === "RESERVED" && !data.isMyReservation))) {
+              setIsOpen(false);
+              return;
+            }
+          } catch {}
         }
 
         // Pre-fill phone if previously entered
@@ -160,36 +188,49 @@ export default function CustomerPhoneModal({
         setIsOpen(true);
       };
 
-      // Non-root routes (e.g. /menu, /[tableNumber]) trigger immediately without waiting for splash
-      if (pathname !== "/") {
+      // Wait for splash screen to complete before popping up entry flow
+      const isSplashDone = sessionStorage.getItem("spiral_cafe_splash") === "true";
+      if (isSplashDone) {
         checkAndTrigger();
       } else {
-        const isSplashDone = sessionStorage.getItem("spiral_cafe_splash") === "true";
-        if (isSplashDone) {
-          checkAndTrigger();
-        } else {
-          const interval = setInterval(() => {
-            if (sessionStorage.getItem("spiral_cafe_splash") === "true") {
-              clearInterval(interval);
-              checkAndTrigger();
-            }
-          }, 150);
-
-          const timeout = setTimeout(() => {
-            clearInterval(interval);
+        let done = false;
+        const triggerOnce = () => {
+          if (!done) {
+            done = true;
             checkAndTrigger();
-          }, 3200);
+          }
+        };
 
-          return () => {
+        const interval = setInterval(() => {
+          if (sessionStorage.getItem("spiral_cafe_splash") === "true") {
             clearInterval(interval);
-            clearTimeout(timeout);
-          };
-        }
+            triggerOnce();
+          }
+        }, 150);
+
+        const timeout = setTimeout(() => {
+          clearInterval(interval);
+          triggerOnce();
+        }, 4000);
+
+        const onSplashDone = () => {
+          clearInterval(interval);
+          clearTimeout(timeout);
+          triggerOnce();
+        };
+
+        window.addEventListener("spiral_splash_complete", onSplashDone, { once: true });
+
+        return () => {
+          clearInterval(interval);
+          clearTimeout(timeout);
+          window.removeEventListener("spiral_splash_complete", onSplashDone);
+        };
       }
     } catch {
       setIsOpen(true);
     }
-  }, [pathname]);
+  }, [pathname, isViewOnlyMenu, isTableBookedByOther]);
 
   // Handler for First-Time Phone Submission -> Moves to Food Preference Screen
   const handlePhoneSubmit = (e: React.FormEvent) => {

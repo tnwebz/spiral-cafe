@@ -1066,17 +1066,30 @@ export default function TableDetailPage() {
                               NEWEST
                             </span>
                           )}
-                          {((ord.notes || "").includes("[TAKEAWAY]") ||
-                            (ord.notes || "").includes("[PARCEL]") ||
-                            ord.tableNumber === "TAKEAWAY") && (
-                            <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs">
-                              <ShoppingBag size={11} />
-                              TAKE AWAY (PARCEL)
-                            </span>
-                          )}
+                          {(() => {
+                            const hasParcel = ord.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel") || (i.notes || "").toLowerCase().includes("takeaway"));
+                            const hasDineIn = ord.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel") && !(i.notes || "").toLowerCase().includes("takeaway"));
+                            const isMixed = (hasParcel && hasDineIn) || (ord.notes || "").includes("DINE_IN_AND_TAKEAWAY");
+                            if (isMixed) {
+                              return (
+                                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-950 border border-orange-300 flex items-center gap-1 shadow-2xs">
+                                  <span>🍽️ DINE IN & 🛍️ TAKE AWAY</span>
+                                </span>
+                              );
+                            }
+                            if ((ord.notes || "").includes("[TAKEAWAY]") || (ord.notes || "").includes("[PARCEL]") || ord.tableNumber === "TAKEAWAY" || hasParcel) {
+                              return (
+                                <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                  <ShoppingBag size={11} />
+                                  TAKE AWAY (PARCEL)
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                         <h2 className="font-heading font-extrabold text-lg text-[#2C1710] mt-1">
-                          Order #{ord.orderNumber}
+                          Order {ord.orderNumber.replace(/^#/, "")}
                         </h2>
                         <p className="text-xs text-[#52525b]">
                           Placed{" "}

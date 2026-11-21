@@ -137,9 +137,29 @@ export async function POST(req: NextRequest) {
     inFlightCheckouts.add(lockKey);
 
     try {
+      const isTakeawayTable = cleanTable === "TAKEAWAY";
+
       // 5. Single Master Order per Table Session:
-      // Check if there is an active, unpaid order already for this table
-      const activeOrder = await getActiveOrderForTable(cleanTable);
+      // For floor tables, check if there is an active, unpaid order already for this table.
+      // For takeaway, check ONLY within this customer's own session (takeaway orders never collide or lock table).
+      let activeOrder = null;
+      if (!isTakeawayTable) {
+        activeOrder = await getActiveOrderForTable(cleanTable);
+      } else {
+        const sessionOrders = await getSessionOrders(cleanSessionId);
+        activeOrder = sessionOrders.find(
+          (o) => o.status !== "CANCELLED" && o.paymentStatus !== "PAID"
+        ) || null;
+      }
+
+      // Check if order has mixed items (both dine-in and parcel)
+      const hasParcel = validatedItems.some(
+        (it) => it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel") || (it.notes || "").toLowerCase().includes("takeaway")
+      );
+      const hasDineIn = validatedItems.some(
+        (it) => !it.name.toLowerCase().includes("(parcel)") && !(it.notes || "").toLowerCase().includes("parcel") && !(it.notes || "").toLowerCase().includes("takeaway")
+      );
+      const isMixed = (hasParcel && hasDineIn) || cleanNotes.includes("DINE_IN_AND_TAKEAWAY");
 
       // Idempotency Protection:
       // If client retried with the exact same checkoutId, return the existing order
@@ -175,11 +195,18 @@ export async function POST(req: NextRequest) {
       }
 
       const checkoutTag = cleanCheckoutId ? `[CHECKOUT:${cleanCheckoutId}]` : "";
-      const combinedNotes = `${cleanNotes} ${checkoutTag}`.trim();
+      let combinedNotes = `${cleanNotes} ${checkoutTag}`.trim();
+      if (isMixed) {
+        combinedNotes = `[ORDER_TYPE:DINE_IN_AND_TAKEAWAY] [DINE_IN_AND_TAKEAWAY] ${combinedNotes}`.trim();
+      } else if (isTakeawayTable || hasParcel) {
+        if (!combinedNotes.includes("[TAKEAWAY]")) {
+          combinedNotes = `[ORDER_TYPE:TAKEAWAY] [TAKEAWAY] [PARCEL] ${combinedNotes}`.trim();
+        }
+      }
 
       if (activeOrder) {
         // Check customer session ownership of this dining table
-        if (activeOrder.customerSessionId && activeOrder.customerSessionId !== cleanSessionId) {
+        if (!isTakeawayTable && activeOrder.customerSessionId && activeOrder.customerSessionId !== cleanSessionId) {
           return NextResponse.json(
             {
               success: false,
@@ -195,7 +222,7 @@ export async function POST(req: NextRequest) {
         const existingVisitId =
           activeOrder.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
           (activeOrder as any).visit_id ||
-          `VISIT-${cleanTable}-${activeOrder.id.slice(0, 8).toUpperCase()}`;
+          (isTakeawayTable ? `VISIT-TAKEAWAY-${cleanSessionId.slice(-6)}` : `VISIT-${cleanTable}-${activeOrder.id.slice(0, 8).toUpperCase()}`);
 
         // Create a separate new order record with its own KOT ticket
         const newOrder = await createOrder({
@@ -220,33 +247,35 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Check if table is occupied or reserved
-      const activeRes = await getActiveReservations();
-      const tableRes = activeRes.find(
-        (r) =>
-          normalizeTableNumber(r.tableNumber) === cleanTable &&
-          r.status === "ACTIVE" &&
-          new Date(r.expiresAt) > new Date()
-      );
-
+      // Check if table is occupied or reserved (Floor tables only; skip for TAKEAWAY)
       let visitId = `VISIT-${cleanTable}-${Date.now().toString(36).toUpperCase()}`;
 
-      if (tableRes) {
-        if (tableRes.customerSessionId && tableRes.customerSessionId !== cleanSessionId) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `Table ${cleanTable} is temporarily reserved by another customer. Please choose another table.`,
-              tableReserved: true,
-            },
-            { status: 403 }
-          );
+      if (!isTakeawayTable) {
+        const activeRes = await getActiveReservations();
+        const tableRes = activeRes.find(
+          (r) =>
+            normalizeTableNumber(r.tableNumber) === cleanTable &&
+            r.status === "ACTIVE" &&
+            new Date(r.expiresAt) > new Date()
+        );
+
+        if (tableRes) {
+          if (tableRes.customerSessionId && tableRes.customerSessionId !== cleanSessionId) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Table ${cleanTable} is temporarily reserved by another customer. Please choose another table.`,
+                tableReserved: true,
+              },
+              { status: 403 }
+            );
+          }
+          await convertReservationToVisit({
+            tableNumber: cleanTable,
+            customerSessionId: cleanSessionId,
+            visitId,
+          });
         }
-        await convertReservationToVisit({
-          tableNumber: cleanTable,
-          customerSessionId: cleanSessionId,
-          visitId,
-        });
       }
 
       const order = await createOrder({

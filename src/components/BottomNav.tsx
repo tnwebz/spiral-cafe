@@ -8,7 +8,7 @@ import { useCart } from "@/context/CartContext";
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { openOrders, placedOrders, totalItems } = useCart();
+  const { openOrders, placedOrders, totalItems, isViewOnlyMenu } = useCart();
 
   // Hide completely on Kitchen Display System
   if (pathname?.startsWith("/kitchen")) {
@@ -48,21 +48,23 @@ export default function BottomNav() {
           <span className="text-[10px] font-semibold tracking-tight leading-none">Menu</span>
         </Link>
 
-        {/* My Orders Button */}
-        <button
-          onClick={openOrders}
-          className="flex flex-col items-center justify-center gap-1 min-w-[54px] py-1 px-2 rounded-2xl transition-all duration-200 text-[#8C5E51] hover:text-[#B73F1D] cursor-pointer relative"
-        >
-          <div className="p-1.5 rounded-xl transition-all relative">
-            <Clock size={19} strokeWidth={1.9} />
-            {(activeOrdersCount > 0 || totalItems > 0) && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#B73F1D] text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
-                {activeOrdersCount > 0 ? activeOrdersCount : totalItems}
-              </span>
-            )}
-          </div>
-          <span className="text-[10px] font-semibold tracking-tight leading-none">Orders</span>
-        </button>
+        {/* My Orders Button - Only for ordering guests */}
+        {!isViewOnlyMenu && (
+          <button
+            onClick={openOrders}
+            className="flex flex-col items-center justify-center gap-1 min-w-[54px] py-1 px-2 rounded-2xl transition-all duration-200 text-[#8C5E51] hover:text-[#B73F1D] cursor-pointer relative"
+          >
+            <div className="p-1.5 rounded-xl transition-all relative">
+              <Clock size={19} strokeWidth={1.9} />
+              {(activeOrdersCount > 0 || totalItems > 0) && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#B73F1D] text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+                  {activeOrdersCount > 0 ? activeOrdersCount : totalItems}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] font-semibold tracking-tight leading-none">Orders</span>
+          </button>
+        )}
 
         <Link
           href="/offers"

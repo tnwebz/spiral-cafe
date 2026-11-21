@@ -36,8 +36,13 @@ export function resolveTableFromParam(param: string | null | undefined): string 
     return null;
   }
 
-  // If uppercase code like A1, B2, etc.
+  // If takeaway / parcel parameter
   const upper = clean.toUpperCase();
+  if (upper === "TAKEAWAY" || upper === "TAKE-AWAY" || upper === "PARCEL") {
+    return "TAKEAWAY";
+  }
+
+  // If uppercase code like A1, B2, etc.
   const found = (VALID_FLOOR_TABLES as readonly string[]).find((t) => t.toUpperCase() === upper);
   if (found) return found;
 

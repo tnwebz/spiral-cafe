@@ -6,6 +6,7 @@ import FloatingCartBar from "@/components/Menu/FloatingCartBar";
 import CartOrdersSheet from "@/components/Menu/CartOrdersSheet";
 import CustomerPhoneModal from "@/components/Menu/CustomerPhoneModal";
 import CustomerSessionProtection from "@/components/Menu/CustomerSessionProtection";
+import GlobalSplashScreen from "@/components/GlobalSplashScreen";
 import PWARegistration from "@/components/PWA/PWARegistration";
 
 export const metadata: Metadata = {
@@ -60,6 +61,7 @@ export default function RootLayout({
       >
         <PWARegistration />
         <CartProvider>
+          <GlobalSplashScreen />
           <SmoothScroll>
             {children}
           </SmoothScroll>

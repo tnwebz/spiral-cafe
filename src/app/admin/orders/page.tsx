@@ -981,9 +981,14 @@ export default function AdminOrdersPage() {
                           Dining Mode
                         </span>
                         <span className="font-bold text-zinc-900">
-                          {selectedOrder.tableNumber === "TAKEAWAY"
-                            ? "Take Away / Parcel"
-                            : `Dine-In (Table ${selectedOrder.tableNumber})`}
+                          {(() => {
+                            const hasParcel = (selectedOrder.items || []).some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
+                            const hasDineIn = (selectedOrder.items || []).some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
+                            const isMixed = (hasParcel && hasDineIn) || (selectedOrder.notes || "").includes("DINE_IN_AND_TAKEAWAY");
+                            if (isMixed) return `Dine-In & Take Away (Table ${selectedOrder.tableNumber})`;
+                            if (selectedOrder.tableNumber === "TAKEAWAY" || (selectedOrder.notes || "").includes("[TAKEAWAY]") || hasParcel) return "Take Away / Parcel";
+                            return `Dine-In (Table ${selectedOrder.tableNumber})`;
+                          })()}
                         </span>
                       </div>
                       <div className="flex justify-between">

@@ -19,6 +19,7 @@ export interface CartItem {
   image: string;
   description?: string;
   notes?: string;
+  isParcel?: boolean;
 }
 
 export interface PersistentCartState {
@@ -133,6 +134,8 @@ interface CartContextType {
   grandTotal: number;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
+  isViewOnlyMenu: boolean;
+  isTableBookedByOther: boolean;
   activeSheetTab: "cart" | "orders";
   setActiveSheetTab: (tab: "cart" | "orders") => void;
   placedOrders: PlacedOrder[];
@@ -145,11 +148,14 @@ interface CartContextType {
     price: number;
     image: string;
     description?: string;
+    isParcel?: boolean;
   }) => void;
   removeFromCart: (id: string) => void;
   increaseQuantity: (id: string) => void;
   decreaseQuantity: (id: string) => void;
   getItemQuantity: (id: string) => number;
+  getItemDineInQuantity: (id: string) => number;
+  getItemParcelQuantity: (id: string) => number;
   clearCart: () => void;
   placeOrder: (notes?: string, overrideTable?: string, isTakeaway?: boolean) => Promise<{ success: boolean; order?: PlacedOrder; error?: string }>;
   selectCashPayment: (orderId: string) => Promise<boolean>;
@@ -185,6 +191,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return [];
   });
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
+  const [isViewOnlyMenu, setIsViewOnlyMenu] = useState<boolean>(false);
+  const [isTableBookedByOther, setIsTableBookedByOther] = useState<boolean>(false);
   const [activeSheetTab, setActiveSheetTab] = useState<"cart" | "orders">("cart");
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
   const [foodPreference, setFoodPreferenceState] = useState<FoodPreference>("ALL");
@@ -264,15 +272,44 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Validate and sync active table session & restore unsubmitted cart if valid
   const syncTableSessionAndCart = useCallback(
-    async (tableCode: string, currentVisitor: string) => {
+    async (tableCode: string, currentVisitor: string, currentSession?: string, currentPhone?: string) => {
       try {
+        const sid =
+          currentSession ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("spiral_customer_session_id") || ""
+            : "");
+        const ph =
+          currentPhone ||
+          (typeof window !== "undefined"
+            ? localStorage.getItem("spiral_customer_phone") || ""
+            : "");
+
         const res = await fetch(
-          `/api/tables/session?table=${encodeURIComponent(tableCode)}&visitorId=${encodeURIComponent(currentVisitor)}`
+          `/api/tables/session?table=${encodeURIComponent(tableCode)}&visitorId=${encodeURIComponent(currentVisitor)}&sessionId=${encodeURIComponent(sid)}&phone=${encodeURIComponent(ph)}`
         );
         const data = await res.json();
         const serverVisitId =
           data.success && data.visitId ? data.visitId : `VISIT-${tableCode}-IDLE`;
         setActiveVisitId(serverVisitId);
+
+        const isOther = Boolean(
+          tableCode !== "TAKEAWAY" &&
+          (data.isViewOnlyMenu ||
+           data.isTableBookedByOther ||
+           (data.status === "OCCUPIED" && !data.isMyActiveTable) ||
+           (data.status === "RESERVED" && !data.isMyReservation))
+        );
+
+        setIsTableBookedByOther(isOther);
+        setIsViewOnlyMenu(isOther);
+
+        if (isOther) {
+          // Extra guest at booked table: keep draft cart empty & view only!
+          setCart([]);
+          setTableReservation(null);
+          return;
+        }
 
         // Reservation status check
         if (data.success && data.status === "RESERVED" && data.isMyReservation) {
@@ -660,23 +697,43 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Cart operations
   const addToCart = useCallback(
-    (item: { id: string; name: string; price: number; image: string; description?: string }) => {
+    (item: {
+      id: string;
+      name: string;
+      price: number;
+      image: string;
+      description?: string;
+      isParcel?: boolean;
+    }) => {
+      if (isViewOnlyMenu) {
+        return;
+      }
+      const isParcel = Boolean(item.isParcel);
+      const actualId = isParcel
+        ? item.id.endsWith("__parcel") ? item.id : `${item.id}__parcel`
+        : item.id;
+      const actualName = isParcel
+        ? item.name.toLowerCase().includes("(parcel)") ? item.name : `${item.name} (parcel)`
+        : item.name;
+
       setCart((prev) => {
-        const existing = prev.find((i) => i.id === item.id);
+        const existing = prev.find((i) => i.id === actualId);
         if (existing) {
           return prev.map((i) =>
-            i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+            i.id === actualId ? { ...i, quantity: i.quantity + 1 } : i
           );
         }
         return [
           ...prev,
           {
-            id: item.id,
-            name: item.name,
+            id: actualId,
+            name: actualName,
             price: item.price,
             quantity: 1,
             image: item.image,
             description: item.description,
+            isParcel,
+            notes: isParcel ? "[PARCEL]" : undefined,
           },
         ];
       });
@@ -708,7 +765,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const getItemQuantity = useCallback(
     (id: string) => {
-      const found = cart.find((i) => i.id === id);
+      const dineIn = cart.find((i) => i.id === id);
+      const parcel = cart.find((i) => i.id === `${id}__parcel`);
+      return (dineIn ? dineIn.quantity : 0) + (parcel ? parcel.quantity : 0);
+    },
+    [cart]
+  );
+
+  const getItemDineInQuantity = useCallback(
+    (id: string) => {
+      const found = cart.find((i) => i.id === id && !i.isParcel);
+      return found ? found.quantity : 0;
+    },
+    [cart]
+  );
+
+  const getItemParcelQuantity = useCallback(
+    (id: string) => {
+      const found = cart.find((i) => i.id === `${id}__parcel` || (i.id === id && i.isParcel));
       return found ? found.quantity : 0;
     },
     [cart]
@@ -755,8 +829,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const checkoutId = checkoutIdRef.current;
 
       let finalNotes = (notes || "").trim();
-      if (isTakeaway && !finalNotes.includes("[TAKEAWAY]")) {
-        finalNotes = `[TAKEAWAY] [PARCEL] ${finalNotes}`.trim();
+      const hasParcel = cart.some(
+        (it) => it.isParcel || it.id.includes("__parcel") || it.name.toLowerCase().includes("(parcel)")
+      );
+      const hasDineIn = cart.some(
+        (it) => !it.isParcel && !it.id.includes("__parcel") && !it.name.toLowerCase().includes("(parcel)")
+      );
+
+      if (hasParcel && hasDineIn) {
+        if (!finalNotes.includes("DINE_IN_AND_TAKEAWAY")) {
+          finalNotes = `[DINE_IN_AND_TAKEAWAY] ${finalNotes}`.trim();
+        }
+      } else if (isTakeaway || hasParcel || activeTable === "TAKEAWAY") {
+        if (!finalNotes.includes("[TAKEAWAY]")) {
+          finalNotes = `[TAKEAWAY] [PARCEL] ${finalNotes}`.trim();
+        }
       }
 
       setIsPlacingOrder(true);
@@ -771,14 +858,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           customerSessionId,
           checkoutId,
           customerPhone,
-          items: cart.map((it) => ({
-            productId: it.id,
-            name: it.name,
-            price: it.price,
-            quantity: it.quantity,
-            image: it.image,
-            notes: it.notes,
-          })),
+          items: cart.map((it) => {
+            const cleanProdId = it.id.replace(/__parcel$/, "");
+            return {
+              productId: cleanProdId,
+              name: it.name,
+              price: it.price,
+              quantity: it.quantity,
+              image: it.image,
+              notes: it.notes || (it.isParcel ? "[PARCEL]" : undefined),
+            };
+          }),
           notes: finalNotes,
         };
 
@@ -1065,6 +1155,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         grandTotal,
         isCartOpen,
         setIsCartOpen,
+        isViewOnlyMenu,
+        isTableBookedByOther,
         activeSheetTab,
         setActiveSheetTab,
         placedOrders,
@@ -1076,6 +1168,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         increaseQuantity,
         decreaseQuantity,
         getItemQuantity,
+        getItemDineInQuantity,
+        getItemParcelQuantity,
         clearCart,
         placeOrder,
         selectCashPayment,

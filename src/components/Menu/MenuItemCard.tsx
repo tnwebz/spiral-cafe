@@ -38,8 +38,17 @@ export default function MenuItemCard({
   const calculatedOriginalPrice = originalPrice || Math.round(price * 1.35);
   const itemId = id || name.toLowerCase().replace(/\s+/g, "-");
 
-  const { getItemQuantity, addToCart, increaseQuantity, decreaseQuantity } = useCart();
-  const quantity = getItemQuantity(itemId);
+  const {
+    addToCart,
+    increaseQuantity,
+    decreaseQuantity,
+    getItemDineInQuantity,
+    getItemParcelQuantity,
+    isViewOnlyMenu,
+  } = useCart();
+  const dineInQty = getItemDineInQuantity(itemId);
+  const parcelQty = getItemParcelQuantity(itemId);
+  const totalQty = dineInQty + parcelQty;
 
   return (
     <motion.div
@@ -138,47 +147,135 @@ export default function MenuItemCard({
             </span>
           </div>
 
-          {/* Ordering Quantity Control */}
+          {/* Ordering Quantity Control / Digital Menu Static Mode */}
           <div>
-            {!available ? (
+            {isViewOnlyMenu ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50/90 text-amber-900 border border-amber-200/80 rounded-full font-heading font-extrabold text-[10px] uppercase tracking-wider shadow-2xs">
+                <span>📖 Digital Menu</span>
+              </span>
+            ) : !available ? (
               <span className="inline-block px-3 py-1.5 bg-zinc-200 text-zinc-600 font-heading font-extrabold text-[11px] rounded-full uppercase tracking-wider cursor-not-allowed">
                 SOLD OUT
               </span>
-            ) : quantity === 0 ? (
-              <button
-                onClick={() =>
-                  addToCart({
-                    id: itemId,
-                    name,
-                    price,
-                    image,
-                    description,
-                  })
-                }
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-cream hover:bg-primary-dark font-heading font-bold text-xs rounded-full shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
-              >
-                <Plus size={13} strokeWidth={3} />
-                <span>Add</span>
-              </button>
+            ) : totalQty === 0 ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() =>
+                    addToCart({
+                      id: itemId,
+                      name,
+                      price,
+                      image,
+                      description,
+                      isParcel: false,
+                    })
+                  }
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-cream hover:bg-primary-dark font-heading font-bold text-xs rounded-full shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
+                  title="Eat here (Dine In)"
+                >
+                  <Plus size={12} strokeWidth={3} />
+                  <span>Add</span>
+                </button>
+                <button
+                  onClick={() =>
+                    addToCart({
+                      id: itemId,
+                      name,
+                      price,
+                      image,
+                      description,
+                      isParcel: true,
+                    })
+                  }
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-heading font-bold text-xs rounded-full shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
+                  title="Pack for Takeaway (Parcel)"
+                >
+                  <span>🛍️ Parcel</span>
+                </button>
+              </div>
             ) : (
-              <div className="flex items-center gap-2 bg-[#FFF8F3] border border-[#B73F1D]/40 rounded-full p-1 shadow-xs">
-                <button
-                  onClick={() => decreaseQuantity(itemId)}
-                  className="w-7 h-7 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-cream flex items-center justify-center font-bold transition-all active:scale-90 cursor-pointer"
-                  aria-label="Decrease quantity"
-                >
-                  <Minus size={13} strokeWidth={3} />
-                </button>
-                <span className="font-heading font-bold text-sm text-[#4A2117] min-w-[18px] text-center">
-                  {quantity}
-                </span>
-                <button
-                  onClick={() => increaseQuantity(itemId)}
-                  className="w-7 h-7 rounded-full bg-primary text-cream hover:bg-primary-dark flex items-center justify-center font-bold transition-all active:scale-90 cursor-pointer"
-                  aria-label="Increase quantity"
-                >
-                  <Plus size={13} strokeWidth={3} />
-                </button>
+              <div className="flex flex-col gap-1 items-end">
+                {dineInQty > 0 && (
+                  <div className="flex items-center gap-1.5 bg-[#FFF8F3] border border-[#B73F1D]/40 rounded-full px-1.5 py-0.5 shadow-2xs text-[11px]">
+                    <span className="text-[10px] font-extrabold text-[#8C5E51] uppercase">Dine:</span>
+                    <button
+                      onClick={() => decreaseQuantity(itemId)}
+                      className="w-5 h-5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-cream flex items-center justify-center font-bold cursor-pointer"
+                      aria-label="Decrease dine-in"
+                    >
+                      <Minus size={10} strokeWidth={3} />
+                    </button>
+                    <span className="font-heading font-bold text-xs text-[#4A2117] min-w-[14px] text-center">
+                      {dineInQty}
+                    </span>
+                    <button
+                      onClick={() => increaseQuantity(itemId)}
+                      className="w-5 h-5 rounded-full bg-primary text-cream hover:bg-primary-dark flex items-center justify-center font-bold cursor-pointer"
+                      aria-label="Increase dine-in"
+                    >
+                      <Plus size={10} strokeWidth={3} />
+                    </button>
+                  </div>
+                )}
+
+                {parcelQty > 0 && (
+                  <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 rounded-full px-1.5 py-0.5 shadow-2xs text-[11px]">
+                    <span className="text-[10px] font-extrabold text-amber-900 uppercase">🛍️:</span>
+                    <button
+                      onClick={() => decreaseQuantity(`${itemId}__parcel`)}
+                      className="w-5 h-5 rounded-full bg-amber-200/70 text-amber-900 hover:bg-amber-800 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+                      aria-label="Decrease parcel"
+                    >
+                      <Minus size={10} strokeWidth={3} />
+                    </button>
+                    <span className="font-heading font-bold text-xs text-amber-950 min-w-[14px] text-center">
+                      {parcelQty}
+                    </span>
+                    <button
+                      onClick={() => increaseQuantity(`${itemId}__parcel`)}
+                      className="w-5 h-5 rounded-full bg-amber-600 text-white hover:bg-amber-700 flex items-center justify-center font-bold cursor-pointer"
+                      aria-label="Increase parcel"
+                    >
+                      <Plus size={10} strokeWidth={3} />
+                    </button>
+                  </div>
+                )}
+
+                {dineInQty === 0 && (
+                  <button
+                    onClick={() =>
+                      addToCart({
+                        id: itemId,
+                        name,
+                        price,
+                        image,
+                        description,
+                        isParcel: false,
+                      })
+                    }
+                    className="text-[10px] font-bold text-[#B73F1D] hover:underline cursor-pointer"
+                  >
+                    + Add Dine-In
+                  </button>
+                )}
+
+                {parcelQty === 0 && (
+                  <button
+                    onClick={() =>
+                      addToCart({
+                        id: itemId,
+                        name,
+                        price,
+                        image,
+                        description,
+                        isParcel: true,
+                      })
+                    }
+                    className="text-[10px] font-bold text-amber-800 hover:underline cursor-pointer"
+                  >
+                    + 🛍️ Add Parcel
+                  </button>
+                )}
               </div>
             )}
           </div>

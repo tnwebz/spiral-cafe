@@ -18,6 +18,7 @@ export default function CustomerSessionProtection() {
     customerSessionId,
     placedOrders,
     activeTableOrder,
+    isViewOnlyMenu,
   } = useCart();
 
   const [customerPhone, setCustomerPhone] = useState<string>("");
@@ -32,6 +33,7 @@ export default function CustomerSessionProtection() {
 
   const prevOrdersCountRef = useRef<number>(0);
   const lastPlacedOrderIdRef = useRef<string | null>(null);
+  const isInitialMountRef = useRef<boolean>(true);
 
   // Read saved customer phone on mount & listen for transfer trigger events
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function CustomerSessionProtection() {
       setCustomerPhone(p);
 
       const handleOpenTransfer = () => {
-        setShowTransferModal(true);
+        // Staff or admin manual triggers only
       };
       window.addEventListener("open-table-transfer", handleOpenTransfer);
       return () => {
@@ -133,16 +135,29 @@ export default function CustomerSessionProtection() {
     };
   }, [isAdminOrKitchen, customerSessionId, customerPhone, tableNumber, setTableNumber]);
 
-  // LAYER 1: Post-Order Placement Confirmation
+  // LAYER 1: Post-Order Placement Confirmation (only when user actively places new order, never on refresh)
   useEffect(() => {
     if (isAdminOrKitchen) return;
 
-    // Detect when a new order is added
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      prevOrdersCountRef.current = placedOrders.length;
+      if (placedOrders.length > 0) {
+        lastPlacedOrderIdRef.current = placedOrders[0]?.id || null;
+      }
+      return;
+    }
+
+    // Detect when a genuinely new order is added during the active session
     if (placedOrders.length > prevOrdersCountRef.current) {
       const newestOrder = placedOrders[0];
-      if (newestOrder && newestOrder.id !== lastPlacedOrderIdRef.current) {
+      const seenKey = `spiral_seen_post_order_${newestOrder?.id}`;
+      const alreadySeen = typeof sessionStorage !== "undefined" && sessionStorage.getItem(seenKey) === "true";
+      if (newestOrder && newestOrder.id !== lastPlacedOrderIdRef.current && !alreadySeen) {
         lastPlacedOrderIdRef.current = newestOrder.id;
-        // Show Layer 1 confirmation
+        try {
+          sessionStorage.setItem(seenKey, "true");
+        } catch {}
         setShowPostOrderModal(true);
       }
     }
@@ -205,10 +220,11 @@ export default function CustomerSessionProtection() {
         <ActiveTableBanner
           currentTable={tableNumber}
           hasActiveOrders={hasActiveOrders}
+          isViewOnlyMenu={isViewOnlyMenu}
           pendingTransfer={pendingTransfer}
           motionEnabled={userOptIn}
           onToggleMotion={toggleOptIn}
-          onRequestChangeTable={() => setShowTransferModal(true)}
+          onRequestChangeTable={() => {}}
         />
       )}
 
@@ -218,10 +234,7 @@ export default function CustomerSessionProtection() {
         orderNumber={placedOrders[0]?.orderNumber}
         tableNumber={tableNumber}
         onContinue={() => setShowPostOrderModal(false)}
-        onRequestTransfer={() => {
-          setShowPostOrderModal(false);
-          setShowTransferModal(true);
-        }}
+        onRequestTransfer={() => setShowPostOrderModal(false)}
       />
 
       {/* Layer 2: Motion Walking Detection Alert */}
@@ -229,10 +242,7 @@ export default function CustomerSessionProtection() {
         isOpen={showMotionAlert}
         currentTable={tableNumber}
         onDismiss={() => setShowMotionAlert(false)}
-        onRequestTransfer={() => {
-          setShowMotionAlert(false);
-          setShowTransferModal(true);
-        }}
+        onRequestTransfer={() => setShowMotionAlert(false)}
       />
 
       {/* Layer 3: Reopening Returning Visit Confirmation */}
@@ -242,10 +252,7 @@ export default function CustomerSessionProtection() {
         orderCount={placedOrders.length || 1}
         currentBill={totalBill}
         onConfirmStillHere={handleConfirmReopening}
-        onRequestTransfer={() => {
-          setShowReopeningModal(false);
-          setShowTransferModal(true);
-        }}
+        onRequestTransfer={() => setShowReopeningModal(false)}
       />
 
       {/* Interactive Table Transfer Modal */}

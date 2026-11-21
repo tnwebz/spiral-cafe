@@ -38,13 +38,21 @@ export async function getAuthoritativeItemPrice(
 
   const cleanId = (productId || "").toLowerCase().trim();
   const cleanName = (name || "").toLowerCase().trim();
+  const strippedId = cleanId.replace(/__parcel$/i, "").replace(/-parcel$/i, "");
+  const strippedName = cleanName.replace(/\s*\(parcel\)\s*/gi, "").replace(/\s*-\s*\(parcel\)\s*/gi, "").trim();
 
   // 1. Check static menu catalog
   if (staticMenuMap.has(cleanId)) {
     return staticMenuMap.get(cleanId)!;
   }
+  if (staticMenuMap.has(strippedId)) {
+    return staticMenuMap.get(strippedId)!;
+  }
   if (cleanName && staticMenuMap.has(cleanName)) {
     return staticMenuMap.get(cleanName)!;
+  }
+  if (strippedName && staticMenuMap.has(strippedName)) {
+    return staticMenuMap.get(strippedName)!;
   }
 
   // 2. Check dynamic database items (with lightweight cache)

@@ -392,7 +392,7 @@ export default function OrderSuccessModal({
                   ORDER ID
                 </span>
                 <span className="font-heading font-black text-base sm:text-lg text-[#2C1710]">
-                  #{orderNumber || "ORD-PENDING"}
+                  {(orderNumber || "PENDING").replace(/^#/, "")}
                 </span>
               </div>
 

@@ -75,12 +75,12 @@ export function PostOrderConfirmModal({
 
             {orderNumber && (
               <p className="text-[11px] font-semibold text-[#8C5E51]">
-                Order Reference: <span className="font-bold text-[#4A2117]">#{orderNumber}</span>
+                Order Reference: <span className="font-bold text-[#4A2117]">{orderNumber.replace(/^#/, "")}</span>
               </p>
             )}
 
             <div className="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200/80 text-[11px] text-amber-900 leading-relaxed font-medium">
-              💡 <strong>Seat Change Policy:</strong> If you move to another table while waiting, tap &quot;Change Table&quot; so our service staff brings your food to the right table.
+              🍽️ <strong>Table Notice:</strong> Kindly remain seated at Table {displayTable} while we prepare your food. If you wish to change your place, please contact the admin/counter staff.
             </div>
           </div>
 
@@ -92,14 +92,6 @@ export function PostOrderConfirmModal({
             >
               <Sparkles size={16} />
               <span>Got It, Continue to Menu</span>
-            </button>
-
-            <button
-              onClick={onRequestTransfer}
-              className="w-full py-2.5 bg-white hover:bg-[#FFF8F3] text-[#8C5E51] hover:text-[#4A2117] border border-[#EBDAD0] font-heading font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <MapPin size={13} />
-              <span>I Moved, Change Table</span>
             </button>
           </div>
         </motion.div>

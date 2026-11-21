@@ -63,6 +63,7 @@ export default function CartOrdersSheet() {
     batchSelectCashPayment,
     switchPaymentMethod,
     processOnlinePayment,
+    isViewOnlyMenu,
   } = useCart();
 
   const [orderServingMode, setOrderServingMode] = useState<"DINE_IN" | "TAKEAWAY">(
@@ -140,7 +141,13 @@ export default function CartOrdersSheet() {
     }
   }, [showTableModal, customerSessionId]);
 
-  if (!isCartOpen) return null;
+  useEffect(() => {
+    if (isViewOnlyMenu && isCartOpen) {
+      setIsCartOpen(false);
+    }
+  }, [isViewOnlyMenu, isCartOpen, setIsCartOpen]);
+
+  if (!isCartOpen || isViewOnlyMenu) return null;
 
   const handleSelectTable = async (table: string) => {
     setOrderError(null);
@@ -301,32 +308,11 @@ export default function CartOrdersSheet() {
                     <ShoppingBag size={12} />
                     <span>Take Away Mode</span>
                   </span>
-                  <button
-                    onClick={() => {
-                      setSelectedTable("A1");
-                      setShowTableModal(true);
-                    }}
-                    className="font-bold text-[#B73F1D] underline inline-flex items-center gap-0.5 cursor-pointer hover:text-[#9D3E22]"
-                    title="Tap to select floor table to dine in"
-                  >
-                    <span>(Switch to Table)</span>
-                    <Edit2 size={11} />
-                  </button>
                 </div>
               ) : (
                 <>
                   <span>Dining at</span>
-                  <button
-                    onClick={() => {
-                      setSelectedTable(tableNumber || "A1");
-                      setShowTableModal(true);
-                    }}
-                    className="font-bold text-[#B73F1D] underline inline-flex items-center gap-1 cursor-pointer hover:text-[#9D3E22]"
-                    title="Tap to change table"
-                  >
-                    <span>Table {tableNumber.replace(/^Table\s*/i, "")}</span>
-                    <Edit2 size={11} />
-                  </button>
+                  <span className="font-bold text-[#B73F1D]">Table {tableNumber.replace(/^Table\s*/i, "")}</span>
                 </>
               )}
             </div>
@@ -680,15 +666,6 @@ export default function CartOrdersSheet() {
                 <span className="text-[11px] font-bold text-[#8C5E51] uppercase tracking-wider">
                   Dining Orders ({sortedOrders.length})
                 </span>
-                <button
-                  onClick={async () => {
-                    await notifyAddingFood(true);
-                    setIsCartOpen(false);
-                  }}
-                  className="text-xs font-bold text-[#B73F1D] hover:underline inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <span>+ ADD MORE FOOD</span>
-                </button>
               </div>
 
               {sortedOrders.length > 0 && (
@@ -772,34 +749,50 @@ export default function CartOrdersSheet() {
                               </span>
                             ) : (
                               <span className="text-amber-800 font-extrabold bg-amber-50 px-2 py-0.5 rounded-full">
-                                SAVED IN CLOUD (AWAITING REVIEW)
+                                ORDER PLACED (PENDING KOT)
                               </span>
                             )}
                           </div>
                           <h4 className="font-heading font-extrabold text-base text-[#4A2117] mt-1">
-                            #{order.orderNumber}
+                            Order {order.orderNumber.replace(/^#/, "")}
                           </h4>
                           <div className="text-[11px] text-[#8C5E51] font-medium flex items-center gap-2 mt-0.5">
                             <span>{order.tableNumber}</span>
                             <span>•</span>
                             <span>{timeFormatted}</span>
-                            {((order.notes || "").includes("[TAKEAWAY]") ||
-                              (order.notes || "").includes("[PARCEL]") ||
-                              order.tableNumber === "TAKEAWAY") ? (
-                              <>
-                                <span>•</span>
-                                <span className="font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-full text-[10px]">
-                                  🛍️ Take Away (Parcel)
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span>•</span>
-                                <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded-full text-[10px]">
-                                  🍽️ Dine-In Table
-                                </span>
-                              </>
-                            )}
+                            {(() => {
+                              const hasParcel = order.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
+                              const hasDineIn = order.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
+                              const isMixed = (hasParcel && hasDineIn) || (order.notes || "").includes("DINE_IN_AND_TAKEAWAY");
+                              if (isMixed) {
+                                return (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-extrabold text-orange-950 bg-orange-100 border border-orange-300 px-2 py-0.5 rounded-full text-[10px]">
+                                      🍽️ Dine In & 🛍️ Take Away
+                                    </span>
+                                  </>
+                                );
+                              }
+                              if ((order.notes || "").includes("[TAKEAWAY]") || (order.notes || "").includes("[PARCEL]") || order.tableNumber === "TAKEAWAY" || hasParcel) {
+                                return (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-full text-[10px]">
+                                      🛍️ Take Away (Parcel)
+                                    </span>
+                                  </>
+                                );
+                              }
+                              return (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded-full text-[10px]">
+                                    🍽️ Dine-In Table
+                                  </span>
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -807,7 +800,7 @@ export default function CartOrdersSheet() {
                       <div>
                         {!isKotSent && !isCompleted && order.status !== "CANCELLED" && (
                           <span className="px-3 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-full text-xs font-extrabold flex items-center gap-1 shadow-xs">
-                            <Clock size={12} /> {order.items.some(i => (i.round || 1) > 1) ? "ADD-ON PENDING" : "SAVED — AWAITING REVIEW"}
+                            <Clock size={12} /> {order.items.some(i => (i.round || 1) > 1) ? "ADD-ON PENDING" : "ORDER PLACED (PENDING KOT)"}
                           </span>
                         )}
                         {isKotSent && !isCompleted && order.status !== "CANCELLED" && (
@@ -914,12 +907,12 @@ export default function CartOrdersSheet() {
                             ✓
                           </div>
                           <div className="font-heading font-bold text-xs text-emerald-950">
-                            ORDER SAVED IN CLOUD
+                            ORDER RECEIVED
                           </div>
                           <p className="text-[11px] text-[#8C5E51]">
                             {isKotSent
                               ? "Order received & approved by counter team."
-                              : "Order securely saved in cloud. Awaiting counter review & kitchen dispatch."}
+                              : "Order received. Preparing your food."}
                           </p>
                         </div>
 
@@ -1358,15 +1351,9 @@ export default function CartOrdersSheet() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setShowContactCounterModal(true)}
-                      className="text-xs font-bold text-[#B73F1D] hover:underline px-2.5 py-1.5 rounded-xl hover:bg-white border border-[#B73F1D]/20 cursor-pointer"
-                    >
-                      Change Table?
-                    </button>
                   </div>
-                  <p className="text-[11px] text-[#8C5E51] leading-relaxed pt-1 border-t border-amber-200/60">
-                    Your order will be sent to Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}. Kindly remain at the same table while we prepare and serve your food.
+                  <p className="text-[11px] text-[#8C5E51] leading-relaxed pt-2 border-t border-amber-200/60">
+                    Order will be placed for your seated table. Kindly remain at your table. If you want to change your table, please contact staff/admin.
                   </p>
                 </div>
               )}

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import SplashScreen from "@/components/SplashScreen";
+import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import HeroBanner from "@/components/Home/HeroBanner";
 import CategoryCardsList from "@/components/Menu/CategoryCardsList";
@@ -16,24 +15,7 @@ import { useCart } from "@/context/CartContext";
 export default function Home() {
   const router = useRouter();
   const { foodPreference } = useCart();
-  const [showSplash, setShowSplash] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    const hasSeenSplash = sessionStorage.getItem("spiral_cafe_splash");
-    if (hasSeenSplash) {
-      setShowSplash(false);
-    }
-  }, []);
-
-  const handleSplashComplete = () => {
-    setShowSplash(false);
-    sessionStorage.setItem("spiral_cafe_splash", "true");
-  };
-
-  if (showSplash) {
-    return <SplashScreen onComplete={handleSplashComplete} />;
-  }
 
   // Helper to filter according to dietary preference
   const isDietMatch = (item: { badges?: string[] }) =>

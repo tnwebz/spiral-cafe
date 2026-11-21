@@ -32,6 +32,7 @@ function MenuContent() {
     tableReservation,
     customerSessionId,
     activeTableOrder,
+    isViewOnlyMenu,
   } = useCart();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
@@ -304,8 +305,26 @@ function MenuContent() {
   return (
     <main className="min-h-screen bg-background pb-28 md:pb-16">
 
-      {/* Sticky Table Reservation Banner (Blue temporary 10-minute hold) */}
-      {tableReservation && tableReservation.isReserved && !tableReservation.isExpired && (
+      {/* Sticky Digital Menu Card Notice for Extra Table Guests */}
+      {isViewOnlyMenu && (
+        <div className="sticky top-0 z-50 bg-[#2C1710] text-[#FFF8F3] text-xs font-semibold py-2.5 px-4 shadow-md flex items-center justify-between gap-3 border-b border-[#4A2117]">
+          <div className="flex items-center gap-2 truncate">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+            <span className="truncate">
+              <strong className="font-extrabold uppercase tracking-wide text-amber-300">
+                Table {tableNumber.replace(/^Table\s*/i, "")} • Digital Menu Card
+              </strong>{" "}
+              • Table is active with your group. Orders are managed by your host. Browse dishes below.
+            </span>
+          </div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-400/40 text-[11px] font-bold shrink-0">
+            Viewing Mode
+          </span>
+        </div>
+      )}
+
+      {/* Sticky Table Reservation Banner (Blue temporary 10-minute hold for Host) */}
+      {!isViewOnlyMenu && tableReservation && tableReservation.isReserved && !tableReservation.isExpired && (
         <div className="sticky top-0 z-50 bg-blue-600 text-white text-xs font-semibold py-2 px-4 shadow-md flex items-center justify-between gap-3 border-b border-blue-700">
           <div className="flex items-center gap-2 truncate">
             <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse shrink-0"></span>
@@ -335,7 +354,7 @@ function MenuContent() {
         </div>
       )}
 
-      {tableReservation && tableReservation.isExpired && (
+      {!isViewOnlyMenu && tableReservation && tableReservation.isExpired && (
         <div className="sticky top-0 z-50 bg-amber-600 text-white text-xs font-semibold py-2 px-4 shadow-md flex items-center justify-between gap-3 border-b border-amber-700">
           <div className="flex items-center gap-2 truncate">
             <span className="w-2 h-2 rounded-full bg-white shrink-0"></span>
@@ -366,21 +385,29 @@ function MenuContent() {
               </h1>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={openCart}
-                className="text-[11px] font-bold text-[#8C5E51] bg-muted hover:bg-[#EBDAD0] px-2.5 py-1 rounded-full border border-border cursor-pointer transition-colors"
-              >
-                {tableNumber === "TAKEAWAY" ? "🛍️ Takeaway" : `Dining at Table ${tableNumber.replace(/^Table\s*/i, "")}`}
-              </button>
-              <button
-                onClick={openCart}
-                className="text-[11px] font-bold text-cream bg-primary hover:bg-primary-dark px-3 py-1 rounded-full shadow-xs cursor-pointer flex items-center gap-1.5 transition-transform active:scale-95"
-              >
-                <ShoppingBag size={12} />
-                <span>Basket ({totalItems})</span>
-              </button>
-            </div>
+            {isViewOnlyMenu ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-[#8C5E51] bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                  <span>📖 Table {tableNumber.replace(/^Table\s*/i, "")}</span>
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={openCart}
+                  className="text-[11px] font-bold text-[#8C5E51] bg-muted hover:bg-[#EBDAD0] px-2.5 py-1 rounded-full border border-border cursor-pointer transition-colors"
+                >
+                  {tableNumber === "TAKEAWAY" ? "🛍️ Takeaway" : `Dining at Table ${tableNumber.replace(/^Table\s*/i, "")}`}
+                </button>
+                <button
+                  onClick={openCart}
+                  className="text-[11px] font-bold text-cream bg-primary hover:bg-primary-dark px-3 py-1 rounded-full shadow-xs cursor-pointer flex items-center gap-1.5 transition-transform active:scale-95"
+                >
+                  <ShoppingBag size={12} />
+                  <span>Basket ({totalItems})</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Desktop Top Row */}
@@ -446,22 +473,31 @@ function MenuContent() {
               )}
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0">
-              <button
-                onClick={openCart}
-                className="text-xs font-bold text-[#8C5E51] bg-muted hover:bg-[#EBDAD0] px-3.5 py-1.5 rounded-full border border-border cursor-pointer transition-colors inline-flex items-center gap-1.5"
-              >
-                <Utensils className="w-3.5 h-3.5 text-[#8C5E51]" />
-                <span>{tableNumber === "TAKEAWAY" ? "🛍️ Takeaway" : `Dining at Table ${tableNumber.replace(/^Table\s*/i, "")}`}</span>
-              </button>
-              <button
-                onClick={openCart}
-                className="text-xs font-bold text-cream bg-primary hover:bg-primary-dark px-4 py-1.5 rounded-full shadow-sm cursor-pointer flex items-center gap-2 transition-transform active:scale-95 hover:shadow-md"
-              >
-                <ShoppingBag size={14} />
-                <span>My Basket ({totalItems})</span>
-              </button>
-            </div>
+            {isViewOnlyMenu ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs font-bold text-[#8C5E51] bg-amber-50 border border-amber-200 px-3.5 py-1.5 rounded-full inline-flex items-center gap-1.5">
+                  <Utensils className="w-3.5 h-3.5 text-[#8C5E51]" />
+                  <span>📖 Table {tableNumber.replace(/^Table\s*/i, "")} (Digital Menu)</span>
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  onClick={openCart}
+                  className="text-xs font-bold text-[#8C5E51] bg-muted hover:bg-[#EBDAD0] px-3.5 py-1.5 rounded-full border border-border cursor-pointer transition-colors inline-flex items-center gap-1.5"
+                >
+                  <Utensils className="w-3.5 h-3.5 text-[#8C5E51]" />
+                  <span>{tableNumber === "TAKEAWAY" ? "🛍️ Takeaway" : `Dining at Table ${tableNumber.replace(/^Table\s*/i, "")}`}</span>
+                </button>
+                <button
+                  onClick={openCart}
+                  className="text-xs font-bold text-cream bg-primary hover:bg-primary-dark px-4 py-1.5 rounded-full shadow-sm cursor-pointer flex items-center gap-2 transition-transform active:scale-95 hover:shadow-md"
+                >
+                  <ShoppingBag size={14} />
+                  <span>My Basket ({totalItems})</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Mobile Search Bar */}

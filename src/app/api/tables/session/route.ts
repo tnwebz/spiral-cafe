@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveOrderForTable, normalizeTableNumber } from "@/lib/db";
-import { getActiveReservations, getActiveCustomerVisit } from "@/lib/tables";
+import { getActiveReservations, getActiveCustomerVisit, reserveTable } from "@/lib/tables";
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
         (phone && activeOrder.customerPhone && activeOrder.customerPhone.slice(-10) === phone.slice(-10))
       );
 
+      const isViewOnlyMenu = !isMyActiveTable && cleanTable !== "TAKEAWAY";
+
       return NextResponse.json({
         success: true,
         tableNumber: cleanTable,
@@ -49,6 +51,8 @@ export async function GET(req: NextRequest) {
         orderId: activeOrder.id,
         orderNumber: activeOrder.orderNumber,
         isMyActiveTable,
+        isViewOnlyMenu,
+        isTableBookedByOther: isViewOnlyMenu,
         cartExpiryMinutes: 10,
         conflictActiveVisit: hasConflictVisit,
         currentActiveTable: activeCustomerVisit?.tableNumber || null,
@@ -73,6 +77,8 @@ export async function GET(req: NextRequest) {
         Math.floor((new Date(reservation.expiresAt).getTime() - Date.now()) / 1000)
       );
 
+      const isViewOnlyMenu = !isMyReservation && cleanTable !== "TAKEAWAY";
+
       const visitId = isMyReservation
         ? `VISIT-${cleanTable}-RES-${clientIdent.slice(-6).toUpperCase()}`
         : `VISIT-${cleanTable}-RESERVED`;
@@ -84,6 +90,8 @@ export async function GET(req: NextRequest) {
         visitId,
         isMyReservation,
         isMyActiveTable: isMyReservation,
+        isViewOnlyMenu,
+        isTableBookedByOther: isViewOnlyMenu,
         remainingSeconds,
         expiresAt: reservation.expiresAt,
         reservationId: reservation.id,
@@ -92,6 +100,43 @@ export async function GET(req: NextRequest) {
         currentActiveTable: activeCustomerVisit?.tableNumber || null,
         currentActiveVisit: activeCustomerVisit || null,
       });
+    }
+
+    // If table is free/available and customer is visiting a floor table (not takeaway), auto-reserve for this customer!
+    const effectiveSession = sessionId || visitorId || "";
+    if (cleanTable !== "TAKEAWAY" && effectiveSession && !hasConflictVisit) {
+      try {
+        const newRes = await reserveTable({
+          tableNumber: cleanTable,
+          customerSessionId: effectiveSession,
+          customerPhone: phone || undefined,
+        });
+
+        const remainingSeconds = Math.max(
+          0,
+          Math.floor((new Date(newRes.expiresAt).getTime() - Date.now()) / 1000)
+        );
+
+        return NextResponse.json({
+          success: true,
+          tableNumber: cleanTable,
+          status: "RESERVED",
+          visitId: `VISIT-${cleanTable}-RES-${clientIdent.slice(-6).toUpperCase()}`,
+          isMyReservation: true,
+          isMyActiveTable: true,
+          isViewOnlyMenu: false,
+          isTableBookedByOther: false,
+          remainingSeconds,
+          expiresAt: newRes.expiresAt,
+          reservationId: newRes.id,
+          cartExpiryMinutes: 10,
+          conflictActiveVisit: false,
+          currentActiveTable: null,
+          currentActiveVisit: null,
+        });
+      } catch (err: any) {
+        console.warn("Auto-reserve notice:", err.message);
+      }
     }
 
     // Table is available / no active order & no reservation
@@ -106,6 +151,8 @@ export async function GET(req: NextRequest) {
       visitId,
       isMyActiveTable: false,
       isMyReservation: false,
+      isViewOnlyMenu: false,
+      isTableBookedByOther: false,
       cartExpiryMinutes: 10,
       conflictActiveVisit: hasConflictVisit,
       currentActiveTable: activeCustomerVisit?.tableNumber || null,

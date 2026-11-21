@@ -313,8 +313,38 @@ function mapDbConfigToConfig(row: any): CafeConfig {
 }
 
 export function generateOrderNumber(): string {
-  const randomDigits = Math.floor(100000 + Math.random() * 900000);
-  return `ORD-${randomDigits}`;
+  const randomDigits = Math.floor(100 + Math.random() * 900);
+  return String(randomDigits);
+}
+
+export async function generate3DigitOrderNumber(): Promise<string> {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const { data } = await supabaseAdmin
+      .from("orders")
+      .select("order_number")
+      .gte("created_at", today.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(60);
+
+    let maxNum = 100;
+    if (data && data.length > 0) {
+      for (const row of data) {
+        const val = (row.order_number || "").trim().replace(/\D/g, "");
+        if (val.length === 3) {
+          const num = parseInt(val, 10);
+          if (num > maxNum && num < 999) {
+            maxNum = num;
+          }
+        }
+      }
+    }
+    const next = maxNum >= 999 ? 101 : maxNum + 1;
+    return String(next);
+  } catch {
+    return String(Math.floor(100 + Math.random() * 900));
+  }
 }
 
 export function generateInvoiceNumber(seq: number): string {
@@ -1368,7 +1398,7 @@ export async function createOrder(params: {
   }
 
   const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const orderNumber = generateOrderNumber();
+  const orderNumber = await generate3DigitOrderNumber();
 
   // Price calculations - Tag initial items with [ROUND:1]
   const orderItems: OrderItem[] = params.items.map((item, index) => {
