@@ -11,7 +11,6 @@ import {
   X,
   ArrowRight,
   Receipt,
-  Calculator,
   Printer,
   RotateCw,
   Sparkles,
@@ -37,7 +36,6 @@ export default function ReceivePaymentModal({
 }: ReceivePaymentModalProps) {
   const [step, setStep] = useState<"FORM" | "SUCCESS">("FORM");
   const [method, setMethod] = useState<"CASH" | "ONLINE">("CASH");
-  const [cashReceived, setCashReceived] = useState<string>("");
   const [onlineMode, setOnlineMode] = useState<"CARD_MACHINE" | "UPI_QR" | "OTHER">(
     "CARD_MACHINE"
   );
@@ -89,12 +87,6 @@ export default function ReceivePaymentModal({
   if (!isOpen || !order) return null;
 
   const total = order.grandTotal || 0;
-  const numCash = parseFloat(cashReceived) || total;
-  const changeToReturn = Math.max(0, numCash - total);
-
-  const handleQuickCash = (amount: number) => {
-    setCashReceived(String(amount));
-  };
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -107,8 +99,8 @@ export default function ReceivePaymentModal({
         body: JSON.stringify({
           orderId: order.id,
           paymentMethod: method,
-          amountReceived: method === "CASH" ? numCash : total,
-          changeGiven: method === "CASH" ? changeToReturn : 0,
+          amountReceived: total,
+          changeGiven: 0,
           paymentTxnId:
             method === "ONLINE"
               ? txnRef || `${onlineMode}-${Date.now().toString().slice(-6)}`
@@ -352,53 +344,22 @@ export default function ReceivePaymentModal({
               {/* CASH SECTION */}
               {method === "CASH" && (
                 <div className="space-y-3 pt-1">
-                  <div>
-                    <label className="block text-xs font-bold text-[#2C1710] mb-1">
-                      Cash Received (₹)
-                    </label>
-                    <input
-                      type="number"
-                      value={cashReceived}
-                      onChange={(e) => setCashReceived(e.target.value)}
-                      placeholder={`Exact ₹${total}`}
-                      className="w-full px-3.5 py-2.5 bg-[#FFF9F5] border border-zinc-300 rounded-xl text-base font-bold text-[#2C1710] focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
+                  <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
+                        Amount to Collect (Cash)
+                      </span>
+                      <span className="text-2xl font-heading font-extrabold text-emerald-950">
+                        ₹{total}
+                      </span>
+                    </div>
+                    <div className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-2xs">
+                      Cash at Counter
+                    </div>
                   </div>
-
-                  {/* Quick Cash Buttons */}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleQuickCash(total)}
-                      className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-xs font-bold text-zinc-800"
-                    >
-                      Exact (₹{total})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickCash(Math.ceil(total / 100) * 100)}
-                      className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-xs font-bold text-zinc-800"
-                    >
-                      ₹{Math.ceil(total / 100) * 100}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickCash(Math.ceil(total / 500) * 500 || 500)}
-                      className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-xs font-bold text-zinc-800"
-                    >
-                      ₹{Math.ceil(total / 500) * 500 || 500}
-                    </button>
-                  </div>
-
-                  {/* Change to Return */}
-                  <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex justify-between items-center text-xs">
-                    <span className="font-bold text-emerald-900 flex items-center gap-1.5">
-                      <Calculator size={15} /> Change to Return:
-                    </span>
-                    <span className="text-base font-heading font-extrabold text-emerald-950">
-                      ₹{changeToReturn}
-                    </span>
-                  </div>
+                  <p className="text-[11px] text-zinc-500 text-center">
+                    Collect ₹{total} from the customer and click Confirm Received to complete settlement.
+                  </p>
                 </div>
               )}
 

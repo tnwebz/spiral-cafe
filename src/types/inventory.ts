@@ -1,3 +1,19 @@
+export interface StockBatch {
+  id: string;
+  ingredient_id: string;
+  batch_type: "OPENING" | "PURCHASE";
+  date: string; // YYYY-MM-DD
+  created_at: string;
+  original_qty: number;
+  remaining_qty: number;
+  unit: string;
+  unit_cost: number;
+  remaining_value: number;
+  purchase_id?: string;
+  supplier?: string;
+  notes?: string;
+}
+
 export interface InventoryCategory {
   id: string;
   code: string;
@@ -23,6 +39,11 @@ export interface InventoryIngredient {
   notes?: string | null;
   created_at?: string;
   updated_at?: string;
+
+  // Dynamic FIFO properties for Master Catalog
+  current_stock?: number;
+  stock_value?: number;
+  batches?: StockBatch[];
 }
 
 export interface InventoryPurchaseRecord {
@@ -84,6 +105,8 @@ export interface InventoryDayItem {
   latest_purchase_price?: number | null;
   avg_purchase_price?: number | null;
   purchase_entries?: InventoryPurchaseRecord[];
+  available_batches?: StockBatch[];
+  closing_batches?: StockBatch[];
   is_counted: boolean;
   counted_by?: string | null;
   counted_at?: string | null;
@@ -260,6 +283,84 @@ export function calculateUsedQty(
   }
   const rawUsed = opening + purchased - wastage - closing;
   return Number(rawUsed.toFixed(3));
+}
+
+/**
+ * FIFO Batch-Based Costing & Allocation Engine
+ * Never averages purchase prices.
+ * Consumes oldest eligible batches first for wastage and usage.
+ * Closing stock is valued from actual remaining batches.
+ */
+export function calculateFifoAllocation(
+  availableBatches: StockBatch[],
+  wastageQty: number,
+  usedQty: number | null
+): {
+  wastageCost: number;
+  usedCost: number | null;
+  closingStockQty: number;
+  closingStockValue: number;
+  remainingBatches: StockBatch[];
+} {
+  const sortedBatches: StockBatch[] = availableBatches
+    .map((b) => ({ ...b }))
+    .sort((a, b) => {
+      const dCmp = a.date.localeCompare(b.date);
+      if (dCmp !== 0) return dCmp;
+      const tCmp = (a.created_at || "").localeCompare(b.created_at || "");
+      if (tCmp !== 0) return tCmp;
+      return a.id.localeCompare(b.id);
+    });
+
+  let remainingWastage = Math.max(0, Number((wastageQty || 0).toFixed(4)));
+  let wastageCost = 0;
+
+  // 1. Consume wastage first from oldest batches
+  for (const b of sortedBatches) {
+    if (remainingWastage <= 0.00001) break;
+    if (b.remaining_qty <= 0) continue;
+
+    const take = Math.min(b.remaining_qty, remainingWastage);
+    wastageCost += take * b.unit_cost;
+    b.remaining_qty = Number((b.remaining_qty - take).toFixed(4));
+    b.remaining_value = Number((b.remaining_qty * b.unit_cost).toFixed(2));
+    remainingWastage = Number((remainingWastage - take).toFixed(4));
+  }
+
+  // 2. Consume used qty from oldest remaining batches
+  let usedCost: number | null = null;
+  if (usedQty !== null && usedQty !== undefined && !isNaN(usedQty)) {
+    let remainingUsed = Math.max(0, Number((usedQty || 0).toFixed(4)));
+    let costAcc = 0;
+
+    for (const b of sortedBatches) {
+      if (remainingUsed <= 0.00001) break;
+      if (b.remaining_qty <= 0) continue;
+
+      const take = Math.min(b.remaining_qty, remainingUsed);
+      costAcc += take * b.unit_cost;
+      b.remaining_qty = Number((b.remaining_qty - take).toFixed(4));
+      b.remaining_value = Number((b.remaining_qty * b.unit_cost).toFixed(2));
+      remainingUsed = Number((remainingUsed - take).toFixed(4));
+    }
+    usedCost = Number(costAcc.toFixed(2));
+  }
+
+  const remainingBatches = sortedBatches.filter((b) => b.remaining_qty > 0.00001);
+  const closingStockQty = Number(
+    remainingBatches.reduce((acc, b) => acc + b.remaining_qty, 0).toFixed(4)
+  );
+  const closingStockValue = Number(
+    remainingBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2)
+  );
+
+  return {
+    wastageCost: Number(wastageCost.toFixed(2)),
+    usedCost,
+    closingStockQty,
+    closingStockValue,
+    remainingBatches,
+  };
 }
 
 /**

@@ -59,6 +59,16 @@ export default function AdminTablesPage() {
   const [activeTakeaways, setActiveTakeaways] = useState<any[]>([]);
   const [selectedTakeawayOrder, setSelectedTakeawayOrder] = useState<any | null>(null);
 
+  // Drag and drop / Merge takeaway into table
+  const [draggedTakeaway, setDraggedTakeaway] = useState<any | null>(null);
+  const [dragOverTable, setDragOverTable] = useState<string | null>(null);
+  const [confirmMergeModal, setConfirmMergeModal] = useState<{
+    takeawayOrder: any;
+    targetTable: TableCardStatus;
+  } | null>(null);
+  const [pickerTakeawayOrder, setPickerTakeawayOrder] = useState<any | null>(null);
+  const [isMergingTakeaway, setIsMergingTakeaway] = useState(false);
+
   // Table Transfers State
   const [pendingTransfers, setPendingTransfers] = useState<any[]>([]);
   const [transferLoading, setTransferLoading] = useState(false);
@@ -88,6 +98,37 @@ export default function AdminTablesPage() {
       }
     } catch {}
   }, []);
+
+  // Merge Takeaway Order into Floor Table
+  const handleExecuteMergeTakeaway = async (takeawayOrderId: string, targetTableNumber: string) => {
+    setIsMergingTakeaway(true);
+    try {
+      const res = await fetch("/api/admin/tables/merge-takeaway", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          takeawayOrderId,
+          targetTable: targetTableNumber,
+          adminUser: "Cashier Counter",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTransferAlertMsg(data.message || `Takeaway order successfully merged into Table ${targetTableNumber}!`);
+        setConfirmMergeModal(null);
+        setPickerTakeawayOrder(null);
+        setDraggedTakeaway(null);
+        fetchTables(true);
+        fetchTakeaways();
+      } else {
+        alert(data.error || "Failed to merge takeaway order into table.");
+      }
+    } catch (e: any) {
+      alert(e.message || "Network error while merging takeaway order.");
+    } finally {
+      setIsMergingTakeaway(false);
+    }
+  };
 
   // Fetch tables overview
   const fetchTables = useCallback(async (isSilent = false) => {
@@ -379,7 +420,7 @@ export default function AdminTablesPage() {
                     </span>
                   </div>
                   <p className="text-[11px] text-[#8C5E51]">
-                    Click any takeaway to view details, dispatch KOT, print bill, or collect payment
+                    Drag and drop any takeaway onto a table card, or tap &ldquo;Merge to Table&rdquo; to combine bills
                   </p>
                 </div>
               </div>
@@ -400,17 +441,32 @@ export default function AdminTablesPage() {
                 const elapsedMins = Math.max(0, Math.floor((Date.now() - new Date(ord.createdAt).getTime()) / 60000));
                 const customerMatch = ord.notes?.match(/\[CUSTOMER_NAME:([^\]]+)\]/);
                 const custName = customerMatch ? customerMatch[1].trim() : (ord.customerPhone ? `+91 ${ord.customerPhone}` : "Walk-in Guest");
+                const isBeingDragged = draggedTakeaway?.id === ord.id;
 
                 return (
                   <div
                     key={ord.id}
+                    draggable={true}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", ord.id);
+                      setDraggedTakeaway(ord);
+                    }}
+                    onDragEnd={() => setDraggedTakeaway(null)}
                     onClick={() => setSelectedTakeawayOrder(ord)}
-                    className="min-w-[240px] max-w-[280px] p-3.5 bg-[#FFFBF7] hover:bg-amber-50/70 border border-[#EBDAD0] hover:border-amber-400 rounded-2xl shadow-xs transition-all cursor-pointer shrink-0 flex flex-col justify-between"
+                    className={`min-w-[260px] max-w-[290px] p-3.5 bg-[#FFFBF7] hover:bg-amber-50/70 border ${
+                      isBeingDragged
+                        ? "border-amber-600 ring-2 ring-amber-400 opacity-60 scale-98"
+                        : "border-[#EBDAD0] hover:border-amber-400"
+                    } rounded-2xl shadow-xs transition-all cursor-grab active:cursor-grabbing shrink-0 flex flex-col justify-between select-none`}
+                    title="Drag this card onto any floor table card to merge orders"
                   >
                     <div className="flex items-center justify-between text-xs mb-2">
-                      <span className="font-heading font-extrabold text-xs text-[#2C1710]">
-                        #{ord.orderNumber}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-zinc-400 font-normal">⠿</span>
+                        <span className="font-heading font-extrabold text-xs text-[#2C1710]">
+                          #{ord.orderNumber}
+                        </span>
+                      </div>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                         isPendingKot
                           ? "bg-red-100 text-red-700 border border-red-200 animate-pulse"
@@ -432,10 +488,26 @@ export default function AdminTablesPage() {
                     </div>
 
                     <div className="mt-2.5 pt-2 border-t border-[#EBDAD0] flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-zinc-500 font-medium">Total Bill</span>
-                      <span className="font-heading font-extrabold text-sm text-[#CA340A]">
-                        ₹{ord.grandTotal}
-                      </span>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 font-medium block">Total Bill</span>
+                        <span className="font-heading font-extrabold text-sm text-[#CA340A]">
+                          ₹{ord.grandTotal}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPickerTakeawayOrder(ord);
+                          }}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-bold shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                          title="Merge into a table"
+                        >
+                          <ArrowRight size={11} />
+                          <span>Merge to Table</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -563,7 +635,7 @@ export default function AdminTablesPage() {
               <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">
                 Reserved
               </span>
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-blue-500" />
             </div>
             <p className="text-xl sm:text-2xl font-heading font-extrabold text-blue-700 mt-0.5">
               {stats.reserved}
@@ -717,10 +789,26 @@ export default function AdminTablesPage() {
               const isRed = t.color === "RED";
               const isYellow = t.color === "YELLOW";
               const isGreen = t.color === "GREEN";
+              const isDragTarget = dragOverTable === t.tableNumber;
 
               return (
                 <div
                   key={t.tableNumber}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragOverTable !== t.tableNumber) setDragOverTable(t.tableNumber);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverTable === t.tableNumber) setDragOverTable(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOverTable(null);
+                    if (draggedTakeaway) {
+                      setConfirmMergeModal({ takeawayOrder: draggedTakeaway, targetTable: t });
+                    }
+                  }}
                   onClick={() => {
                     if (isWhite) {
                       setAvailablePromptTable(t);
@@ -729,7 +817,9 @@ export default function AdminTablesPage() {
                     }
                   }}
                   className={`group relative rounded-xl p-2.5 sm:p-3 cursor-pointer transition-all duration-200 flex flex-col justify-between min-h-[110px] sm:min-h-[118px] ${
-                    isWhite
+                    isDragTarget
+                      ? "ring-4 ring-amber-500 scale-102 bg-amber-50 border-2 border-amber-600 shadow-xl z-20"
+                      : isWhite
                       ? "bg-white border border-black/5 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
                       : isBlue
                       ? "bg-[#EFF6FF] border-2 border-blue-400 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
@@ -740,6 +830,19 @@ export default function AdminTablesPage() {
                       : "bg-[#F0FDF4] border-2 border-emerald-300 shadow-2xs hover:shadow-md hover:-translate-y-0.5"
                   }`}
                 >
+                  {/* Drop Overlay when Dragging Takeaway Over Table */}
+                  {isDragTarget && (
+                    <div className="absolute inset-0 bg-amber-600/95 rounded-xl flex flex-col items-center justify-center text-white z-30 p-2 text-center animate-in fade-in duration-100 shadow-lg">
+                      <ArrowRight size={20} className="rotate-90 animate-bounce mb-1 text-white" />
+                      <span className="text-xs font-heading font-black">
+                        Drop to Merge #{draggedTakeaway?.orderNumber}
+                      </span>
+                      <span className="text-[10px] font-semibold text-amber-100">
+                        into Table {t.tableNumber}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Top Status Row */}
                   <div className="flex items-center justify-between text-xs">
                     <span
@@ -760,7 +863,7 @@ export default function AdminTablesPage() {
                           isWhite
                             ? "bg-zinc-400"
                             : isBlue
-                            ? "bg-white animate-pulse"
+                            ? "bg-white"
                             : isRed
                             ? "bg-white animate-ping"
                             : isYellow
@@ -955,6 +1058,188 @@ export default function AdminTablesPage() {
               <button
                 onClick={() => setAvailablePromptTable(null)}
                 className="w-full py-1.5 text-zinc-400 hover:text-zinc-600 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM MERGE TAKEAWAY INTO TABLE MODAL (Drag & Drop Confirmation) */}
+      {confirmMergeModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-amber-200 space-y-4 animate-in zoom-in-95 duration-150 relative">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <ShoppingBag size={20} />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-[#2C1710]">
+                    Merge Takeaway into Table {confirmMergeModal.targetTable.tableNumber}
+                  </h3>
+                  <span className="text-[11px] text-zinc-500">
+                    Combine takeaway order with table dining bill
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmMergeModal(null)}
+                disabled={isMergingTakeaway}
+                className="p-1.5 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Order & Table Mapping Card */}
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-600 font-medium">Takeaway Order:</span>
+                <span className="font-heading font-extrabold text-[#2C1710]">
+                  #{confirmMergeModal.takeawayOrder.orderNumber}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-600 font-medium">Takeaway Items:</span>
+                <span className="font-bold text-zinc-800">
+                  {confirmMergeModal.takeawayOrder.items?.length || 0} item(s) • ₹{confirmMergeModal.takeawayOrder.grandTotal}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-amber-200/60">
+                <span className="text-zinc-600 font-medium">Destination Table:</span>
+                <span className="px-2 py-0.5 bg-amber-200/80 text-amber-900 rounded-lg font-heading font-extrabold text-xs">
+                  Table {confirmMergeModal.targetTable.tableNumber}
+                </span>
+              </div>
+            </div>
+
+            {/* Explanation Note */}
+            <div className="p-3 bg-blue-50/80 border border-blue-200/80 rounded-2xl text-[11px] text-blue-900 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-blue-950">
+                <CheckCircle2 size={13} className="text-blue-700 shrink-0" />
+                Single Unified Bill
+              </p>
+              <p className="text-blue-800 leading-relaxed">
+                This takeaway order will be moved into Table {confirmMergeModal.targetTable.tableNumber}. Both dine-in and takeaway items will appear together under the table&apos;s bill, allowing the customer to pay for everything in a single transaction.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-2 flex items-center gap-2.5">
+              <button
+                type="button"
+                disabled={isMergingTakeaway}
+                onClick={() => setConfirmMergeModal(null)}
+                className="flex-1 py-3 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-heading font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isMergingTakeaway}
+                onClick={() =>
+                  handleExecuteMergeTakeaway(
+                    confirmMergeModal.takeawayOrder.id,
+                    confirmMergeModal.targetTable.tableNumber
+                  )
+                }
+                className="flex-2 py-3 px-4 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isMergingTakeaway ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Merging Order...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight size={14} />
+                    <span>Confirm Merge & Combine Bill</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TABLE SELECT PICKER MODAL (Touchscreen / Tap Fallback) */}
+      {pickerTakeawayOrder && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-zinc-200 space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-100 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                  <ShoppingBag size={18} />
+                </div>
+                <div>
+                  <h3 className="font-heading font-extrabold text-base text-[#2C1710]">
+                    Select Table for Order #{pickerTakeawayOrder.orderNumber}
+                  </h3>
+                  <p className="text-[11px] text-zinc-500">
+                    Tap any table below to merge this takeaway order (₹{pickerTakeawayOrder.grandTotal}) into it
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPickerTakeawayOrder(null)}
+                className="p-1.5 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Grid of floor tables to pick from */}
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 overflow-y-auto p-1 max-h-[350px]">
+              {tables.map((t) => {
+                const isWhite = t.color === "WHITE";
+                const isBlue = t.color === "BLUE";
+                const isRed = t.color === "RED";
+                const isYellow = t.color === "YELLOW";
+
+                return (
+                  <button
+                    key={t.tableNumber}
+                    type="button"
+                    onClick={() => {
+                      setConfirmMergeModal({
+                        takeawayOrder: pickerTakeawayOrder,
+                        targetTable: t,
+                      });
+                      setPickerTakeawayOrder(null);
+                    }}
+                    className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-between min-h-[90px] hover:scale-102 hover:shadow-md ${
+                      isWhite
+                        ? "bg-white border-zinc-200 hover:border-amber-400"
+                        : isBlue
+                        ? "bg-blue-50 border-blue-200 hover:border-blue-400"
+                        : isRed
+                        ? "bg-red-50 border-red-200 hover:border-red-400"
+                        : isYellow
+                        ? "bg-amber-50 border-amber-200 hover:border-amber-400"
+                        : "bg-emerald-50 border-emerald-200 hover:border-emerald-400"
+                    }`}
+                  >
+                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full uppercase tracking-wider mb-1 block w-fit mx-auto bg-black/5 text-zinc-700">
+                      {t.statusLabel}
+                    </span>
+                    <h4 className="font-heading font-black text-lg text-[#2C1710]">
+                      {t.tableNumber}
+                    </h4>
+                    <span className="text-[10px] text-zinc-500 font-semibold mt-1">
+                      {isWhite ? "Free Table" : `₹${t.totalAmount || 0}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 shrink-0 border-t border-zinc-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPickerTakeawayOrder(null)}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-heading font-bold text-xs rounded-xl transition-all cursor-pointer"
               >
                 Cancel
               </button>

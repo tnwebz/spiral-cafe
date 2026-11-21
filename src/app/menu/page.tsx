@@ -66,14 +66,7 @@ function MenuContent() {
 
   useEffect(() => {
     if (!tableParam) return;
-    const isQr = searchParams.get("qr") === "true";
-    if (isQr) {
-      try {
-        sessionStorage.removeItem("spiral_entered");
-      } catch {}
-    }
     const resolved = resolveTableFromParam(tableParam) || tableParam.toUpperCase();
-
     // Check existing stored table session
     const existing = typeof window !== "undefined" ? localStorage.getItem("spiral_table_session") : null;
     const cleanExisting = existing ? existing.replace(/^Table\s*/i, "").trim().toUpperCase() : null;
@@ -91,6 +84,13 @@ function MenuContent() {
       } catch {}
     }
 
+    const isQr = searchParams.get("qr") === "true";
+    if (isQr && !cleanExisting && !hasActiveExistingOrders && !activeTableOrder) {
+      try {
+        sessionStorage.removeItem("spiral_entered");
+      } catch {}
+    }
+
     if (cleanExisting && cleanExisting !== cleanResolved && (hasActiveExistingOrders || activeTableOrder)) {
       // Customer has active dining session at cleanExisting, but scanned cleanResolved!
       setSwitchAssignedTable(cleanExisting);
@@ -104,11 +104,14 @@ function MenuContent() {
       localStorage.setItem("spiral_table_session", resolved);
       localStorage.setItem("spiral_table_number", resolved);
     } catch {}
-  }, [tableParam, setTableNumber, activeTableOrder]);
+  }, [tableParam, setTableNumber, activeTableOrder, searchParams]);
 
   const handleContinueAssignedTable = () => {
     setShowSwitchWarningModal(false);
     if (switchPollTimerRef.current) clearInterval(switchPollTimerRef.current);
+    try {
+      sessionStorage.setItem("spiral_entered", "true");
+    } catch {}
     router.replace(`/menu?table=${encodeURIComponent(switchAssignedTable)}`);
   };
 
@@ -776,10 +779,6 @@ function MenuContent() {
         assignedTable={switchAssignedTable}
         targetTable={switchTargetTable}
         onContinueAssignedTable={handleContinueAssignedTable}
-        onRequestTableChange={handleRequestTableChange}
-        isSubmittingRequest={isSubmittingSwitchRequest}
-        requestStatus={switchRequestStatus}
-        statusMessage={switchStatusMessage}
       />
 
       <BottomNav />

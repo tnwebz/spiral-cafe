@@ -97,9 +97,17 @@ export default function AdminInventoryPage() {
   });
 
   const [showPurchaseHistoryModal, setShowPurchaseHistoryModal] = useState<boolean>(false);
-  const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryDayItem | null>(null);
+  const [selectedItemForHistory, setSelectedItemForHistory] = useState<any | null>(null);
   const [ingredientPurchases, setIngredientPurchases] = useState<InventoryPurchaseRecord[]>([]);
   const [loadingPurchases, setLoadingPurchases] = useState<boolean>(false);
+
+  // FIFO Batches Modal (Master Catalog)
+  const [showBatchesModal, setShowBatchesModal] = useState<boolean>(false);
+  const [selectedIngredientForBatches, setSelectedIngredientForBatches] = useState<InventoryIngredient | null>(null);
+
+  // Purchased Breakdown Modal (Daily Register)
+  const [showPurchasedBreakdownModal, setShowPurchasedBreakdownModal] = useState<boolean>(false);
+  const [selectedItemForBreakdown, setSelectedItemForBreakdown] = useState<InventoryDayItem | null>(null);
 
   // Category Edit Modal
   const [showEditCategoryModal, setShowEditCategoryModal] = useState<boolean>(false);
@@ -387,12 +395,14 @@ export default function AdminInventoryPage() {
     }
   };
 
-  const openPurchaseHistory = async (item: InventoryDayItem) => {
-    setSelectedItemForHistory(item);
+  const openPurchaseHistory = async (target: { ingredient_id?: string; id?: string; ingredient_name?: string; name?: string; unit?: string }) => {
+    const ingId = target.ingredient_id || target.id;
+    const ingName = target.ingredient_name || target.name || "Ingredient";
+    setSelectedItemForHistory({ ingredient_id: ingId, ingredient_name: ingName, unit: target.unit || "" });
     setShowPurchaseHistoryModal(true);
     setLoadingPurchases(true);
     try {
-      const res = await fetch(`/api/admin/inventory/purchases?ingredientId=${item.ingredient_id}`);
+      const res = await fetch(`/api/admin/inventory/purchases?ingredientId=${ingId}`);
       const json = await res.json();
       if (json.success) {
         setIngredientPurchases(json.purchases || []);
@@ -402,6 +412,16 @@ export default function AdminInventoryPage() {
     } finally {
       setLoadingPurchases(false);
     }
+  };
+
+  const openViewBatchesModal = (ing: InventoryIngredient) => {
+    setSelectedIngredientForBatches(ing);
+    setShowBatchesModal(true);
+  };
+
+  const openPurchasedBreakdownModal = (item: InventoryDayItem) => {
+    setSelectedItemForBreakdown(item);
+    setShowPurchasedBreakdownModal(true);
   };
 
   const handleDeletePurchase = async (purchaseId: string) => {
@@ -505,6 +525,11 @@ export default function AdminInventoryPage() {
     e.preventDefault();
     if (!editingIngredient) return;
     try {
+      const parsedCost =
+        editIngForm.cost_per_unit !== "" && !isNaN(Number(editIngForm.cost_per_unit))
+          ? parseFloat(editIngForm.cost_per_unit)
+          : null;
+
       const res = await fetch("/api/admin/inventory/ingredients", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -513,7 +538,7 @@ export default function AdminInventoryPage() {
           name: editIngForm.name.trim(),
           category_id: editIngForm.category_id,
           unit: editIngForm.unit.trim(),
-          cost_per_unit: editIngForm.cost_per_unit ? parseFloat(editIngForm.cost_per_unit) : null,
+          cost_per_unit: parsedCost,
           min_stock_level: Number(editIngForm.min_stock_level) || 0,
           notes: editIngForm.notes || null,
         }),
@@ -528,7 +553,13 @@ export default function AdminInventoryPage() {
         setItems((prev) =>
           prev.map((it) =>
             it.ingredient_id === json.ingredient.id
-              ? { ...it, unit_cost: json.ingredient.cost_per_unit }
+              ? {
+                  ...it,
+                  unit: json.ingredient.unit,
+                  ingredient_name: json.ingredient.name,
+                  category_id: json.ingredient.category_id,
+                  unit_cost: json.ingredient.cost_per_unit ?? it.unit_cost,
+                }
               : it
           )
         );
@@ -537,8 +568,8 @@ export default function AdminInventoryPage() {
       setShowEditIngredientModal(false);
       setSaveSuccessMessage("Ingredient updated successfully!");
       setTimeout(() => setSaveSuccessMessage(null), 3000);
-      fetchDayData(selectedDate);
-      fetchIngredientsMaster();
+      await fetchDayData(selectedDate);
+      await fetchIngredientsMaster();
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to update ingredient");
     }
@@ -548,12 +579,17 @@ export default function AdminInventoryPage() {
   const handleAddIngredient = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const parsedCost =
+        newIngForm.cost_per_unit !== "" && !isNaN(Number(newIngForm.cost_per_unit))
+          ? parseFloat(newIngForm.cost_per_unit)
+          : null;
+
       const res = await fetch("/api/admin/inventory/ingredients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...newIngForm,
-          cost_per_unit: newIngForm.cost_per_unit ? parseFloat(newIngForm.cost_per_unit) : null,
+          cost_per_unit: parsedCost,
         }),
       });
       const json = await res.json();
@@ -567,8 +603,8 @@ export default function AdminInventoryPage() {
       setNewIngForm({ name: "", category_id: "", unit: "kg", cost_per_unit: "", min_stock_level: 0, notes: "" });
       setSaveSuccessMessage("✅ Ingredient added successfully!");
       setTimeout(() => setSaveSuccessMessage(null), 3000);
-      fetchDayData(selectedDate);
-      fetchIngredientsMaster();
+      await fetchDayData(selectedDate);
+      await fetchIngredientsMaster();
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to add ingredient");
     }
@@ -683,7 +719,9 @@ export default function AdminInventoryPage() {
       const draft = draftChanges[item.id] || {};
       const closing = draft.closing_actual_qty !== undefined ? draft.closing_actual_qty : item.closing_actual_qty;
       if (closing !== null && closing !== undefined) {
-        if (item.unit_cost !== null && item.unit_cost !== undefined) {
+        if (draft.closing_actual_qty === undefined && item.closing_stock_value !== null && item.closing_stock_value !== undefined) {
+          sum += item.closing_stock_value;
+        } else if (item.unit_cost !== null && item.unit_cost !== undefined) {
           sum += closing * item.unit_cost;
         } else {
           missing++;
@@ -1011,8 +1049,12 @@ export default function AdminInventoryPage() {
                 for (const it of group.items) {
                   const draft = draftChanges[it.id] || {};
                   const cl = draft.closing_actual_qty !== undefined ? draft.closing_actual_qty : it.closing_actual_qty;
-                  if (cl !== null && cl !== undefined && it.unit_cost) {
-                    catValuationSum += cl * it.unit_cost;
+                  if (cl !== null && cl !== undefined) {
+                    if (draft.closing_actual_qty === undefined && it.closing_stock_value !== null && it.closing_stock_value !== undefined) {
+                      catValuationSum += it.closing_stock_value;
+                    } else if (it.unit_cost) {
+                      catValuationSum += cl * it.unit_cost;
+                    }
                   }
                 }
 
@@ -1077,9 +1119,11 @@ export default function AdminInventoryPage() {
                             const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
                             const isCounted = closing !== null && closing !== undefined;
 
-                            // Calculate closing stock value
+                            // Calculate closing stock value (FIFO allocation priority)
                             const closingStockVal =
-                              isCounted && item.unit_cost !== null && item.unit_cost !== undefined
+                              draft.closing_actual_qty === undefined && item.closing_stock_value !== null && item.closing_stock_value !== undefined
+                                ? item.closing_stock_value
+                                : isCounted && item.unit_cost !== null && item.unit_cost !== undefined
                                 ? Number((closing! * item.unit_cost).toFixed(2))
                                 : null;
 
@@ -1095,42 +1139,15 @@ export default function AdminInventoryPage() {
                                   {item.ingredient_number}
                                 </td>
 
-                                {/* Ingredient Name, Unit & Price Pill */}
+                                {/* Ingredient Name & Unit Badge ONLY (Clean column) */}
                                 <td className="py-3 px-4">
                                   <div className="font-bold text-zinc-950 text-xs sm:text-sm">
                                     {item.ingredient_name}
                                   </div>
-                                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  <div className="flex items-center gap-1.5 mt-1">
                                     <span className="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 font-mono text-[10px]">
                                       {item.unit}
                                     </span>
-
-                                    {item.unit_cost !== null && item.unit_cost !== undefined ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => openPurchaseHistory(item)}
-                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 hover:bg-orange-100 text-[#CA340A] text-[10px] font-bold font-mono transition border border-orange-200/60 cursor-pointer"
-                                        title="Click to view purchase history"
-                                      >
-                                        <span>Avg ₹{item.unit_cost.toFixed(2)}</span>
-                                        {item.latest_purchase_price && (
-                                          <span className="text-zinc-400 font-normal">
-                                            · Latest ₹{item.latest_purchase_price}
-                                          </span>
-                                        )}
-                                        <History size={10} className="ml-0.5 text-[#CA340A]" />
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => openAddPurchaseModal(item)}
-                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold transition border border-amber-200 cursor-pointer"
-                                        title="Set purchase price for this ingredient"
-                                      >
-                                        <span>Cost Not Set</span>
-                                        <Plus size={10} />
-                                      </button>
-                                    )}
                                   </div>
                                 </td>
 
@@ -1153,23 +1170,42 @@ export default function AdminInventoryPage() {
                                   )}
                                 </td>
 
-                                {/* Purchased (Reflects purchases + Add button) */}
+                                {/* Purchased (Reflects purchases + Clickable breakdown + Add button) */}
                                 <td className="py-3 px-3 text-center">
                                   <div className="flex items-center justify-center gap-1.5">
                                     {isFinalized ? (
-                                      <span className="font-semibold text-zinc-800">{purchased}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => openPurchasedBreakdownModal(item)}
+                                        className="font-bold text-zinc-800 hover:text-[#CA340A] underline underline-offset-2 cursor-pointer"
+                                        title="Click to view purchase batches"
+                                      >
+                                        {purchased}
+                                      </button>
                                     ) : (
-                                      <input
-                                        type="number"
-                                        step="any"
-                                        min="0"
-                                        value={purchased === 0 ? "0" : purchased}
-                                        onFocus={(e) => e.target.select()}
-                                        onChange={(e) =>
-                                          handleCellChange(item.id, "purchased_qty", e.target.value)
-                                        }
-                                        className="w-16 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
-                                      />
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          min="0"
+                                          value={purchased === 0 ? "0" : purchased}
+                                          onFocus={(e) => e.target.select()}
+                                          onChange={(e) =>
+                                            handleCellChange(item.id, "purchased_qty", e.target.value)
+                                          }
+                                          className="w-16 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
+                                        />
+                                        {item.purchase_entries && item.purchase_entries.length > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => openPurchasedBreakdownModal(item)}
+                                            className="px-1.5 py-1 rounded bg-orange-100 text-[#CA340A] text-[10px] font-bold hover:bg-orange-200 transition cursor-pointer"
+                                            title="View today's purchase batches"
+                                          >
+                                            {item.purchase_entries.length}
+                                          </button>
+                                        )}
+                                      </div>
                                     )}
                                     <button
                                       type="button"
@@ -1227,7 +1263,7 @@ export default function AdminInventoryPage() {
                                   )}
                                 </td>
 
-                                {/* Stock Value (₹) Column (Closing Actual * Weighted Avg Cost) */}
+                                {/* Stock Value (₹) Column (FIFO Allocation) */}
                                 <td className="py-3 px-3 text-right">
                                   {isCounted ? (
                                     closingStockVal !== null ? (
@@ -1235,13 +1271,7 @@ export default function AdminInventoryPage() {
                                         ₹{closingStockVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </span>
                                     ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => openAddPurchaseModal(item)}
-                                        className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 hover:bg-amber-100 cursor-pointer"
-                                      >
-                                        Cost Not Set
-                                      </button>
+                                      <span className="text-zinc-400 font-mono text-xs">₹0.00</span>
                                     )
                                   ) : (
                                     <span className="text-zinc-300 font-mono">—</span>
@@ -1261,9 +1291,12 @@ export default function AdminInventoryPage() {
                                       >
                                         {calculatedUsed}
                                       </span>
-                                      {item.unit_cost && calculatedUsed > 0 && (
+                                      {calculatedUsed > 0 && (
                                         <div className="text-[10px] text-zinc-400 font-mono">
-                                          ₹{(calculatedUsed * item.unit_cost).toFixed(0)}
+                                          ₹{(draft.closing_actual_qty === undefined && item.used_cost !== null && item.used_cost !== undefined
+                                            ? item.used_cost
+                                            : (calculatedUsed * (item.unit_cost || 0))
+                                          ).toFixed(0)}
                                         </div>
                                       )}
                                     </div>
@@ -1606,13 +1639,14 @@ export default function AdminInventoryPage() {
                         <th className="py-3 px-4">Category</th>
                         <th className="py-3 px-4 text-center">Counting Unit</th>
                         <th className="py-3 px-4 text-center">Base Price / Unit</th>
+                        <th className="py-3 px-4 text-center">Current Stock</th>
+                        <th className="py-3 px-4 text-right">FIFO Stock Value</th>
                         <th className="py-3 px-4 text-center">Min Stock Alert</th>
-                        <th className="py-3 px-4">Notes</th>
                         <th className="py-3 px-4 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
-                      {(ingredients.length > 0 ? ingredients : items.map((i) => ({
+                      {(ingredients.length > 0 ? ingredients : items.map((i): InventoryIngredient => ({
                         id: i.ingredient_id,
                         item_number: i.ingredient_number,
                         name: i.ingredient_name,
@@ -1623,8 +1657,24 @@ export default function AdminInventoryPage() {
                         display_order: i.ingredient_number,
                         is_active: true,
                         notes: i.notes || null,
+                        current_stock: i.closing_actual_qty ?? i.opening_qty,
+                        stock_value: i.closing_stock_value ?? 0,
+                        batches: i.closing_batches || i.available_batches || [],
                       }))).map((ing) => {
                         const cat = categories.find((c) => c.id === ing.category_id);
+                        const dayItem = items.find((i) => i.ingredient_id === ing.id);
+                        const currentStock = dayItem
+                          ? (dayItem.closing_actual_qty !== null && dayItem.closing_actual_qty !== undefined
+                              ? dayItem.closing_actual_qty
+                              : Math.max(0, (dayItem.opening_qty || 0) + (dayItem.purchased_qty || 0) - (dayItem.wastage_qty || 0)))
+                          : (ing.current_stock ?? 0);
+                        const stockVal = dayItem
+                          ? (dayItem.closing_stock_value !== null && dayItem.closing_stock_value !== undefined
+                              ? dayItem.closing_stock_value
+                              : (dayItem.unit_cost ? Number((currentStock * dayItem.unit_cost).toFixed(2)) : (ing.cost_per_unit ? Number((currentStock * ing.cost_per_unit).toFixed(2)) : 0)))
+                          : (ing.stock_value ?? 0);
+                        const batches = dayItem?.closing_batches || dayItem?.available_batches || ing.batches || [];
+
                         return (
                           <tr key={ing.id} className="hover:bg-zinc-50">
                             <td className="py-3 px-4 text-center font-mono text-zinc-400">
@@ -1639,21 +1689,46 @@ export default function AdminInventoryPage() {
                             <td className="py-3 px-4 text-center font-mono text-zinc-700">{ing.unit}</td>
                             <td className="py-3 px-4 text-center font-mono font-bold text-zinc-800">
                               {ing.cost_per_unit !== null && ing.cost_per_unit !== undefined && !isNaN(Number(ing.cost_per_unit))
-                                ? `₹${Number(ing.cost_per_unit)}`
+                                ? `₹${Number(ing.cost_per_unit).toFixed(2)}`
                                 : "—"}
+                            </td>
+                            <td className="py-3 px-4 text-center font-mono font-bold text-zinc-800">
+                              {currentStock} {ing.unit}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono font-bold text-zinc-900">
+                              {stockVal > 0
+                                ? `₹${Number(stockVal).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : "₹0.00"}
                             </td>
                             <td className="py-3 px-4 text-center font-mono text-zinc-700">
                               {ing.min_stock_level || 0} {ing.unit}
                             </td>
-                            <td className="py-3 px-4 text-zinc-400 text-[11px]">{ing.notes || "—"}</td>
                             <td className="py-3 px-4 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditIngredient(ing)}
-                                className="px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-200 transition cursor-pointer"
-                              >
-                                Edit
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditIngredient(ing)}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition cursor-pointer"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openViewBatchesModal({ ...ing, current_stock: currentStock, stock_value: stockVal, batches })}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+                                  title="View active FIFO stock batches"
+                                >
+                                  Batches ({batches.length})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openPurchaseHistory({ ingredient_id: ing.id, ingredient_name: ing.name, unit: ing.unit })}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-bold text-orange-800 bg-orange-50 hover:bg-orange-100 border border-orange-200 transition cursor-pointer"
+                                  title="View purchase history"
+                                >
+                                  Price History
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2417,6 +2492,194 @@ export default function AdminInventoryPage() {
                   className="px-5 py-2 rounded-xl bg-[#2C1710] text-[#FFF9F5] text-xs font-bold hover:bg-black transition shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {saving ? "Finalizing..." : "Confirm & Lock Day"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: FIFO STOCK BATCHES (MASTER CATALOG)                                 */}
+        {/* ========================================================================= */}
+        {showBatchesModal && selectedIngredientForBatches && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-zinc-200">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-900">
+                    Stock Batches (FIFO) — {selectedIngredientForBatches.name}
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Active inventory batches tracked by strict First-In, First-Out (FIFO) costing.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchesModal(false)}
+                  className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="mt-4 max-h-80 overflow-y-auto rounded-xl border border-zinc-200">
+                {(!selectedIngredientForBatches.batches || selectedIngredientForBatches.batches.length === 0) ? (
+                  <div className="py-12 text-center text-zinc-400 text-xs">
+                    No active stock batches found for this ingredient. Add a purchase or count opening stock.
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold uppercase text-[10px]">
+                        <th className="py-2.5 px-3">Batch Type</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3 text-center">Original Qty</th>
+                        <th className="py-2.5 px-3 text-center">Remaining Qty</th>
+                        <th className="py-2.5 px-3 text-center">Unit Cost (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Remaining Value (₹)</th>
+                        <th className="py-2.5 px-3">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {selectedIngredientForBatches.batches.map((b) => (
+                        <tr key={b.id} className="hover:bg-zinc-50 transition">
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                b.batch_type === "OPENING"
+                                  ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                  : "bg-orange-50 text-orange-700 border border-orange-200"
+                              }`}
+                            >
+                              {b.batch_type}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-zinc-600 text-[11px]">{b.date}</td>
+                          <td className="py-2.5 px-3 text-center font-mono text-zinc-600">
+                            {b.original_qty} {b.unit}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-zinc-900">
+                            {b.remaining_qty} {b.unit}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-zinc-800">
+                            ₹{b.unit_cost.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                            ₹{b.remaining_value.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-zinc-500 text-[11px]">
+                            {b.supplier ? `Supplier: ${b.supplier}` : b.notes || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 mt-4 border-t border-zinc-100">
+                <div className="text-xs text-zinc-600">
+                  Total Remaining Stock:{" "}
+                  <strong className="text-zinc-900">
+                    {selectedIngredientForBatches.current_stock ?? 0} {selectedIngredientForBatches.unit}
+                  </strong>{" "}
+                  · Total FIFO Value:{" "}
+                  <strong className="text-emerald-700">
+                    ₹{Number(selectedIngredientForBatches.stock_value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchesModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODAL: TODAY'S PURCHASE BATCHES BREAKDOWN (DAILY REGISTER)                 */}
+        {/* ========================================================================= */}
+        {showPurchasedBreakdownModal && selectedItemForBreakdown && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-zinc-200">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-900">
+                    Purchases on {selectedDate} — {selectedItemForBreakdown.ingredient_name}
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Detailed batch breakdown for today&apos;s deliveries.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPurchasedBreakdownModal(false)}
+                  className="p-1 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="mt-4 max-h-72 overflow-y-auto rounded-xl border border-zinc-200">
+                {(!selectedItemForBreakdown.purchase_entries || selectedItemForBreakdown.purchase_entries.length === 0) ? (
+                  <div className="py-8 text-center text-zinc-400 text-xs">
+                    No purchase entries recorded for this ingredient on {selectedDate}.
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 font-bold uppercase text-[10px]">
+                        <th className="py-2 px-3">#</th>
+                        <th className="py-2 px-3 text-center">Qty</th>
+                        <th className="py-2 px-3 text-center">Unit Price (₹)</th>
+                        <th className="py-2 px-3 text-right">Total (₹)</th>
+                        <th className="py-2 px-3">Supplier</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {selectedItemForBreakdown.purchase_entries.map((p, pIdx) => (
+                        <tr key={p.id || pIdx} className="hover:bg-zinc-50 transition">
+                          <td className="py-2 px-3 font-mono text-zinc-400">{pIdx + 1}</td>
+                          <td className="py-2 px-3 text-center font-mono font-bold text-zinc-900">
+                            {p.quantity} {p.unit}
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono text-zinc-700">
+                            ₹{p.price_per_unit.toFixed(2)}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                            ₹{(p.total_cost || p.quantity * p.price_per_unit).toFixed(2)}
+                          </td>
+                          <td className="py-2 px-3 text-zinc-500 text-[11px]">{p.supplier || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 mt-4 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPurchasedBreakdownModal(false);
+                    openAddPurchaseModal(selectedItemForBreakdown);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-orange-50 text-[#CA340A] text-xs font-bold hover:bg-orange-100 transition border border-orange-200 cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>+ Record Another Purchase</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPurchasedBreakdownModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition cursor-pointer"
+                >
+                  Close
                 </button>
               </div>
             </div>

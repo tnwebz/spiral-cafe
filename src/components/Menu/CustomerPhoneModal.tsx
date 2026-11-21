@@ -158,7 +158,23 @@ export default function CustomerPhoneModal({
       const checkAndTrigger = async () => {
         // If customer has already completed the entry flow in this tab/session or viewing booked table, don't interrupt
         const alreadyEntered = sessionStorage.getItem("spiral_entered") === "true";
-        if (alreadyEntered || isViewOnlyMenu || isTableBookedByOther) {
+        const savedPref = localStorage.getItem("spiral_food_preference");
+        const cleanSavedPhone = savedPhone?.replace(/\D/g, "") || "";
+        const storedPlaced = localStorage.getItem("spiral_placed_orders");
+        let hasActiveOrders = false;
+        if (storedPlaced) {
+          try {
+            const arr = JSON.parse(storedPlaced);
+            if (Array.isArray(arr) && arr.some((o: any) => !(o.paymentStatus === "PAID" && o.status === "COMPLETED") && o.status !== "CANCELLED")) {
+              hasActiveOrders = true;
+            }
+          } catch {}
+        }
+
+        if (alreadyEntered || isViewOnlyMenu || isTableBookedByOther || hasActiveOrders || (cleanSavedPhone.length === 10 && Boolean(savedPref))) {
+          try {
+            sessionStorage.setItem("spiral_entered", "true");
+          } catch {}
           setIsOpen(false);
           return;
         }

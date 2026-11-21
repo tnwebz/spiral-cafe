@@ -57,13 +57,12 @@
     "visitId": "VISIT-B5-MWPEPD3P"
   },
   {
-    "id": "RES-A1-MWQ4JHYR",
+    "id": "RES-A1-MWQBIR97",
     "tableNumber": "A1",
     "customerSessionId": "sess_1795248260700_a68d31f7cc4f4f4d9fff9ec6f77ca107",
     "customerPhone": "8608113558",
-    "reservedAt": "2026-11-21T08:06:32.824Z",
-    "expiresAt": "2026-11-21T08:16:33.895Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-A1-MWQ4NONO"
+    "reservedAt": "2026-11-21T11:21:55.669Z",
+    "expiresAt": "2026-11-21T11:31:55.669Z",
+    "status": "ACTIVE"
   }
 ]

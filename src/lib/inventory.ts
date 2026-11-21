@@ -17,6 +17,8 @@ import {
   getKolkataDateString,
   calculateUsedQty,
   calculateWeightedAverageCost,
+  calculateFifoAllocation,
+  StockBatch,
 } from "@/types/inventory";
 
 // ---------------------------------------------------------
@@ -30,12 +32,19 @@ interface LocalStoreSchema {
   dayItems: InventoryDayItem[];
   movements: InventoryMovement[];
   purchases: InventoryPurchaseRecord[];
+  stockBatches?: StockBatch[];
 }
 
 function getLocalStorePath(): string {
   const p1 = path.join(process.cwd(), "src", "data", "inventory_store.json");
   if (fs.existsSync(/*turbopackIgnore: true*/ p1)) return p1;
-  const p2 = path.join(process.cwd(), "menu-card", "src", "data", "inventory_store.json");
+  const p2 = path.join(
+    process.cwd(),
+    "menu-card",
+    "src",
+    "data",
+    "inventory_store.json",
+  );
   if (fs.existsSync(/*turbopackIgnore: true*/ p2)) return p2;
   return p1;
 }
@@ -47,10 +56,14 @@ function readLocalStore(): LocalStoreSchema {
       const raw = fs.readFileSync(filePath, "utf-8");
       const parsed = JSON.parse(raw);
       if (!parsed.purchases) parsed.purchases = [];
+      if (!parsed.stockBatches) parsed.stockBatches = [];
       return parsed;
     }
   } catch (err) {
-    console.warn("Failed reading local inventory store, initializing fresh defaults:", err);
+    console.warn(
+      "Failed reading local inventory store, initializing fresh defaults:",
+      err,
+    );
   }
 
   const initialStore: LocalStoreSchema = {
@@ -60,6 +73,7 @@ function readLocalStore(): LocalStoreSchema {
     dayItems: [],
     movements: [],
     purchases: [],
+    stockBatches: [],
   };
 
   try {
@@ -123,7 +137,7 @@ export async function getInventoryCategories(): Promise<InventoryCategory[]> {
 }
 
 export async function createInventoryCategory(
-  category: Omit<InventoryCategory, "id" | "created_at" | "updated_at">
+  category: Omit<InventoryCategory, "id" | "created_at" | "updated_at">,
 ): Promise<InventoryCategory> {
   const id = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const newCat: InventoryCategory = {
@@ -137,7 +151,11 @@ export async function createInventoryCategory(
   if (await isSupabaseAvailable()) {
     try {
       const admin = getSupabaseAdminClient() as any;
-      const { data, error } = await admin.from("inventory_categories").insert(newCat).select().single();
+      const { data, error } = await admin
+        .from("inventory_categories")
+        .insert(newCat)
+        .select()
+        .single();
       if (!error && data) return data as InventoryCategory;
     } catch {}
   }
@@ -150,7 +168,7 @@ export async function createInventoryCategory(
 
 export async function updateInventoryCategory(
   id: string,
-  patch: Partial<InventoryCategory>
+  patch: Partial<InventoryCategory>,
 ): Promise<InventoryCategory | null> {
   if (await isSupabaseAvailable()) {
     try {
@@ -168,13 +186,19 @@ export async function updateInventoryCategory(
   const store = readLocalStore();
   const idx = store.categories.findIndex((c) => c.id === id);
   if (idx === -1) return null;
-  store.categories[idx] = { ...store.categories[idx], ...patch, updated_at: new Date().toISOString() };
+  store.categories[idx] = {
+    ...store.categories[idx],
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
   writeLocalStore(store);
   return store.categories[idx];
 }
 
 // 2. Ingredients
-export async function getInventoryIngredients(categoryId?: string): Promise<InventoryIngredient[]> {
+export async function getInventoryIngredients(
+  categoryId?: string,
+): Promise<InventoryIngredient[]> {
   if (await isSupabaseAvailable()) {
     try {
       const admin = getSupabaseAdminClient() as any;
@@ -187,7 +211,8 @@ export async function getInventoryIngredients(categoryId?: string): Promise<Inve
         query = query.eq("category_id", categoryId);
       }
       const { data, error } = await query;
-      if (!error && data && data.length > 0) return data as InventoryIngredient[];
+      if (!error && data && data.length > 0)
+        return data as InventoryIngredient[];
     } catch {}
   }
 
@@ -200,18 +225,25 @@ export async function getInventoryIngredients(categoryId?: string): Promise<Inve
 }
 
 export async function createInventoryIngredient(
-  item: Omit<InventoryIngredient, "id" | "item_number" | "created_at" | "updated_at">
+  item: Omit<
+    InventoryIngredient,
+    "id" | "item_number" | "created_at" | "updated_at"
+  >,
 ): Promise<InventoryIngredient> {
   const store = readLocalStore();
   const nextNumber =
-    store.ingredients.reduce((max, i) => Math.max(max, i.item_number || 0), 0) + 1;
+    store.ingredients.reduce((max, i) => Math.max(max, i.item_number || 0), 0) +
+    1;
   const id = `ing_${nextNumber}_${Math.random().toString(36).slice(2, 6)}`;
 
   const newIng: InventoryIngredient = {
     id,
     item_number: nextNumber,
     ...item,
-    cost_per_unit: item.cost_per_unit !== undefined && item.cost_per_unit !== null ? Number(item.cost_per_unit) : null,
+    cost_per_unit:
+      item.cost_per_unit !== undefined && item.cost_per_unit !== null
+        ? Number(item.cost_per_unit)
+        : null,
     is_active: true,
     display_order: item.display_order || nextNumber,
     created_at: new Date().toISOString(),
@@ -221,14 +253,26 @@ export async function createInventoryIngredient(
   if (await isSupabaseAvailable()) {
     try {
       const admin = getSupabaseAdminClient() as any;
-      const { data, error } = await admin.from("inventory_ingredients").insert(newIng).select().single();
+      const { data, error } = await admin
+        .from("inventory_ingredients")
+        .insert(newIng)
+        .select()
+        .single();
       if (!error && data) {
         // Also ensure ingredient is attached to today's active register
         try {
           const todayStr = getKolkataDateString();
-          const { data: todayDay } = await admin.from("inventory_days").select("id").eq("date", todayStr).maybeSingle();
+          const { data: todayDay } = await admin
+            .from("inventory_days")
+            .select("id")
+            .eq("date", todayStr)
+            .maybeSingle();
           if (todayDay) {
-            const { data: cat } = await admin.from("inventory_categories").select("name").eq("id", newIng.category_id).maybeSingle();
+            const { data: cat } = await admin
+              .from("inventory_categories")
+              .select("name")
+              .eq("id", newIng.category_id)
+              .maybeSingle();
             await admin.from("inventory_day_items").insert({
               id: `item_${todayDay.id}_${newIng.id}`,
               inventory_day_id: todayDay.id,
@@ -255,7 +299,7 @@ export async function createInventoryIngredient(
   }
 
   store.ingredients.push(newIng);
-  
+
   // Reconcile into today's active local day if present
   const todayStr = getKolkataDateString();
   const todayDay = store.days.find((d) => d.date === todayStr);
@@ -280,7 +324,8 @@ export async function createInventoryIngredient(
       updated_at: new Date().toISOString(),
     };
     store.dayItems.push(dayItem);
-    todayDay.total_active_ingredients = (todayDay.total_active_ingredients || 0) + 1;
+    todayDay.total_active_ingredients =
+      (todayDay.total_active_ingredients || 0) + 1;
   }
 
   writeLocalStore(store);
@@ -289,21 +334,8 @@ export async function createInventoryIngredient(
 
 export async function updateInventoryIngredient(
   id: string,
-  patch: Partial<InventoryIngredient>
+  patch: Partial<InventoryIngredient>,
 ): Promise<InventoryIngredient | null> {
-  if (await isSupabaseAvailable()) {
-    try {
-      const admin = getSupabaseAdminClient() as any;
-      const { data, error } = await admin
-        .from("inventory_ingredients")
-        .update({ ...patch, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-      if (!error && data) return data as InventoryIngredient;
-    } catch {}
-  }
-
   const store = readLocalStore();
   const idx = store.ingredients.findIndex((i) => i.id === id);
   if (idx === -1) return null;
@@ -315,31 +347,46 @@ export async function updateInventoryIngredient(
         : Number(patch.cost_per_unit)
       : store.ingredients[idx].cost_per_unit;
 
-  store.ingredients[idx] = {
+  const updatedIngredient: InventoryIngredient = {
     ...store.ingredients[idx],
     ...patch,
     cost_per_unit: parsedCost,
     updated_at: new Date().toISOString(),
   };
 
-  if (patch.cost_per_unit !== undefined) {
+  store.ingredients[idx] = updatedIngredient;
+
+  // 1. Synchronize Unit across all day items
+  if (patch.unit !== undefined && patch.unit !== null) {
+    const cleanUnit = patch.unit.trim();
     for (const item of store.dayItems) {
       if (item.ingredient_id === id) {
-        if (!item.purchase_entries || item.purchase_entries.length === 0) {
-          item.unit_cost = parsedCost;
-          if (item.closing_actual_qty !== null && parsedCost !== null && parsedCost !== undefined) {
-            item.closing_stock_value = Number((item.closing_actual_qty * parsedCost).toFixed(2));
-          }
-          if (item.calculated_used_qty !== null && parsedCost !== null && parsedCost !== undefined) {
-            item.used_cost = Number((item.calculated_used_qty * parsedCost).toFixed(2));
-          }
-        }
+        item.unit = cleanUnit;
+      }
+    }
+    // Also update purchases for this ingredient
+    for (const p of store.purchases) {
+      if (p.ingredient_id === id) {
+        p.unit = cleanUnit;
       }
     }
   }
 
+  // 2. Synchronize Name across all day items
+  if (patch.name !== undefined && patch.name !== null) {
+    const cleanName = patch.name.trim();
+    for (const item of store.dayItems) {
+      if (item.ingredient_id === id) {
+        item.ingredient_name = cleanName;
+      }
+    }
+  }
+
+  // 3. Synchronize Category across all day items
   if (patch.category_id) {
-    const targetCategory = store.categories.find((c) => c.id === patch.category_id);
+    const targetCategory = store.categories.find(
+      (c) => c.id === patch.category_id,
+    );
     if (targetCategory) {
       for (const item of store.dayItems) {
         if (item.ingredient_id === id) {
@@ -350,7 +397,55 @@ export async function updateInventoryIngredient(
     }
   }
 
+  // 4. Synchronize Base Cost across day items without conflicting actual purchase batches or finalized days
+  if (patch.cost_per_unit !== undefined) {
+    const finalizedDayIds = new Set(
+      store.days.filter((d) => d.status === "FINALIZED").map((d) => d.id)
+    );
+    for (const item of store.dayItems) {
+      if (item.ingredient_id === id && !finalizedDayIds.has(item.inventory_day_id)) {
+        if (!item.purchase_entries || item.purchase_entries.length === 0) {
+          item.unit_cost = parsedCost;
+          if (
+            item.closing_actual_qty !== null &&
+            parsedCost !== null &&
+            parsedCost !== undefined
+          ) {
+            item.closing_stock_value = Number(
+              (item.closing_actual_qty * parsedCost).toFixed(2),
+            );
+          }
+          if (
+            item.calculated_used_qty !== null &&
+            parsedCost !== null &&
+            parsedCost !== undefined
+          ) {
+            item.used_cost = Number(
+              (item.calculated_used_qty * parsedCost).toFixed(2),
+            );
+          }
+        }
+      }
+    }
+  }
+
   writeLocalStore(store);
+
+  // Sync to Supabase if configured and available
+  if (await isSupabaseAvailable()) {
+    try {
+      const admin = getSupabaseAdminClient() as any;
+      await admin
+        .from("inventory_ingredients")
+        .update({
+          ...patch,
+          cost_per_unit: parsedCost,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+    } catch {}
+  }
+
   return store.ingredients[idx];
 }
 
@@ -359,10 +454,212 @@ export async function archiveInventoryIngredient(id: string): Promise<boolean> {
   return !!updated;
 }
 
+// ---------------------------------------------------------
+// FIFO BATCH CONTEXT & VALUATION HELPERS
+// ---------------------------------------------------------
+
+export function getPreviousFinalizedDayContext(
+  store: LocalStoreSchema,
+  beforeDate: string
+): {
+  prevDay: InventoryDay | undefined;
+  prevClosingMap: Record<string, number>;
+  prevCostMap: Record<string, number | null>;
+  prevClosingBatchesMap: Record<string, StockBatch[]>;
+} {
+  const previousFinalizedDays = store.days
+    .filter((d) => d.date < beforeDate && d.status === "FINALIZED")
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const prevDay = previousFinalizedDays[0];
+
+  const prevClosingMap: Record<string, number> = {};
+  const prevCostMap: Record<string, number | null> = {};
+  const prevClosingBatchesMap: Record<string, StockBatch[]> = {};
+
+  if (prevDay) {
+    const prevItems = store.dayItems.filter((di) => di.inventory_day_id === prevDay.id);
+    for (const pi of prevItems) {
+      if (
+        pi.closing_actual_qty !== null &&
+        pi.closing_actual_qty !== undefined &&
+        !isNaN(Number(pi.closing_actual_qty))
+      ) {
+        prevClosingMap[pi.ingredient_id] = Number(pi.closing_actual_qty);
+      }
+      if (
+        pi.unit_cost !== null &&
+        pi.unit_cost !== undefined &&
+        !isNaN(Number(pi.unit_cost))
+      ) {
+        prevCostMap[pi.ingredient_id] = Number(pi.unit_cost);
+      }
+      if (pi.closing_batches && Array.isArray(pi.closing_batches) && pi.closing_batches.length > 0) {
+        prevClosingBatchesMap[pi.ingredient_id] = pi.closing_batches;
+      }
+    }
+  }
+
+  return { prevDay, prevClosingMap, prevCostMap, prevClosingBatchesMap };
+}
+
+/**
+ * Core FIFO Batch Allocation and Stock Valuation Engine
+ * Never averages purchase prices.
+ * Consumes oldest batches first for wastage and usage.
+ * Calculates used_cost and closing_stock_value from actual batches.
+ * Preserves batch unit costs and purchase histories without averaging.
+ */
+export function computeItemFifoValuation(
+  item: InventoryDayItem,
+  prevClosingBatches: StockBatch[] | undefined,
+  fallbackCost: number | null | undefined,
+  dayPurchases: InventoryPurchaseRecord[],
+  targetDate: string
+): {
+  availableBatches: StockBatch[];
+  closingBatches: StockBatch[];
+  usedCost: number | null;
+  closingStockValue: number | null;
+  wastageCost: number | null;
+  openingStockValue: number;
+  totalPurchaseCost: number;
+  unitCost: number | null;
+  latestPurchasePrice: number | null;
+} {
+  // 1. Build opening batches
+  let openingBatches: StockBatch[] = [];
+  if (prevClosingBatches && prevClosingBatches.length > 0) {
+    const totalPrevQty = prevClosingBatches.reduce((acc, b) => acc + (b.remaining_qty || 0), 0);
+    // If opening qty matches carry-forward, carry forward the exact remaining batches
+    if (Math.abs(totalPrevQty - item.opening_qty) < 0.001) {
+      openingBatches = prevClosingBatches.map((b) => ({
+        ...b,
+        remaining_qty: Number(b.remaining_qty.toFixed(4)),
+        remaining_value: Number((b.remaining_qty * b.unit_cost).toFixed(2)),
+      }));
+    } else if (item.opening_qty > 0) {
+      const unitCost = fallbackCost ?? (prevClosingBatches[0]?.unit_cost || 0);
+      openingBatches = [
+        {
+          id: `batch_open_${item.ingredient_id}_${targetDate}`,
+          ingredient_id: item.ingredient_id,
+          batch_type: "OPENING",
+          date: targetDate,
+          created_at: `${targetDate}T00:00:00.000Z`,
+          original_qty: item.opening_qty,
+          remaining_qty: item.opening_qty,
+          unit: item.unit,
+          unit_cost: unitCost,
+          remaining_value: Number((item.opening_qty * unitCost).toFixed(2)),
+          notes: "Manual Opening Stock",
+        },
+      ];
+    }
+  } else if (item.opening_qty > 0) {
+    const unitCost = fallbackCost ?? 0;
+    openingBatches = [
+      {
+        id: `batch_open_${item.ingredient_id}_${targetDate}`,
+        ingredient_id: item.ingredient_id,
+        batch_type: "OPENING",
+        date: targetDate,
+        created_at: `${targetDate}T00:00:00.000Z`,
+        original_qty: item.opening_qty,
+        remaining_qty: item.opening_qty,
+        unit: item.unit,
+        unit_cost: unitCost,
+        remaining_value: Number((item.opening_qty * unitCost).toFixed(2)),
+        notes: "Opening Stock",
+      },
+    ];
+  }
+
+  // 2. Build today's purchase batches
+  const sortedPurchases = [...dayPurchases].sort((a, b) => {
+    const c1 = (a.created_at || a.date).localeCompare(b.created_at || b.date);
+    if (c1 !== 0) return c1;
+    return a.id.localeCompare(b.id);
+  });
+
+  const purchaseBatches: StockBatch[] = sortedPurchases.map((p) => ({
+    id: `batch_purch_${p.id}`,
+    ingredient_id: p.ingredient_id,
+    batch_type: "PURCHASE",
+    date: p.date,
+    created_at: p.created_at || `${p.date}T12:00:00.000Z`,
+    original_qty: p.quantity,
+    remaining_qty: p.quantity,
+    unit: p.unit || item.unit,
+    unit_cost: p.price_per_unit,
+    remaining_value: Number((p.quantity * p.price_per_unit).toFixed(2)),
+    purchase_id: p.id,
+    supplier: p.supplier || undefined,
+    notes: p.notes || undefined,
+  }));
+
+  const availableBatches: StockBatch[] = [...openingBatches, ...purchaseBatches];
+
+  const openingStockValue = Number(
+    openingBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2)
+  );
+  const totalPurchaseCost = Number(
+    purchaseBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2)
+  );
+  const latestPurchasePrice =
+    purchaseBatches.length > 0 ? purchaseBatches[purchaseBatches.length - 1].unit_cost : null;
+
+  // 3. FIFO Allocation
+  if (item.closing_actual_qty !== null && item.closing_actual_qty !== undefined) {
+    const calculatedUsed = calculateUsedQty(
+      item.opening_qty,
+      item.purchased_qty,
+      item.wastage_qty,
+      item.closing_actual_qty
+    );
+
+    const fifo = calculateFifoAllocation(availableBatches, item.wastage_qty, calculatedUsed);
+
+    const effectiveUnitCost: number | null =
+      fifo.closingStockQty > 0
+        ? Number((fifo.closingStockValue / fifo.closingStockQty).toFixed(2))
+        : (latestPurchasePrice ?? fallbackCost ?? null);
+
+    return {
+      availableBatches,
+      closingBatches: fifo.remainingBatches,
+      usedCost: fifo.usedCost,
+      closingStockValue: fifo.closingStockValue,
+      wastageCost: item.wastage_qty > 0 ? fifo.wastageCost : null,
+      openingStockValue,
+      totalPurchaseCost,
+      unitCost: effectiveUnitCost,
+      latestPurchasePrice,
+    };
+  } else {
+    let wastageCost: number | null = null;
+    if (item.wastage_qty > 0) {
+      const fifoWastage = calculateFifoAllocation(availableBatches, item.wastage_qty, 0);
+      wastageCost = fifoWastage.wastageCost;
+    }
+
+    return {
+      availableBatches,
+      closingBatches: availableBatches,
+      usedCost: null,
+      closingStockValue: null,
+      wastageCost,
+      openingStockValue,
+      totalPurchaseCost,
+      unitCost: latestPurchasePrice ?? fallbackCost ?? null,
+      latestPurchasePrice,
+    };
+  }
+}
+
 // 3. Daily Register Lifecycle & Carry-Forward
 export async function getOrCreateDayRegister(
   dateStr?: string,
-  staffName: string = "Staff"
+  staffName: string = "Staff",
 ): Promise<{
   day: InventoryDay;
   items: InventoryDayItem[];
@@ -377,26 +674,9 @@ export async function getOrCreateDayRegister(
   const store = readLocalStore();
   if (!store.purchases) store.purchases = [];
 
-  // 1. Locate the latest previous FINALIZED day to carry forward quantities & unit costs
-  const previousFinalizedDays = store.days
-    .filter((d) => d.date < targetDate && d.status === "FINALIZED")
-    .sort((a, b) => b.date.localeCompare(a.date));
-  const prevDay = previousFinalizedDays[0];
-
-  const prevClosingMap: Record<string, number> = {};
-  const prevCostMap: Record<string, number | null> = {};
-
-  if (prevDay) {
-    const prevItems = store.dayItems.filter((di) => di.inventory_day_id === prevDay.id);
-    for (const pi of prevItems) {
-      if (pi.closing_actual_qty !== null && pi.closing_actual_qty !== undefined && !isNaN(Number(pi.closing_actual_qty))) {
-        prevClosingMap[pi.ingredient_id] = Number(pi.closing_actual_qty);
-      }
-      if (pi.unit_cost !== null && pi.unit_cost !== undefined && !isNaN(Number(pi.unit_cost))) {
-        prevCostMap[pi.ingredient_id] = Number(pi.unit_cost);
-      }
-    }
-  }
+  // 1. Locate the latest previous FINALIZED day context
+  const { prevDay, prevClosingMap, prevCostMap, prevClosingBatchesMap } =
+    getPreviousFinalizedDayContext(store, targetDate);
 
   let day = store.days.find((d) => d.date === targetDate);
   const dayId = day ? day.id : `day_${targetDate.replace(/-/g, "")}`;
@@ -418,7 +698,8 @@ export async function getOrCreateDayRegister(
         category_id: ing.category_id,
         category_name: catMap.get(ing.category_id) || "Other",
         unit: ing.unit,
-        opening_qty: prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0,
+        opening_qty:
+          prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0,
         purchased_qty: 0,
         wastage_qty: 0,
         closing_actual_qty: null,
@@ -441,7 +722,7 @@ export async function getOrCreateDayRegister(
             item.opening_qty,
             item.purchased_qty,
             item.wastage_qty,
-            item.closing_actual_qty
+            item.closing_actual_qty,
           );
         }
       }
@@ -460,7 +741,8 @@ export async function getOrCreateDayRegister(
     };
 
     items = ingredients.map((ing) => {
-      const opening = prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0;
+      const opening =
+        prevClosingMap[ing.id] !== undefined ? prevClosingMap[ing.id] : 0;
       return {
         id: `item_${dayId}_${ing.id}`,
         inventory_day_id: dayId,
@@ -486,7 +768,7 @@ export async function getOrCreateDayRegister(
     day = newDay;
   }
 
-  // 2. Load and attach date-wise purchases and moving weighted average costs
+  // 2. Load purchases and compute FIFO valuations
   const targetPurchases = store.purchases.filter((p) => p.date === targetDate);
   const allPurchasesForIngredients = store.purchases;
 
@@ -497,63 +779,79 @@ export async function getOrCreateDayRegister(
   let hasIncompleteValuation = false;
 
   for (const item of items) {
-    const itemPurchasesToday = targetPurchases.filter((p) => p.ingredient_id === item.ingredient_id);
-    const allItemPurchases = allPurchasesForIngredients.filter((p) => p.ingredient_id === item.ingredient_id);
+    const itemPurchasesToday = targetPurchases.filter(
+      (p) => p.ingredient_id === item.ingredient_id,
+    );
+    const allItemPurchases = allPurchasesForIngredients.filter(
+      (p) => p.ingredient_id === item.ingredient_id,
+    );
     const ing = ingMap.get(item.ingredient_id);
+
+    // CRITICAL: Always synchronize ingredient definition (Unit, Name, Category) from Master Catalog
+    if (ing) {
+      item.unit = ing.unit;
+      item.ingredient_name = ing.name;
+      item.ingredient_number = ing.item_number;
+      item.category_id = ing.category_id;
+      item.category_name = catMap.get(ing.category_id) || item.category_name;
+    }
 
     // If purchases were recorded via Add Purchase, enforce purchased_qty to match exact sum
     if (itemPurchasesToday.length > 0) {
       item.purchased_qty = Number(
-        itemPurchasesToday.reduce((sum, p) => sum + (p.quantity || 0), 0).toFixed(3)
+        itemPurchasesToday
+          .reduce((sum, p) => sum + (p.quantity || 0), 0)
+          .toFixed(3),
       );
     }
+    item.purchase_entries = itemPurchasesToday;
 
     item.calculated_used_qty = calculateUsedQty(
       item.opening_qty,
       item.purchased_qty,
       item.wastage_qty,
-      item.closing_actual_qty
+      item.closing_actual_qty,
     );
 
-    const prevCost = prevCostMap[item.ingredient_id] ?? null;
-    const costCalc = calculateWeightedAverageCost(
-      item.opening_qty,
+    const prevCost =
+      prevCostMap[item.ingredient_id] ??
+      (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null);
+    const prevBatches = prevClosingBatchesMap[item.ingredient_id];
+
+    const fifoRes = computeItemFifoValuation(
+      item,
+      prevBatches,
       prevCost,
-      item.purchased_qty,
       itemPurchasesToday,
-      ing?.cost_per_unit ?? null
+      targetDate
     );
 
-    item.unit_cost = costCalc.unitCost;
-    item.opening_stock_value = costCalc.openingStockValue;
-    item.total_purchase_cost = costCalc.totalPurchaseCost;
+    item.available_batches = fifoRes.availableBatches;
+    item.closing_batches = fifoRes.closingBatches;
+    item.opening_stock_value = fifoRes.openingStockValue;
+    item.total_purchase_cost = fifoRes.totalPurchaseCost;
     item.latest_purchase_price =
-      costCalc.latestPurchasePrice ??
-      (allItemPurchases.length > 0 ? allItemPurchases[allItemPurchases.length - 1].price_per_unit : null);
-    item.purchase_entries = itemPurchasesToday;
+      fifoRes.latestPurchasePrice ??
+      (allItemPurchases.length > 0
+        ? allItemPurchases[allItemPurchases.length - 1].price_per_unit
+        : null);
+    item.unit_cost = fifoRes.unitCost;
+    item.closing_stock_value = fifoRes.closingStockValue;
+    item.used_cost = fifoRes.usedCost;
+    item.wastage_cost = fifoRes.wastageCost;
 
-    if (item.closing_actual_qty !== null && item.unit_cost != null) {
-      item.closing_stock_value = Number((item.closing_actual_qty * item.unit_cost).toFixed(2));
+    if (item.closing_stock_value !== null) {
       dayTotalClosing += item.closing_stock_value;
-    } else {
-      item.closing_stock_value = null;
-      if (item.closing_actual_qty !== null && item.unit_cost == null) {
-        hasIncompleteValuation = true;
-      }
+    } else if (item.closing_actual_qty !== null && item.unit_cost == null) {
+      hasIncompleteValuation = true;
     }
 
-    if (item.calculated_used_qty !== null && item.unit_cost != null) {
-      item.used_cost = Number((item.calculated_used_qty * item.unit_cost).toFixed(2));
+    if (item.used_cost !== null) {
       dayTotalUsed += item.used_cost;
-    } else {
-      item.used_cost = null;
     }
 
-    if (item.wastage_qty > 0 && item.unit_cost != null) {
-      item.wastage_cost = Number((item.wastage_qty * item.unit_cost).toFixed(2));
+    if (item.wastage_cost !== null) {
       dayTotalWastage += item.wastage_cost;
-    } else {
-      item.wastage_cost = null;
     }
 
     if (item.total_purchase_cost) {
@@ -610,7 +908,7 @@ export interface DayItemUpdateInput {
 export async function updateDayItemsBatch(
   dayId: string,
   updates: DayItemUpdateInput[],
-  staffName: string = "Staff"
+  staffName: string = "Staff",
 ): Promise<{
   success: boolean;
   day: InventoryDay;
@@ -623,22 +921,39 @@ export async function updateDayItemsBatch(
   }
 
   if (store.days[dayIndex].status === "FINALIZED") {
-    throw new Error("This inventory day is FINALIZED and locked. Reopening is restricted to admin.");
+    throw new Error(
+      "This inventory day is FINALIZED and locked. Reopening is restricted to admin.",
+    );
   }
 
   const day = store.days[dayIndex];
+  const { prevClosingBatchesMap, prevCostMap } = getPreviousFinalizedDayContext(
+    store,
+    day.date
+  );
   const updatedItems: InventoryDayItem[] = [];
 
   for (const up of updates) {
     const itemIndex = store.dayItems.findIndex(
-      (di) => di.inventory_day_id === dayId && (di.id === up.id || di.ingredient_id === up.id)
+      (di) =>
+        di.inventory_day_id === dayId &&
+        (di.id === up.id || di.ingredient_id === up.id),
     );
     if (itemIndex === -1) continue;
 
     const current = store.dayItems[itemIndex];
-    const opening = up.opening_qty !== undefined ? Math.max(0, up.opening_qty) : current.opening_qty;
-    const purchased = up.purchased_qty !== undefined ? Math.max(0, up.purchased_qty) : current.purchased_qty;
-    const wastage = up.wastage_qty !== undefined ? Math.max(0, up.wastage_qty) : current.wastage_qty;
+    const opening =
+      up.opening_qty !== undefined
+        ? Math.max(0, up.opening_qty)
+        : current.opening_qty;
+    const purchased =
+      up.purchased_qty !== undefined
+        ? Math.max(0, up.purchased_qty)
+        : current.purchased_qty;
+    const wastage =
+      up.wastage_qty !== undefined
+        ? Math.max(0, up.wastage_qty)
+        : current.wastage_qty;
 
     let closing = current.closing_actual_qty;
     let isCounted = current.is_counted;
@@ -658,22 +973,33 @@ export async function updateDayItemsBatch(
     }
 
     const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
-    const unitCost = up.unit_cost !== undefined ? up.unit_cost : current.unit_cost;
+    const ing = store.ingredients.find((i) => i.id === current.ingredient_id);
+    const fallbackCost =
+      up.unit_cost !== undefined
+        ? up.unit_cost
+        : prevCostMap[current.ingredient_id] ??
+          (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : current.unit_cost);
+    const dayPurchases = (store.purchases || []).filter(
+      (p) => p.date === day.date && p.ingredient_id === current.ingredient_id
+    );
+    const prevBatches = prevClosingBatchesMap[current.ingredient_id];
 
-    const closingStockValue =
-      closing !== null && unitCost !== null && unitCost !== undefined
-        ? Number((closing * unitCost).toFixed(2))
-        : null;
+    const tempItem: InventoryDayItem = {
+      ...current,
+      opening_qty: opening,
+      purchased_qty: purchased,
+      wastage_qty: wastage,
+      closing_actual_qty: closing,
+      calculated_used_qty: calculatedUsed,
+    };
 
-    const usedCost =
-      calculatedUsed !== null && unitCost !== null && unitCost !== undefined
-        ? Number((calculatedUsed * unitCost).toFixed(2))
-        : null;
-
-    const wastageCost =
-      wastage > 0 && unitCost !== null && unitCost !== undefined
-        ? Number((wastage * unitCost).toFixed(2))
-        : null;
+    const fifoRes = computeItemFifoValuation(
+      tempItem,
+      prevBatches,
+      fallbackCost,
+      dayPurchases,
+      day.date
+    );
 
     const updated: InventoryDayItem = {
       ...current,
@@ -682,13 +1008,21 @@ export async function updateDayItemsBatch(
       wastage_qty: wastage,
       closing_actual_qty: closing,
       calculated_used_qty: calculatedUsed,
-      unit_cost: unitCost,
-      closing_stock_value: closingStockValue,
-      used_cost: usedCost,
-      wastage_cost: wastageCost,
+      unit_cost: fifoRes.unitCost,
+      closing_stock_value: fifoRes.closingStockValue,
+      used_cost: fifoRes.usedCost,
+      wastage_cost: fifoRes.wastageCost,
+      opening_stock_value: fifoRes.openingStockValue,
+      total_purchase_cost: fifoRes.totalPurchaseCost,
+      latest_purchase_price: fifoRes.latestPurchasePrice ?? current.latest_purchase_price,
+      available_batches: fifoRes.availableBatches,
+      closing_batches: fifoRes.closingBatches,
+      purchase_entries: dayPurchases,
       is_counted: isCounted,
       counted_by: isCounted ? staffName : current.counted_by,
-      counted_at: isCounted ? current.counted_at || new Date().toISOString() : null,
+      counted_at: isCounted
+        ? current.counted_at || new Date().toISOString()
+        : null,
       notes: up.notes !== undefined ? up.notes : current.notes,
       updated_at: new Date().toISOString(),
     };
@@ -698,14 +1032,16 @@ export async function updateDayItemsBatch(
   }
 
   // Recalculate Day stats
-  const allDayItems = store.dayItems.filter((di) => di.inventory_day_id === dayId);
+  const allDayItems = store.dayItems.filter(
+    (di) => di.inventory_day_id === dayId,
+  );
   const countedCount = allDayItems.filter((di) => di.is_counted).length;
   const newStatus: InventoryDayStatus =
     countedCount === 0
       ? "DRAFT"
       : countedCount === allDayItems.length
-      ? "READY_FOR_REVIEW"
-      : "COUNTING";
+        ? "READY_FOR_REVIEW"
+        : "COUNTING";
 
   let totalClosing = 0;
   let totalUsed = 0;
@@ -763,7 +1099,8 @@ export async function updateDayItemsBatch(
           counted_ingredients: countedCount,
           status: store.days[dayIndex].status,
           checked_by: staffName,
-          total_closing_stock_value: store.days[dayIndex].total_closing_stock_value,
+          total_closing_stock_value:
+            store.days[dayIndex].total_closing_stock_value,
           total_used_value: store.days[dayIndex].total_used_value,
           total_wastage_value: store.days[dayIndex].total_wastage_value,
           total_purchase_value: store.days[dayIndex].total_purchase_value,
@@ -776,7 +1113,9 @@ export async function updateDayItemsBatch(
   return {
     success: true,
     day: store.days[dayIndex],
-    items: allDayItems.sort((a, b) => a.ingredient_number - b.ingredient_number),
+    items: allDayItems.sort(
+      (a, b) => a.ingredient_number - b.ingredient_number,
+    ),
   };
 }
 
@@ -786,7 +1125,7 @@ export async function markChecklistItemCounted(
   ingredientId: string,
   physicalQty: number | null,
   staffName: string = "Staff",
-  isCounted: boolean = true
+  isCounted: boolean = true,
 ): Promise<InventoryDayItem> {
   const result = await updateDayItemsBatch(
     dayId,
@@ -797,10 +1136,12 @@ export async function markChecklistItemCounted(
         is_counted: isCounted,
       },
     ],
-    staffName
+    staffName,
   );
 
-  const found = result.items.find((i) => i.ingredient_id === ingredientId || i.id === ingredientId);
+  const found = result.items.find(
+    (i) => i.ingredient_id === ingredientId || i.id === ingredientId,
+  );
   if (!found) throw new Error("Item not found after update");
   return found;
 }
@@ -809,7 +1150,7 @@ export async function markChecklistItemCounted(
 export async function finalizeDayRegister(
   dayId: string,
   managerName: string = "Manager",
-  notes?: string
+  notes?: string,
 ): Promise<InventoryDay> {
   const store = readLocalStore();
   const dayIndex = store.days.findIndex((d) => d.id === dayId);
@@ -848,37 +1189,45 @@ export async function finalizeDayRegister(
 
   if (subsequentDraftDays.length > 0) {
     const nextDay = subsequentDraftDays[0];
-    const nextDayItems = store.dayItems.filter((di) => di.inventory_day_id === nextDay.id);
+    const nextDayItems = store.dayItems.filter(
+      (di) => di.inventory_day_id === nextDay.id,
+    );
     for (const prevItem of dayItems) {
-      const nextItem = nextDayItems.find((ni) => ni.ingredient_id === prevItem.ingredient_id);
+      const nextItem = nextDayItems.find(
+        (ni) => ni.ingredient_id === prevItem.ingredient_id,
+      );
       if (nextItem) {
-        nextItem.opening_qty = prevItem.closing_actual_qty !== null ? prevItem.closing_actual_qty : 0;
+        nextItem.opening_qty =
+          prevItem.closing_actual_qty !== null
+            ? prevItem.closing_actual_qty
+            : 0;
         nextItem.calculated_used_qty = calculateUsedQty(
           nextItem.opening_qty,
           nextItem.purchased_qty,
           nextItem.wastage_qty,
-          nextItem.closing_actual_qty
+          nextItem.closing_actual_qty,
         );
         const itemPurchases = (store.purchases || []).filter(
-          (p) => p.date === nextDay.date && p.ingredient_id === nextItem.ingredient_id
+          (p) =>
+            p.date === nextDay.date &&
+            p.ingredient_id === nextItem.ingredient_id,
         );
-        const costCalc = calculateWeightedAverageCost(
-          nextItem.opening_qty,
+        const fifoRes = computeItemFifoValuation(
+          nextItem,
+          prevItem.closing_batches,
           prevItem.unit_cost,
-          nextItem.purchased_qty,
           itemPurchases,
-          null
+          nextDay.date
         );
-        nextItem.unit_cost = costCalc.unitCost;
-        nextItem.opening_stock_value = costCalc.openingStockValue;
-        nextItem.closing_stock_value =
-          nextItem.closing_actual_qty !== null && nextItem.unit_cost != null
-            ? Number((nextItem.closing_actual_qty * nextItem.unit_cost).toFixed(2))
-            : null;
-        nextItem.used_cost =
-          nextItem.calculated_used_qty !== null && nextItem.unit_cost != null
-            ? Number((nextItem.calculated_used_qty * nextItem.unit_cost).toFixed(2))
-            : null;
+        nextItem.available_batches = fifoRes.availableBatches;
+        nextItem.closing_batches = fifoRes.closingBatches;
+        nextItem.unit_cost = fifoRes.unitCost;
+        nextItem.opening_stock_value = fifoRes.openingStockValue;
+        nextItem.total_purchase_cost = fifoRes.totalPurchaseCost;
+        nextItem.latest_purchase_price = fifoRes.latestPurchasePrice ?? nextItem.latest_purchase_price;
+        nextItem.closing_stock_value = fifoRes.closingStockValue;
+        nextItem.used_cost = fifoRes.usedCost;
+        nextItem.wastage_cost = fifoRes.wastageCost;
       }
     }
   }
@@ -911,7 +1260,7 @@ export async function finalizeDayRegister(
 export async function reopenDayRegister(
   dayId: string,
   adminName: string = "Admin",
-  reason?: string
+  reason?: string,
 ): Promise<InventoryDay> {
   const store = readLocalStore();
   const dayIndex = store.days.findIndex((d) => d.id === dayId);
@@ -923,7 +1272,8 @@ export async function reopenDayRegister(
   store.days[dayIndex].finalized_by = null;
   store.days[dayIndex].updated_at = reopenedAt;
   if (reason) {
-    store.days[dayIndex].notes = `[Reopened by ${adminName} at ${reopenedAt}]: ${reason}`;
+    store.days[dayIndex].notes =
+      `[Reopened by ${adminName} at ${reopenedAt}]: ${reason}`;
   }
 
   writeLocalStore(store);
@@ -950,7 +1300,7 @@ export async function reopenDayRegister(
 
 // 8. Purchases (Date-Wise Purchase Records & Weighted-Average Updating)
 export async function recordInventoryPurchase(
-  purchase: Omit<InventoryPurchaseRecord, "id" | "created_at">
+  purchase: Omit<InventoryPurchaseRecord, "id" | "created_at">,
 ): Promise<{
   purchase: InventoryPurchaseRecord;
   dayItem: InventoryDayItem | null;
@@ -959,7 +1309,9 @@ export async function recordInventoryPurchase(
   if (!store.purchases) store.purchases = [];
 
   const id = `pur_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const totalCost = Number((purchase.quantity * purchase.price_per_unit).toFixed(2));
+  const totalCost = Number(
+    (purchase.quantity * purchase.price_per_unit).toFixed(2),
+  );
 
   const newPurchase: InventoryPurchaseRecord = {
     id,
@@ -998,45 +1350,81 @@ export async function recordInventoryPurchase(
   const day = store.days.find((d) => d.date === purchase.date);
   if (day) {
     const itemIndex = store.dayItems.findIndex(
-      (di) => di.inventory_day_id === day.id && di.ingredient_id === purchase.ingredient_id
+      (di) =>
+        di.inventory_day_id === day.id &&
+        di.ingredient_id === purchase.ingredient_id,
     );
     if (itemIndex !== -1) {
       const allItemPurchases = store.purchases.filter(
-        (p) => p.date === purchase.date && p.ingredient_id === purchase.ingredient_id
+        (p) =>
+          p.date === purchase.date &&
+          p.ingredient_id === purchase.ingredient_id,
       );
-      const totalPurchasedQty = allItemPurchases.reduce((acc, p) => acc + p.quantity, 0);
-      store.dayItems[itemIndex].purchased_qty = Number(totalPurchasedQty.toFixed(3));
+      const totalPurchasedQty = allItemPurchases.reduce(
+        (acc, p) => acc + p.quantity,
+        0,
+      );
+      store.dayItems[itemIndex].purchased_qty = Number(
+        totalPurchasedQty.toFixed(3),
+      );
       store.dayItems[itemIndex].calculated_used_qty = calculateUsedQty(
         store.dayItems[itemIndex].opening_qty,
         store.dayItems[itemIndex].purchased_qty,
         store.dayItems[itemIndex].wastage_qty,
-        store.dayItems[itemIndex].closing_actual_qty
+        store.dayItems[itemIndex].closing_actual_qty,
       );
 
-      const ing = store.ingredients.find((i) => i.id === purchase.ingredient_id);
-      const costCalc = calculateWeightedAverageCost(
-        store.dayItems[itemIndex].opening_qty,
-        store.dayItems[itemIndex].unit_cost,
-        store.dayItems[itemIndex].purchased_qty,
+      const { prevClosingBatchesMap, prevCostMap } = getPreviousFinalizedDayContext(
+        store,
+        day.date
+      );
+      const ing = store.ingredients.find(
+        (i) => i.id === purchase.ingredient_id,
+      );
+      const fallbackCost =
+        prevCostMap[purchase.ingredient_id] ??
+        (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : store.dayItems[itemIndex].unit_cost);
+      const prevBatches = prevClosingBatchesMap[purchase.ingredient_id];
+
+      const fifoRes = computeItemFifoValuation(
+        store.dayItems[itemIndex],
+        prevBatches,
+        fallbackCost,
         allItemPurchases,
-        ing?.cost_per_unit
+        day.date
       );
-      store.dayItems[itemIndex].unit_cost = costCalc.unitCost;
-      store.dayItems[itemIndex].latest_purchase_price = newPurchase.price_per_unit;
-      store.dayItems[itemIndex].total_purchase_cost = costCalc.totalPurchaseCost;
 
-      if (store.dayItems[itemIndex].closing_actual_qty !== null && costCalc.unitCost !== null) {
-        store.dayItems[itemIndex].closing_stock_value = Number(
-          (store.dayItems[itemIndex].closing_actual_qty! * costCalc.unitCost).toFixed(2)
-        );
-      }
-      if (store.dayItems[itemIndex].calculated_used_qty !== null && costCalc.unitCost !== null) {
-        store.dayItems[itemIndex].used_cost = Number(
-          (store.dayItems[itemIndex].calculated_used_qty! * costCalc.unitCost).toFixed(2)
-        );
-      }
+      store.dayItems[itemIndex].available_batches = fifoRes.availableBatches;
+      store.dayItems[itemIndex].closing_batches = fifoRes.closingBatches;
+      store.dayItems[itemIndex].unit_cost = fifoRes.unitCost;
+      store.dayItems[itemIndex].latest_purchase_price =
+        fifoRes.latestPurchasePrice ?? newPurchase.price_per_unit;
+      store.dayItems[itemIndex].total_purchase_cost = fifoRes.totalPurchaseCost;
+      store.dayItems[itemIndex].opening_stock_value = fifoRes.openingStockValue;
+      store.dayItems[itemIndex].closing_stock_value = fifoRes.closingStockValue;
+      store.dayItems[itemIndex].used_cost = fifoRes.usedCost;
+      store.dayItems[itemIndex].wastage_cost = fifoRes.wastageCost;
+      store.dayItems[itemIndex].purchase_entries = allItemPurchases;
       store.dayItems[itemIndex].updated_at = new Date().toISOString();
       updatedDayItem = store.dayItems[itemIndex];
+
+      // Recompute day stats
+      const allDayItems = store.dayItems.filter((di) => di.inventory_day_id === day.id);
+      let totalClosing = 0;
+      let totalUsed = 0;
+      let totalWastage = 0;
+      let totalPurchase = 0;
+      for (const it of allDayItems) {
+        if (it.closing_stock_value) totalClosing += it.closing_stock_value;
+        if (it.used_cost) totalUsed += it.used_cost;
+        if (it.wastage_cost) totalWastage += it.wastage_cost;
+        if (it.total_purchase_cost) totalPurchase += it.total_purchase_cost;
+      }
+      day.total_closing_stock_value = Number(totalClosing.toFixed(2));
+      day.total_used_value = Number(totalUsed.toFixed(2));
+      day.total_wastage_value = Number(totalWastage.toFixed(2));
+      day.total_purchase_value = Number(totalPurchase.toFixed(2));
+      day.updated_at = new Date().toISOString();
     }
   }
 
@@ -1053,7 +1441,7 @@ export async function recordInventoryPurchase(
 }
 
 export async function deleteInventoryPurchase(
-  purchaseId: string
+  purchaseId: string,
 ): Promise<{ success: boolean; message?: string }> {
   const store = readLocalStore();
   if (!store.purchases) store.purchases = [];
@@ -1066,43 +1454,75 @@ export async function deleteInventoryPurchase(
   const day = store.days.find((d) => d.date === removed.date);
   if (day) {
     const itemIndex = store.dayItems.findIndex(
-      (di) => di.inventory_day_id === day.id && di.ingredient_id === removed.ingredient_id
+      (di) =>
+        di.inventory_day_id === day.id &&
+        di.ingredient_id === removed.ingredient_id,
     );
     if (itemIndex !== -1) {
       const remainingPurchases = store.purchases.filter(
-        (p) => p.date === removed.date && p.ingredient_id === removed.ingredient_id
+        (p) =>
+          p.date === removed.date && p.ingredient_id === removed.ingredient_id,
       );
-      const totalPurchasedQty = remainingPurchases.reduce((acc, p) => acc + p.quantity, 0);
-      store.dayItems[itemIndex].purchased_qty = Number(totalPurchasedQty.toFixed(3));
+      const totalPurchasedQty = remainingPurchases.reduce(
+        (acc, p) => acc + p.quantity,
+        0,
+      );
+      store.dayItems[itemIndex].purchased_qty = Number(
+        totalPurchasedQty.toFixed(3),
+      );
       store.dayItems[itemIndex].calculated_used_qty = calculateUsedQty(
         store.dayItems[itemIndex].opening_qty,
         store.dayItems[itemIndex].purchased_qty,
         store.dayItems[itemIndex].wastage_qty,
-        store.dayItems[itemIndex].closing_actual_qty
+        store.dayItems[itemIndex].closing_actual_qty,
+      );
+      const { prevClosingBatchesMap, prevCostMap } = getPreviousFinalizedDayContext(
+        store,
+        day.date
       );
       const ing = store.ingredients.find((i) => i.id === removed.ingredient_id);
-      const costCalc = calculateWeightedAverageCost(
-        store.dayItems[itemIndex].opening_qty,
-        store.dayItems[itemIndex].unit_cost,
-        store.dayItems[itemIndex].purchased_qty,
-        remainingPurchases,
-        ing?.cost_per_unit
-      );
-      store.dayItems[itemIndex].unit_cost = costCalc.unitCost;
-      store.dayItems[itemIndex].latest_purchase_price = costCalc.latestPurchasePrice;
-      store.dayItems[itemIndex].total_purchase_cost = costCalc.totalPurchaseCost;
+      const fallbackCost =
+        prevCostMap[removed.ingredient_id] ??
+        (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : store.dayItems[itemIndex].unit_cost);
+      const prevBatches = prevClosingBatchesMap[removed.ingredient_id];
 
-      if (store.dayItems[itemIndex].closing_actual_qty !== null && costCalc.unitCost !== null) {
-        store.dayItems[itemIndex].closing_stock_value = Number(
-          (store.dayItems[itemIndex].closing_actual_qty! * costCalc.unitCost).toFixed(2)
-        );
-      }
-      if (store.dayItems[itemIndex].calculated_used_qty !== null && costCalc.unitCost !== null) {
-        store.dayItems[itemIndex].used_cost = Number(
-          (store.dayItems[itemIndex].calculated_used_qty! * costCalc.unitCost).toFixed(2)
-        );
-      }
+      const fifoRes = computeItemFifoValuation(
+        store.dayItems[itemIndex],
+        prevBatches,
+        fallbackCost,
+        remainingPurchases,
+        day.date
+      );
+
+      store.dayItems[itemIndex].available_batches = fifoRes.availableBatches;
+      store.dayItems[itemIndex].closing_batches = fifoRes.closingBatches;
+      store.dayItems[itemIndex].unit_cost = fifoRes.unitCost;
+      store.dayItems[itemIndex].latest_purchase_price = fifoRes.latestPurchasePrice;
+      store.dayItems[itemIndex].total_purchase_cost = fifoRes.totalPurchaseCost;
+      store.dayItems[itemIndex].opening_stock_value = fifoRes.openingStockValue;
+      store.dayItems[itemIndex].closing_stock_value = fifoRes.closingStockValue;
+      store.dayItems[itemIndex].used_cost = fifoRes.usedCost;
+      store.dayItems[itemIndex].wastage_cost = fifoRes.wastageCost;
+      store.dayItems[itemIndex].purchase_entries = remainingPurchases;
       store.dayItems[itemIndex].updated_at = new Date().toISOString();
+
+      // Recompute day stats
+      const allDayItems = store.dayItems.filter((di) => di.inventory_day_id === day.id);
+      let totalClosing = 0;
+      let totalUsed = 0;
+      let totalWastage = 0;
+      let totalPurchase = 0;
+      for (const it of allDayItems) {
+        if (it.closing_stock_value) totalClosing += it.closing_stock_value;
+        if (it.used_cost) totalUsed += it.used_cost;
+        if (it.wastage_cost) totalWastage += it.wastage_cost;
+        if (it.total_purchase_cost) totalPurchase += it.total_purchase_cost;
+      }
+      day.total_closing_stock_value = Number(totalClosing.toFixed(2));
+      day.total_used_value = Number(totalUsed.toFixed(2));
+      day.total_wastage_value = Number(totalWastage.toFixed(2));
+      day.total_purchase_value = Number(totalPurchase.toFixed(2));
+      day.updated_at = new Date().toISOString();
     }
   }
 
@@ -1120,7 +1540,7 @@ export async function deleteInventoryPurchase(
 
 export async function getInventoryPurchases(
   ingredientId?: string,
-  date?: string
+  date?: string,
 ): Promise<InventoryPurchaseRecord[]> {
   const store = readLocalStore();
   let list = store.purchases || [];
@@ -1135,13 +1555,15 @@ export async function getInventoryPurchases(
 
 // 9. Category Management (Edit, Reorder, Archive, Move Ingredients)
 export async function archiveInventoryCategory(
-  categoryId: string
+  categoryId: string,
 ): Promise<{ success: boolean; message?: string }> {
   const store = readLocalStore();
   const catIndex = store.categories.findIndex((c) => c.id === categoryId);
   if (catIndex === -1) return { success: false, message: "Category not found" };
 
-  const activeCount = store.ingredients.filter((i) => i.is_active && i.category_id === categoryId).length;
+  const activeCount = store.ingredients.filter(
+    (i) => i.is_active && i.category_id === categoryId,
+  ).length;
   if (activeCount > 0) {
     return {
       success: false,
@@ -1156,7 +1578,10 @@ export async function archiveInventoryCategory(
   if (await isSupabaseAvailable()) {
     try {
       const admin = getSupabaseAdminClient() as any;
-      await admin.from("inventory_categories").update({ is_active: false }).eq("id", categoryId);
+      await admin
+        .from("inventory_categories")
+        .update({ is_active: false })
+        .eq("id", categoryId);
     } catch {}
   }
 
@@ -1165,14 +1590,20 @@ export async function archiveInventoryCategory(
 
 export async function moveIngredientCategory(
   ingredientId: string,
-  newCategoryId: string
-): Promise<{ success: boolean; ingredient?: InventoryIngredient; message?: string }> {
+  newCategoryId: string,
+): Promise<{
+  success: boolean;
+  ingredient?: InventoryIngredient;
+  message?: string;
+}> {
   const store = readLocalStore();
   const ingIndex = store.ingredients.findIndex((i) => i.id === ingredientId);
-  if (ingIndex === -1) return { success: false, message: "Ingredient not found" };
+  if (ingIndex === -1)
+    return { success: false, message: "Ingredient not found" };
 
   const targetCategory = store.categories.find((c) => c.id === newCategoryId);
-  if (!targetCategory) return { success: false, message: "Target category not found" };
+  if (!targetCategory)
+    return { success: false, message: "Target category not found" };
 
   store.ingredients[ingIndex].category_id = newCategoryId;
   store.ingredients[ingIndex].updated_at = new Date().toISOString();
@@ -1192,11 +1623,17 @@ export async function moveIngredientCategory(
       const admin = getSupabaseAdminClient() as any;
       await admin
         .from("inventory_ingredients")
-        .update({ category_id: newCategoryId, updated_at: new Date().toISOString() })
+        .update({
+          category_id: newCategoryId,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", ingredientId);
       await admin
         .from("inventory_day_items")
-        .update({ category_id: newCategoryId, category_name: targetCategory.name })
+        .update({
+          category_id: newCategoryId,
+          category_name: targetCategory.name,
+        })
         .eq("ingredient_id", ingredientId);
     } catch {}
   }
@@ -1206,7 +1643,7 @@ export async function moveIngredientCategory(
 
 export async function updateIngredientCost(
   ingredientId: string,
-  costPerUnit: number
+  costPerUnit: number,
 ): Promise<{ success: boolean; ingredient?: InventoryIngredient }> {
   const store = readLocalStore();
   const ingIndex = store.ingredients.findIndex((i) => i.id === ingredientId);
@@ -1222,7 +1659,10 @@ export async function updateIngredientCost(
       const admin = getSupabaseAdminClient() as any;
       await admin
         .from("inventory_ingredients")
-        .update({ cost_per_unit: Number(costPerUnit), updated_at: new Date().toISOString() })
+        .update({
+          cost_per_unit: Number(costPerUnit),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", ingredientId);
     } catch {}
   }
@@ -1232,7 +1672,7 @@ export async function updateIngredientCost(
 
 // 10. Movements (Audited Purchases and Wastage)
 export async function recordInventoryMovement(
-  movement: Omit<InventoryMovement, "id" | "created_at">
+  movement: Omit<InventoryMovement, "id" | "created_at">,
 ): Promise<InventoryMovement> {
   const store = readLocalStore();
   const id = `mov_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -1248,7 +1688,9 @@ export async function recordInventoryMovement(
   const day = store.days.find((d) => d.date === targetDate);
   if (day) {
     const itemIndex = store.dayItems.findIndex(
-      (di) => di.inventory_day_id === day.id && di.ingredient_id === movement.ingredient_id
+      (di) =>
+        di.inventory_day_id === day.id &&
+        di.ingredient_id === movement.ingredient_id,
     );
     if (itemIndex !== -1) {
       const current = store.dayItems[itemIndex];
@@ -1261,7 +1703,7 @@ export async function recordInventoryMovement(
         current.opening_qty,
         current.purchased_qty,
         current.wastage_qty,
-        current.closing_actual_qty
+        current.closing_actual_qty,
       );
       current.updated_at = new Date().toISOString();
     }
@@ -1281,7 +1723,7 @@ export async function recordInventoryMovement(
 
 export async function getInventoryMovements(
   ingredientId?: string,
-  limit: number = 50
+  limit: number = 50,
 ): Promise<InventoryMovement[]> {
   const store = readLocalStore();
   let list = store.movements;
@@ -1292,7 +1734,9 @@ export async function getInventoryMovements(
 }
 
 // 11. Dashboard Aggregation
-export async function getInventoryDashboard(dateStr?: string): Promise<InventoryDashboardData> {
+export async function getInventoryDashboard(
+  dateStr?: string,
+): Promise<InventoryDashboardData> {
   const { day, items, categories } = await getOrCreateDayRegister(dateStr);
   const ingredients = await getInventoryIngredients();
 
@@ -1307,7 +1751,9 @@ export async function getInventoryDashboard(dateStr?: string): Promise<Inventory
     const ing = ingMap.get(item.ingredient_id);
     const minThreshold = ing?.min_stock_level || 0;
     const currentQty =
-      item.closing_actual_qty !== null ? item.closing_actual_qty : item.opening_qty;
+      item.closing_actual_qty !== null
+        ? item.closing_actual_qty
+        : item.opening_qty;
     if (currentQty <= minThreshold) {
       lowStockCount++;
     }
@@ -1411,14 +1857,17 @@ export interface InventoryAnalyticsData {
 
 export async function getInventoryAnalytics(
   startDate: string,
-  endDate: string
+  endDate: string,
 ): Promise<InventoryAnalyticsData> {
   const store = readLocalStore();
   const categories = await getInventoryCategories();
   const ingredients = await getInventoryIngredients();
 
   const finalizedDays = store.days
-    .filter((d) => d.date >= startDate && d.date <= endDate && d.status === "FINALIZED")
+    .filter(
+      (d) =>
+        d.date >= startDate && d.date <= endDate && d.status === "FINALIZED",
+    )
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const latestFinalizedDay =
@@ -1430,7 +1879,9 @@ export async function getInventoryAnalytics(
   let latestClosingStockValue = 0;
 
   if (latestFinalizedDay) {
-    const latestItems = store.dayItems.filter((di) => di.inventory_day_id === latestFinalizedDay.id);
+    const latestItems = store.dayItems.filter(
+      (di) => di.inventory_day_id === latestFinalizedDay.id,
+    );
     for (const it of latestItems) {
       if (it.closing_stock_value) {
         latestClosingStockValue += it.closing_stock_value;
@@ -1486,7 +1937,9 @@ export async function getInventoryAnalytics(
   let missingCostItemsCount = 0;
 
   for (const day of finalizedDays) {
-    const dayItems = store.dayItems.filter((di) => di.inventory_day_id === day.id);
+    const dayItems = store.dayItems.filter(
+      (di) => di.inventory_day_id === day.id,
+    );
     let dayUsedVal = 0;
     let dayPurchaseVal = 0;
     let dayWastageVal = 0;
@@ -1515,7 +1968,10 @@ export async function getInventoryAnalytics(
         if (catConsumptionMap[it.category_id]) {
           catConsumptionMap[it.category_id].consumptionCost += it.used_cost;
         }
-      } else if (it.calculated_used_qty !== null && it.calculated_used_qty > 0) {
+      } else if (
+        it.calculated_used_qty !== null &&
+        it.calculated_used_qty > 0
+      ) {
         missingCostItemsCount++;
       }
 
@@ -1534,7 +1990,8 @@ export async function getInventoryAnalytics(
       if (it.total_purchase_cost) {
         dayPurchaseVal += it.total_purchase_cost;
         if (catConsumptionMap[it.category_id]) {
-          catConsumptionMap[it.category_id].purchasedCost += it.total_purchase_cost;
+          catConsumptionMap[it.category_id].purchasedCost +=
+            it.total_purchase_cost;
         }
       }
     }
@@ -1553,10 +2010,13 @@ export async function getInventoryAnalytics(
 
   // In latest day, record category closing stock value
   if (latestFinalizedDay) {
-    const latestItems = store.dayItems.filter((di) => di.inventory_day_id === latestFinalizedDay.id);
+    const latestItems = store.dayItems.filter(
+      (di) => di.inventory_day_id === latestFinalizedDay.id,
+    );
     for (const it of latestItems) {
       if (it.closing_stock_value && catConsumptionMap[it.category_id]) {
-        catConsumptionMap[it.category_id].closingStockValue += it.closing_stock_value;
+        catConsumptionMap[it.category_id].closingStockValue +=
+          it.closing_stock_value;
       }
     }
   }
@@ -1576,7 +2036,11 @@ export async function getInventoryAnalytics(
       consumptionCost: Number(u.consumptionCost.toFixed(2)),
       avgUnitCost:
         u.unitCosts.length > 0
-          ? Number((u.unitCosts.reduce((a, b) => a + b, 0) / u.unitCosts.length).toFixed(2))
+          ? Number(
+              (
+                u.unitCosts.reduce((a, b) => a + b, 0) / u.unitCosts.length
+              ).toFixed(2),
+            )
           : 0,
     }));
 
@@ -1595,7 +2059,9 @@ export async function getInventoryAnalytics(
   // Most wasted ingredients
   const mostWastedIngredients = [...allUsageList]
     .filter((u) => u.wastageQty > 0)
-    .sort((a, b) => b.wastageCost - a.wastageCost || b.wastageQty - a.wastageQty)
+    .sort(
+      (a, b) => b.wastageCost - a.wastageCost || b.wastageQty - a.wastageQty,
+    )
     .slice(0, 15)
     .map((u) => ({
       ingredientId: u.ingredientId,
@@ -1651,17 +2117,19 @@ export async function getInventoryAnalytics(
 export function generateRegisterCSV(
   day: InventoryDay,
   items: InventoryDayItem[],
-  categories: InventoryCategory[]
+  categories: InventoryCategory[],
 ): string {
   const lines: string[] = [];
   lines.push(`SPIRAL CAFE — DAILY INVENTORY REGISTER`);
-  lines.push(`Date: ${day.date}, Status: ${day.status}, Staff: ${day.checked_by || "Staff"}`);
   lines.push(
-    `Formula: Used = Opening + Purchased - Wastage - Closing Actual | Stock Value = Closing Actual * Weighted Avg Cost`
+    `Date: ${day.date}, Status: ${day.status}, Staff: ${day.checked_by || "Staff"}`,
+  );
+  lines.push(
+    `Formula: Used = Opening + Purchased - Wastage - Closing Actual | Stock Value = Closing Actual * Weighted Avg Cost`,
   );
   lines.push("");
   lines.push(
-    "Item #,Category,Ingredient,Unit,Opening,Purchased,Wastage,Closing Actual,Unit Cost (Rs),Stock Value (Rs),Used,Used Cost (Rs),Status,Notes"
+    "Item #,Category,Ingredient,Unit,Opening,Purchased,Wastage,Closing Actual,Unit Cost (Rs),Stock Value (Rs),Used,Used Cost (Rs),Status,Notes",
   );
 
   const catMap = new Map(categories.map((c) => [c.id, c]));
@@ -1669,15 +2137,27 @@ export function generateRegisterCSV(
   for (const item of items) {
     const cat = catMap.get(item.category_id);
     const catLabel = cat ? `[${cat.code}] ${cat.name}` : item.category_name;
-    const closingStr = item.closing_actual_qty !== null ? item.closing_actual_qty.toString() : "";
-    const unitCostStr = item.unit_cost !== null && item.unit_cost !== undefined ? item.unit_cost.toFixed(2) : "Not Set";
+    const closingStr =
+      item.closing_actual_qty !== null
+        ? item.closing_actual_qty.toString()
+        : "";
+    const unitCostStr =
+      item.unit_cost !== null && item.unit_cost !== undefined
+        ? item.unit_cost.toFixed(2)
+        : "Not Set";
     const stockValStr =
-      item.closing_stock_value !== null && item.closing_stock_value !== undefined
+      item.closing_stock_value !== null &&
+      item.closing_stock_value !== undefined
         ? item.closing_stock_value.toFixed(2)
         : "";
-    const usedStr = item.calculated_used_qty !== null ? item.calculated_used_qty.toString() : "";
+    const usedStr =
+      item.calculated_used_qty !== null
+        ? item.calculated_used_qty.toString()
+        : "";
     const usedCostStr =
-      item.used_cost !== null && item.used_cost !== undefined ? item.used_cost.toFixed(2) : "";
+      item.used_cost !== null && item.used_cost !== undefined
+        ? item.used_cost.toFixed(2)
+        : "";
     const statusStr = item.is_counted ? "COUNTED" : "PENDING";
     const notesClean = (item.notes || "").replace(/"/g, '""');
 
@@ -1697,7 +2177,7 @@ export function generateRegisterCSV(
         usedCostStr,
         statusStr,
         `"${notesClean}"`,
-      ].join(",")
+      ].join(","),
     );
   }
 
