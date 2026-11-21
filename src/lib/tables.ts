@@ -139,7 +139,11 @@ const DEFAULT_PRINTER_SETTINGS: PrinterSettings = {
 };
 
 function getConfigFilePath(): string {
-  return path.resolve(process.cwd(), "src/data/tables_config.json");
+  const p1 = path.resolve(process.cwd(), "src/data/tables_config.json");
+  if (fs.existsSync(p1)) return p1;
+  const p2 = path.resolve(process.cwd(), "menu-card/src/data/tables_config.json");
+  if (fs.existsSync(p2)) return p2;
+  return p1;
 }
 
 function readLocalConfigFile(): { tables: TableDefinition[]; printerSettings: PrinterSettings } {
@@ -177,7 +181,11 @@ let memoryReservations: TableReservation[] = [];
 let memoryReservationsLoaded = false;
 
 function getReservationsFilePath(): string {
-  return path.resolve(process.cwd(), "src/data/reservations.json");
+  const p1 = path.resolve(process.cwd(), "src/data/reservations.json");
+  if (fs.existsSync(p1)) return p1;
+  const p2 = path.resolve(process.cwd(), "menu-card/src/data/reservations.json");
+  if (fs.existsSync(p2)) return p2;
+  return p1;
 }
 
 function readLocalReservations(): TableReservation[] {
@@ -222,7 +230,44 @@ function writeLocalReservations(reservations: TableReservation[]) {
 export async function getActiveReservations(): Promise<TableReservation[]> {
   const now = new Date();
 
-  // 1. Try Supabase
+  // 1. Primary: Use customer_sessions in Supabase (reliable distributed storage across all serverless containers)
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("customer_sessions" as any)
+      .select("*")
+      .ilike("id", "res_%")
+      .gt("last_active_at", now.toISOString());
+
+    if (!error && Array.isArray(data)) {
+      const activeFromDb: TableReservation[] = data.map((r: any) => ({
+        id: r.id,
+        tableNumber: normalizeTableLabel(r.table_number),
+        customerSessionId: r.session_token || "",
+        customerPhone: r.customer_phone || undefined,
+        reservedAt: r.started_at || new Date().toISOString(),
+        expiresAt: r.last_active_at || new Date().toISOString(),
+        status: "ACTIVE" as const,
+      }));
+
+      // Cache to local memory & file
+      writeLocalReservations(activeFromDb);
+
+      // Async cleanup expired reservation records from customer_sessions
+      Promise.resolve(
+        supabaseAdmin
+          .from("customer_sessions" as any)
+          .delete()
+          .ilike("id", "res_%")
+          .lte("last_active_at", now.toISOString())
+      ).catch(() => {});
+
+      return activeFromDb;
+    }
+  } catch (err) {
+    console.warn("customer_sessions reservation query warning:", err);
+  }
+
+  // 2. Secondary: Try table_reservations table if present
   try {
     const { data, error } = await supabaseAdmin
       .from("table_reservations" as any)
@@ -249,7 +294,7 @@ export async function getActiveReservations(): Promise<TableReservation[]> {
     }
   } catch {}
 
-  // 2. Fallback to local file with expiration filter
+  // 3. Fallback to local file with expiration filter
   const local = readLocalReservations();
   const activeLocal = local.filter((r) => {
     return r.status === "ACTIVE" && new Date(r.expiresAt).getTime() > now.getTime();
@@ -264,6 +309,24 @@ export async function releaseSessionReservations(
   customerSessionId: string,
   excludeTable?: string
 ): Promise<void> {
+  // 1. Release in customer_sessions
+  try {
+    let query = supabaseAdmin
+      .from("customer_sessions" as any)
+      .delete()
+      .ilike("id", "res_%")
+      .eq("session_token", customerSessionId);
+
+    if (excludeTable) {
+      const excNorm = normalizeTableLabel(excludeTable).toUpperCase();
+      query = query.neq("table_number", excNorm).neq("id", `res_${excNorm}`);
+    }
+    await query;
+  } catch (err) {
+    console.warn("releaseSessionReservations customer_sessions warning:", err);
+  }
+
+  // 2. Release in table_reservations
   try {
     let query = supabaseAdmin
       .from("table_reservations" as any)
@@ -488,6 +551,21 @@ export async function reserveTable(params: {
 
       try {
         await supabaseAdmin
+          .from("customer_sessions" as any)
+          .upsert({
+            id: `res_${norm.toUpperCase()}`,
+            table_number: norm.toUpperCase(),
+            session_token: params.customerSessionId,
+            customer_phone: refreshed.customerPhone || null,
+            started_at: existingForTable.reservedAt,
+            last_active_at: expiresAt,
+          });
+      } catch (err) {
+        console.warn("customer_sessions refresh warning:", err);
+      }
+
+      try {
+        await supabaseAdmin
           .from("table_reservations" as any)
           .update({ expires_at: expiresAt, customer_phone: refreshed.customerPhone })
           .eq("id", existingForTable.id);
@@ -511,7 +589,7 @@ export async function reserveTable(params: {
 
   // 4. Create new reservation
   const reservation: TableReservation = {
-    id: `RES-${norm}-${Date.now().toString(36).toUpperCase()}`,
+    id: `res_${norm.toUpperCase()}`,
     tableNumber: norm,
     customerSessionId: params.customerSessionId,
     customerPhone: params.customerPhone,
@@ -519,6 +597,19 @@ export async function reserveTable(params: {
     expiresAt,
     status: "ACTIVE",
   };
+
+  try {
+    await supabaseAdmin.from("customer_sessions" as any).upsert({
+      id: `res_${norm.toUpperCase()}`,
+      table_number: norm.toUpperCase(),
+      session_token: params.customerSessionId,
+      customer_phone: params.customerPhone || null,
+      started_at: reservation.reservedAt,
+      last_active_at: expiresAt,
+    });
+  } catch (err) {
+    console.warn("customer_sessions insert reservation warning:", err);
+  }
 
   try {
     await supabaseAdmin.from("table_reservations" as any).insert({
@@ -571,6 +662,13 @@ export async function transferReservation(params: {
   // 2. Mark old table reservation as TRANSFERRED
   try {
     await supabaseAdmin
+      .from("customer_sessions" as any)
+      .delete()
+      .eq("id", `res_${fromNorm.toUpperCase()}`);
+  } catch {}
+
+  try {
+    await supabaseAdmin
       .from("table_reservations" as any)
       .update({ status: "TRANSFERRED", updated_at: new Date().toISOString() })
       .eq("table_number", fromNorm)
@@ -597,7 +695,11 @@ let memoryTransfers: TableTransferRequest[] = [];
 let memoryTransfersLoaded = false;
 
 function getTransfersFilePath(): string {
-  return path.resolve(process.cwd(), "src/data/table_transfers.json");
+  const p1 = path.resolve(process.cwd(), "src/data/table_transfers.json");
+  if (fs.existsSync(p1)) return p1;
+  const p2 = path.resolve(process.cwd(), "menu-card/src/data/table_transfers.json");
+  if (fs.existsSync(p2)) return p2;
+  return p1;
 }
 
 export function readLocalTransfers(): TableTransferRequest[] {
@@ -1255,6 +1357,19 @@ export async function adminManualTransfer(params: {
       });
     } catch {}
 
+    try {
+      await supabaseAdmin
+        .from("customer_sessions" as any)
+        .upsert({
+          id: `res_${toNorm.toUpperCase()}`,
+          table_number: toNorm.toUpperCase(),
+          session_token: newReservation.customerSessionId,
+          customer_phone: newReservation.customerPhone || null,
+          started_at: newReservation.reservedAt,
+          last_active_at: newReservation.expiresAt,
+        });
+    } catch {}
+
     // Update customer_sessions table if present
     try {
       if (reservationFrom.customerSessionId) {
@@ -1365,6 +1480,19 @@ export async function adminManualTransfer(params: {
     });
   } catch {}
 
+  try {
+    await supabaseAdmin
+      .from("customer_sessions" as any)
+      .upsert({
+        id: `res_${toNorm.toUpperCase()}`,
+        table_number: toNorm.toUpperCase(),
+        session_token: fallbackReservation.customerSessionId,
+        customer_phone: null,
+        started_at: fallbackReservation.reservedAt,
+        last_active_at: fallbackReservation.expiresAt,
+      });
+  } catch {}
+
   return {
     success: true,
     fromTable: fromNorm,
@@ -1385,6 +1513,15 @@ export async function releaseTableReservation(
   const now = new Date().toISOString();
 
   cancelPendingTransfersForTable(norm);
+
+  try {
+    await supabaseAdmin
+      .from("customer_sessions" as any)
+      .delete()
+      .eq("id", `res_${norm.toUpperCase()}`);
+  } catch (err) {
+    console.warn("releaseTableReservation customer_sessions warning:", err);
+  }
 
   try {
     await supabaseAdmin
@@ -1450,6 +1587,15 @@ export async function convertReservationToVisit(params: {
 }): Promise<void> {
   const norm = normalizeTableLabel(params.tableNumber);
   const now = new Date().toISOString();
+
+  try {
+    await supabaseAdmin
+      .from("customer_sessions" as any)
+      .delete()
+      .eq("id", `res_${norm.toUpperCase()}`);
+  } catch (err) {
+    console.warn("convertReservationToVisit customer_sessions warning:", err);
+  }
 
   try {
     await supabaseAdmin
