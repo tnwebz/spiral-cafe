@@ -147,6 +147,28 @@ export default function CartOrdersSheet() {
     }
   }, [isViewOnlyMenu, isCartOpen, setIsCartOpen]);
 
+  // Handle mobile hardware/gesture back button so it closes the cart/orders sheet instead of exiting the site
+  useEffect(() => {
+    if (!isCartOpen) return;
+
+    // Push a history state when the sheet opens
+    window.history.pushState({ spiralModal: "cart_orders" }, "");
+
+    const handlePopState = () => {
+      setIsCartOpen(false);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      // Clean up history state if sheet was closed via UI instead of popstate
+      if (typeof window !== "undefined" && window.history.state?.spiralModal === "cart_orders") {
+        window.history.back();
+      }
+    };
+  }, [isCartOpen, setIsCartOpen]);
+
   if (!isCartOpen || isViewOnlyMenu) return null;
 
   const handleSelectTable = async (table: string) => {
@@ -284,7 +306,14 @@ export default function CartOrdersSheet() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs">
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          setIsCartOpen(false);
+        }
+      }}
+    >
       <motion.div
         initial={{ y: "100%", opacity: 0.5 }}
         animate={{ y: 0, opacity: 1 }}

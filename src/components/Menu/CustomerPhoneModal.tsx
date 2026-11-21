@@ -248,8 +248,8 @@ export default function CustomerPhoneModal({
     }
   }, [pathname, isViewOnlyMenu, isTableBookedByOther]);
 
-  // Handler for First-Time Phone Submission -> Moves to Food Preference Screen
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  // Handler for Phone Submission -> Auto-resumes if preferences/table exist, else progresses
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = phone.replace(/\D/g, "");
 
@@ -260,14 +260,139 @@ export default function CustomerPhoneModal({
 
     const savedPhone =
       typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : null;
+    let activeSession = customerSessionId;
+
     if (savedPhone && savedPhone !== clean) {
-      // Different phone number detected! Isolate customer session completely
-      resetCustomerSession(clean);
+      // Different phone number entered! Isolate customer session completely
+      activeSession = resetCustomerSession(clean);
       setConflictVisitTable(null);
       setSelectedTable("");
     }
 
     setError("");
+
+    // Check if we have existing food preference and table/mode
+    const savedPref =
+      (typeof window !== "undefined" ? (localStorage.getItem("spiral_food_preference") as FoodPreference) : null) ||
+      foodPreference;
+
+    const savedOrderMode =
+      typeof window !== "undefined" ? localStorage.getItem("spiral_order_mode") : null;
+    const savedTableSession =
+      typeof window !== "undefined" ? localStorage.getItem("spiral_table_session") : null;
+    const savedTableNumber =
+      typeof window !== "undefined" ? localStorage.getItem("spiral_table_number") : null;
+
+    const detected =
+      conflictVisitTable ||
+      selectedTable ||
+      currentTable ||
+      tableNumber ||
+      savedTableSession ||
+      savedTableNumber;
+
+    // If customer already has a saved food preference, auto-resume with old details!
+    if (savedPref) {
+      setSubmitting(true);
+      try {
+        const masked = `******${clean.slice(-4)}`;
+        const profile: CustomerProfile = {
+          maskedPhone: masked,
+          foodPreference: savedPref,
+          lastVisited: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+
+        setFoodPreference(savedPref);
+        setCustomerProfile(profile);
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("spiral_customer_phone", clean);
+          localStorage.setItem("spiral_customer_profile", JSON.stringify(profile));
+          localStorage.setItem("spiral_food_preference", savedPref);
+        }
+
+        // Scenario A: Takeaway mode detected
+        if (detected === "TAKEAWAY" || savedOrderMode === "TAKEAWAY") {
+          setTableNumber("TAKEAWAY");
+          setSelectedTable("TAKEAWAY");
+          if (typeof window !== "undefined") {
+            localStorage.setItem("spiral_table_number", "TAKEAWAY");
+            localStorage.setItem("spiral_order_mode", "TAKEAWAY");
+            sessionStorage.setItem("spiral_entered", "true");
+          }
+          await fetch("/api/customers/identify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phoneNumber: clean,
+              foodPreference: savedPref,
+              tableNumber: "TAKEAWAY",
+              sessionId: activeSession,
+            }),
+          });
+          if (onPhoneSaved) {
+            onPhoneSaved(clean, "TAKEAWAY");
+          }
+          setIsOpen(false);
+          return;
+        }
+
+        // Scenario B: Dine-In Table detected (e.g. Table A1, F1)
+        if (detected && detected !== "TAKEAWAY") {
+          const cleanT = detected.replace(/^Table\s*/i, "").trim().toUpperCase();
+          try {
+            await fetch("/api/tables/reserve", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tableNumber: cleanT,
+                customerSessionId: activeSession,
+                customerPhone: clean,
+              }),
+            });
+          } catch (resErr) {
+            console.warn("Auto-reserve table notice:", resErr);
+          }
+
+          setTableNumber(cleanT);
+          setSelectedTable(cleanT);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("spiral_table_session", cleanT);
+            localStorage.setItem("spiral_table_number", cleanT);
+            localStorage.removeItem("spiral_order_mode");
+            sessionStorage.setItem("spiral_entered", "true");
+          }
+
+          await fetch("/api/customers/identify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phoneNumber: clean,
+              foodPreference: savedPref,
+              tableNumber: cleanT,
+              sessionId: activeSession,
+            }),
+          });
+
+          if (onPhoneSaved) {
+            onPhoneSaved(clean, cleanT);
+          }
+          setIsOpen(false);
+          return;
+        }
+
+        // Scenario C: Preference is known, but no table yet -> ask Dine-In / Takeaway
+        setStep("dining_option");
+        return;
+      } catch (err) {
+        console.error("Auto-resume error:", err);
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    // First-time visitor without preference: proceed to preference selection
     setStep("preference");
   };
 
@@ -323,7 +448,37 @@ export default function CustomerPhoneModal({
         onPhoneSaved(clean, targetTable || "");
       }
 
-      // Next: Ask Dine In or Take Away
+      // If a table is already detected (e.g. scanned QR for Table A1), auto-assign table directly!
+      if (detected && detected !== "TAKEAWAY") {
+        const cleanT = detected.replace(/^Table\s*/i, "").trim().toUpperCase();
+        try {
+          await fetch("/api/tables/reserve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tableNumber: cleanT,
+              customerSessionId: activeSession,
+              customerPhone: clean,
+            }),
+          });
+        } catch (resErr) {
+          console.warn("Auto-reserve table notice:", resErr);
+        }
+
+        setTableNumber(cleanT);
+        setSelectedTable(cleanT);
+        try {
+          localStorage.setItem("spiral_table_session", cleanT);
+          localStorage.setItem("spiral_table_number", cleanT);
+          localStorage.removeItem("spiral_order_mode");
+          sessionStorage.setItem("spiral_entered", "true");
+        } catch {}
+
+        setIsOpen(false);
+        return;
+      }
+
+      // Next: Ask Dine In or Take Away only if no table was pre-detected
       setStep("dining_option");
     } catch (err) {
       console.error("Preference save error:", err);

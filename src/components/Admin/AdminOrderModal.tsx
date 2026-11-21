@@ -64,10 +64,58 @@ export default function AdminOrderModal({
   const [customerPhone, setCustomerPhone] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
 
+  // Custom Product State
+  const [showCustomProductForm, setShowCustomProductForm] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
+  const [customQty, setCustomQty] = useState(1);
+  const [customIsParcel, setCustomIsParcel] = useState(false);
+
   // Cart: Map of item ID -> { item: MenuItem, quantity: number }
   const [cart, setCart] = useState<Map<string, { item: MenuItem; quantity: number }>>(new Map());
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "SUCCESS" | "ERROR" | "WARNING"; message: string } | null>(null);
+
+  const handleAddCustomToCart = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = customName.trim();
+    const priceNum = parseFloat(customPrice);
+    const qty = Math.max(1, Number(customQty) || 1);
+
+    if (!trimmed) {
+      alert("Please enter a product name.");
+      return;
+    }
+    if (isNaN(priceNum) || priceNum < 0) {
+      alert("Please enter a valid price.");
+      return;
+    }
+
+    const parcelTag = customIsParcel && !trimmed.toLowerCase().includes("(parcel)") ? " - (parcel)" : "";
+    const finalName = `${trimmed}${parcelTag}`;
+    const customId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+    const customItem: MenuItem = {
+      id: customId,
+      name: finalName,
+      price: priceNum,
+      categoryName: "Custom",
+      dietType: "ALL",
+      available: true,
+    };
+
+    setCart((prev) => {
+      const next = new Map(prev);
+      next.set(customId, { item: customItem, quantity: qty });
+      return next;
+    });
+
+    setCustomName("");
+    setCustomPrice("");
+    setCustomQty(1);
+    setCustomIsParcel(false);
+    setShowCustomProductForm(false);
+  };
 
   // Load Menu items
   useEffect(() => {
@@ -288,16 +336,106 @@ export default function AdminOrderModal({
           <div className="flex-1 flex flex-col border-r border-[#EBDAD0] overflow-hidden bg-white/40">
             {/* Search & Category Pills */}
             <div className="p-4 border-b border-[#EBDAD0] space-y-3 bg-white/60">
-              <div className="relative">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search dishes by name (e.g. Burger, Fries, Coffee)..."
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-[#EBDAD0] rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#CA340A]"
-                />
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search dishes by name (e.g. Burger, Fries, Coffee)..."
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-[#EBDAD0] rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#CA340A]"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCustomProductForm(!showCustomProductForm)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                    showCustomProductForm
+                      ? "bg-[#CA340A] text-white shadow-xs"
+                      : "bg-orange-50 hover:bg-orange-100 text-[#CA340A] border border-orange-200"
+                  }`}
+                  title="Add custom off-menu product manually"
+                >
+                  <Plus size={14} />
+                  <span>+ Custom Product</span>
+                </button>
               </div>
+
+              {/* Inline Custom Product Creator Form */}
+              {showCustomProductForm && (
+                <form
+                  onSubmit={handleAddCustomToCart}
+                  className="p-3.5 bg-white rounded-2xl border-2 border-orange-200 shadow-sm space-y-3 animate-in fade-in slide-in-from-top-1 duration-150"
+                >
+                  <div className="flex items-center justify-between border-b border-orange-100 pb-2">
+                    <span className="text-[11px] font-black uppercase text-[#CA340A] flex items-center gap-1.5">
+                      <Plus size={13} />
+                      Add Custom / Manual Product to Order
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomProductForm(false)}
+                      className="text-zinc-400 hover:text-zinc-600 text-xs p-1"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="text"
+                        required
+                        value={customName}
+                        onChange={(e) => setCustomName(e.target.value)}
+                        placeholder="Product Name (e.g. Cold Coffee, Omelette)..."
+                        className="w-full px-3 py-2 bg-[#FFFBF7] border border-[#EBDAD0] rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
+                          ₹
+                        </span>
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          step="any"
+                          value={customPrice}
+                          onChange={(e) => setCustomPrice(e.target.value)}
+                          placeholder="Price"
+                          className="w-full pl-6 pr-2 py-2 bg-[#FFFBF7] border border-[#EBDAD0] rounded-xl text-xs font-bold text-[#CA340A] focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-zinc-600 select-none">
+                      <input
+                        type="checkbox"
+                        checked={customIsParcel}
+                        onChange={(e) => setCustomIsParcel(e.target.checked)}
+                        className="rounded text-[#CA340A] focus:ring-[#CA340A] w-3.5 h-3.5"
+                      />
+                      <span>Mark as Takeaway / (parcel)</span>
+                    </label>
+
+                    <button
+                      type="submit"
+                      disabled={!customName.trim() || !customPrice}
+                      className="px-4 py-2 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Plus size={13} />
+                      <span>Add to Order</span>
+                    </button>
+                  </div>
+                </form>
+              )}
 
               {/* Categories Scroll */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">

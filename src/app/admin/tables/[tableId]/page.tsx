@@ -7,6 +7,8 @@ import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import PrinterStatusModal from "@/components/Admin/PrinterStatusModal";
 import ReceivePaymentModal from "@/components/Admin/ReceivePaymentModal";
+import AdminOrderModal from "@/components/Admin/AdminOrderModal";
+import AddProductToOrderModal from "@/components/Admin/AddProductToOrderModal";
 import { Order, OrderItem } from "@/lib/db";
 import { KotData, KotReceiptEngine, buildKotData } from "@/lib/kot";
 import type { PrinterSettings, KotStatus } from "@/lib/tables";
@@ -179,6 +181,8 @@ export default function TableDetailPage() {
   const [printerModalOpen, setPrinterModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [manualTransferModalOpen, setManualTransferModalOpen] = useState(false);
+  const [addProductToOrder, setAddProductToOrder] = useState<Order | null>(null);
+  const [adminOrderModalOpen, setAdminOrderModalOpen] = useState(false);
   const [availableFloors, setAvailableFloors] = useState<string[]>([]);
   const [targetFloorTable, setTargetFloorTable] = useState<string>("");
   const [transferring, setTransferring] = useState(false);
@@ -808,6 +812,22 @@ export default function TableDetailPage() {
 
           {/* Top Right: Actions & Printer Status */}
           <div className="flex items-center gap-2">
+            {/* Direct Add Products / Manual Order Button */}
+            <button
+              onClick={() => {
+                if (orders.length > 0) {
+                  setAddProductToOrder(orders[0]);
+                } else {
+                  setAdminOrderModalOpen(true);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-[#CA340A] hover:bg-[#B73F1D] text-white shadow-xs transition-all cursor-pointer"
+              title="Add food / menu items or custom products to this table"
+            >
+              <Plus size={14} />
+              <span>+ Add Products</span>
+            </button>
+
             {(hasActiveOrder || isReserved) && (
               <button
                 onClick={openManualTransferModal}
@@ -968,9 +988,18 @@ export default function TableDetailPage() {
 
               <div className="pt-2 flex items-center justify-center gap-3">
                 <button
+                  type="button"
+                  onClick={() => setAdminOrderModalOpen(true)}
+                  className="px-4 py-2.5 rounded-2xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#B73F1D] shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus size={14} />
+                  <span>Take Manual Order</span>
+                </button>
+
+                <button
                   onClick={handleReleaseTable}
                   disabled={isReleasing}
-                  className="px-5 py-2.5 rounded-2xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 shadow-md shadow-red-500/20 transition-all cursor-pointer flex items-center gap-2"
+                  className="px-4 py-2.5 rounded-2xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2"
                 >
                   <RotateCcw size={14} className={isReleasing ? "animate-spin" : ""} />
                   <span>Release Table</span>
@@ -995,16 +1024,23 @@ export default function TableDetailPage() {
                   Table {tableId} is Available
                 </h3>
                 <p className="text-xs text-[#52525b] mt-1">
-                  No active orders are currently placed for this table. When a customer scans the
-                  QR code and places an order, this card will turn RED.
+                  No active orders are currently placed for this table. You can take a manual walk-in order or wait for customers to scan the QR code.
                 </p>
               </div>
-              <div className="pt-2">
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAdminOrderModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#B73F1D] shadow-md transition-all cursor-pointer"
+                >
+                  <Plus size={15} />
+                  <span>Take Manual Order / Add Products</span>
+                </button>
                 <Link
                   href="/admin/tables"
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-[#CA340A] text-white text-xs font-bold hover:bg-[#B73F1D] shadow-md transition-all"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold transition-all"
                 >
-                  Back to Floor Overview
+                  Floor Overview
                 </Link>
               </div>
             </div>
@@ -1102,6 +1138,15 @@ export default function TableDetailPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAddProductToOrder(ord)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-heading font-extrabold bg-orange-50 hover:bg-orange-100 text-[#CA340A] border border-orange-200/80 shadow-2xs transition-all cursor-pointer"
+                          title={`Add products directly to Order #${ord.orderNumber}`}
+                        >
+                          <Plus size={13} />
+                          <span>+ Add Product</span>
+                        </button>
                         <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-zinc-100 text-zinc-700">
                           {ord.items.reduce((acc, it) => acc + (it.quantity || 1), 0)} Items
                         </span>
@@ -1726,6 +1771,29 @@ export default function TableDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Add Products Directly to Active Order Modal */}
+      <AddProductToOrderModal
+        isOpen={Boolean(addProductToOrder)}
+        onClose={() => setAddProductToOrder(null)}
+        order={addProductToOrder}
+        tableNumber={tableId}
+        onItemAdded={(msg) => {
+          showNotification("success", msg);
+          fetchTableData();
+        }}
+      />
+
+      {/* Direct Manual Order / Add Order Modal for this Table */}
+      <AdminOrderModal
+        isOpen={adminOrderModalOpen}
+        onClose={() => setAdminOrderModalOpen(false)}
+        defaultTableNumber={tableId}
+        onOrderCreated={() => {
+          showNotification("success", `New order successfully placed for Table ${tableId}!`);
+          fetchTableData();
+        }}
+      />
     </AdminLayout>
   );
 }

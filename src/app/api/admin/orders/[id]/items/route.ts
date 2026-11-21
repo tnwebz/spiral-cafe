@@ -1,6 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateOrderItemQuantityOrDelete, getOrderById } from "@/lib/db";
+import { updateOrderItemQuantityOrDelete, addOrderItemToOrder, getOrderById } from "@/lib/db";
 import { requireAdminAuth } from "@/lib/auth";
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const authError = await requireAdminAuth(req);
+  if (authError) return authError;
+
+  try {
+    const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+    const { item, adminUser = "Admin Staff" } = body;
+
+    if (!item || !item.name || typeof item.price !== "number") {
+      return NextResponse.json(
+        { success: false, error: "Valid product name and price are required." },
+        { status: 400 }
+      );
+    }
+
+    const updatedOrder = await addOrderItemToOrder({
+      orderId: id,
+      item: {
+        productId: item.productId || item.id,
+        name: item.name,
+        price: Number(item.price) || 0,
+        quantity: Math.max(1, Number(item.quantity) || 1),
+        image: item.image || undefined,
+        notes: item.notes || undefined,
+      },
+      adminUser,
+    });
+
+    return NextResponse.json({
+      success: true,
+      order: updatedOrder,
+      message: `"${item.name}" added to order #${updatedOrder.orderNumber}`,
+    });
+  } catch (err: any) {
+    console.error("Add order item error:", err);
+    return NextResponse.json(
+      { success: false, error: err.message || "Failed to add product to order" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function PATCH(
   req: NextRequest,

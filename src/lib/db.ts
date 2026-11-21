@@ -1171,6 +1171,112 @@ export async function updateOrderItemQuantityOrDelete(params: {
   return updated;
 }
 
+export async function addOrderItemToOrder(params: {
+  orderId: string;
+  item: {
+    productId?: string;
+    name: string;
+    price: number;
+    quantity: number;
+    image?: string;
+    notes?: string;
+  };
+  adminUser?: string;
+}): Promise<Order> {
+  const current = await getOrderById(params.orderId);
+  if (!current) {
+    throw new Error(`Order not found: ${params.orderId}`);
+  }
+
+  const now = new Date().toISOString();
+  const adminUser = params.adminUser || "admin";
+  const qty = Math.max(1, params.item.quantity || 1);
+  const lineTotal = params.item.price * qty;
+
+  // Check if item with same name already exists in this order
+  const existingItem = (current.items || []).find(
+    (it) => it.name.trim().toLowerCase() === params.item.name.trim().toLowerCase()
+  );
+
+  if (existingItem) {
+    // If it already exists, increase its quantity
+    return updateOrderItemQuantityOrDelete({
+      orderId: params.orderId,
+      itemId: existingItem.id,
+      itemName: existingItem.name,
+      newQuantity: existingItem.quantity + qty,
+      adminUser,
+    });
+  }
+
+  // Insert new row into order_items
+  const newItemId = `oi_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const { error: insErr } = await supabaseAdmin.from("order_items").insert({
+    id: newItemId,
+    order_id: current.id,
+    product_id: params.item.productId || null,
+    name: params.item.name.trim(),
+    price: params.item.price,
+    quantity: qty,
+    line_total: lineTotal,
+    image: params.item.image || "",
+    notes: params.item.notes || null,
+  });
+
+  if (insErr) {
+    console.error("Failed to insert order_item:", insErr);
+    throw new Error(`Failed to add item: ${insErr.message}`);
+  }
+
+  // Recalculate totals
+  const { data: allItemsData } = await supabaseAdmin
+    .from("order_items")
+    .select("*")
+    .eq("order_id", current.id);
+
+  const allItems = allItemsData || [];
+  const newSubtotal = allItems.reduce((acc: number, it: any) => acc + Number(it.line_total || 0), 0);
+  const isPrivate =
+    current.orderType === "PRIVATE" ||
+    current.tableNumber === "COUNTER" ||
+    current.tableNumber === "GIVE ON COUNTER" ||
+    (current.notes || "").includes("[ORDER_TYPE:PRIVATE]");
+  const newTax = isPrivate ? 0 : Math.round(newSubtotal * 0.05);
+  const newGrandTotal = newSubtotal + newTax + (current.packagingFee || 0) + (current.serviceCharge || 0);
+
+  // If order was CANCELLED earlier, bring it back to PENDING since items are present
+  const newStatus = current.status === "CANCELLED" ? "PENDING" : current.status;
+
+  await supabaseAdmin
+    .from("orders")
+    .update({
+      subtotal: newSubtotal,
+      tax: newTax,
+      grand_total: newGrandTotal,
+      status: newStatus,
+      updated_at: now,
+    })
+    .eq("id", current.id);
+
+  try {
+    await recordAuditLog(
+      adminUser,
+      "ADD_ORDER_ITEM",
+      "ORDER",
+      current.id,
+      `Added product "${params.item.name}" (qty: ${qty}, ₹${lineTotal}) to order ${current.orderNumber}`
+    );
+  } catch (auditErr) {
+    console.warn("Audit log warning on item add:", auditErr);
+  }
+
+  const updated = await getOrderById(current.id);
+  if (!updated) {
+    throw new Error(`Failed to reload order ${current.id} after adding item`);
+  }
+  return updated;
+}
+
 export async function getTablesStatus(): Promise<
   Array<{
     tableNumber: string;
