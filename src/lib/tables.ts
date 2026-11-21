@@ -7,8 +7,11 @@ import {
   getAllOrders,
   mapDbOrderToOrder,
   normalizeTableNumber,
+  resolveTableFromParam,
   VALID_FLOOR_TABLES,
 } from "./db";
+
+export { resolveTableFromParam };
 
 export type TableColor = "WHITE" | "BLUE" | "RED" | "YELLOW" | "GREEN";
 export type TableStatusLabel =
@@ -423,15 +426,41 @@ export async function reserveTable(params: {
 
   // 0. Single Active Visit Enforcement: customer cannot independently occupy another table
   const activeVisit = await getActiveCustomerVisit(params.customerSessionId, params.customerPhone);
+  const isTakeawayActive =
+    activeVisit.tableNumber?.toUpperCase() === "TAKEAWAY" ||
+    activeVisit.tableNumber?.toUpperCase().includes("TAKEAWAY");
+
   if (
     activeVisit.hasActiveVisit &&
     activeVisit.type === "DINING" &&
     activeVisit.tableNumber &&
+    !isTakeawayActive &&
     activeVisit.tableNumber.toUpperCase() !== norm.toUpperCase()
   ) {
     throw new Error(
       `ALREADY_HAS_ACTIVE_VISIT:Table ${activeVisit.tableNumber}`
     );
+  }
+
+  // If customer is transitioning from Takeaway to a floor table, link any unpaid takeaway orders to this table
+  if (isTakeawayActive && activeVisit.orders && activeVisit.orders.length > 0) {
+    try {
+      for (const ord of activeVisit.orders) {
+        if (ord.paymentStatus !== "PAID" && ord.status !== "CANCELLED") {
+          const parcelTag = (ord.notes || "").includes("[TAKEAWAY]") ? "" : "[TAKEAWAY] [PARCEL]";
+          const updatedNotes = `${parcelTag} ${ord.notes || ""}`.trim();
+          await supabaseAdmin
+            .from("orders" as any)
+            .update({
+              table_number: norm,
+              notes: updatedNotes,
+            })
+            .eq("id", ord.id);
+        }
+      }
+    } catch (migErr) {
+      console.warn("Notice: could not link takeaway orders to floor table:", migErr);
+    }
   }
 
   // 1. Check if table has an active order (already dining)
@@ -640,6 +669,7 @@ export async function requestTableTransfer(params: {
   toTable: string;
   customerSessionId: string;
   customerPhone?: string;
+  requireApproval?: boolean;
 }): Promise<{
   success: boolean;
   isDirectTransfer: boolean;
@@ -684,8 +714,8 @@ export async function requestTableTransfer(params: {
     activeVisit.type === "DINING" &&
     activeVisit.tableNumber?.toUpperCase() === fromNorm.toUpperCase();
 
-  if (!hasOrdersAtFromTable) {
-    // Customer has not placed any food order yet: direct reservation transfer
+  if (!hasOrdersAtFromTable && !params.requireApproval) {
+    // Customer has not placed any food order yet and direct transfer permitted: direct reservation transfer
     const res = await transferReservation({
       fromTable: fromNorm,
       toTable: toNorm,
@@ -1921,6 +1951,13 @@ export async function getTablesOverview(
         : false
     );
 
+    const hasTakeawayParcel = tableOrders.some(
+      (ord) =>
+        (ord.notes || "").includes("[TAKEAWAY]") ||
+        (ord.notes || "").includes("[PARCEL]") ||
+        ord.items.some((it) => (it.name || "").toLowerCase().includes("(parcel)"))
+    );
+
     return {
       tableNumber: t.tableNumber,
       capacity: t.capacity,
@@ -1932,6 +1969,7 @@ export async function getTablesOverview(
       orderNumber: activeOrder.orderNumber,
       totalAmount,
       itemsCount: totalQty,
+      hasTakeawayParcel,
       elapsedMinutes,
       kotStatus,
       activeRound: highestRound,

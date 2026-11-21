@@ -73,30 +73,13 @@ export const DEFAULT_CONFIG: CafeConfig = {
 // HELPER CONVERTERS (DB Snake_Case <-> App CamelCase)
 // ----------------------------------------------------
 
-export const VALID_FLOOR_TABLES = [
-  "A1", "A2",
-  "B1", "B2", "B3", "B4", "B5", "B6",
-  "C1", "C2", "C3",
-  "F1", "F2", "F3", "F4",
-] as const;
+import {
+  VALID_FLOOR_TABLES,
+  LEGACY_TABLE_NUMBER_MAP,
+  resolveTableFromParam,
+} from "./tableResolution";
 
-export const LEGACY_TABLE_NUMBER_MAP: Record<number, string> = {
-  1: "A1",
-  2: "A2",
-  3: "B1",
-  4: "B2",
-  5: "B3",
-  6: "B4",
-  7: "B5",
-  8: "B6",
-  9: "C1",
-  10: "C2",
-  11: "C3",
-  12: "F1",
-  13: "F2",
-  14: "F3",
-  15: "F4",
-};
+export { VALID_FLOOR_TABLES, LEGACY_TABLE_NUMBER_MAP, resolveTableFromParam };
 
 export function normalizeTableNumber(table: string): string {
   let clean = (table || "").trim();
@@ -675,12 +658,12 @@ export async function getActiveOrderForTable(tableNumber: string): Promise<Order
   const cutoffIso = new Date(Date.now() - ACTIVE_DINEIN_MAX_AGE_MS).toISOString();
 
   // 1. First check for active dining customer order (unpaid & non-cancelled)
+  // An order remains active at the table until it is settled (PAID) and cleared
   const { data: customerOrder, error } = await supabaseAdmin
     .from("orders")
     .select("*, order_items(*)")
     .eq("table_number", cleanTable)
     .neq("status", "CANCELLED")
-    .neq("status", "COMPLETED")
     .neq("payment_status", "PAID")
     .gte("created_at", cutoffIso)
     .order("created_at", { ascending: false })
@@ -697,7 +680,7 @@ export async function getActiveOrderForTable(tableNumber: string): Promise<Order
     .select("*, order_items(*)")
     .eq("table_number", cleanTable)
     .neq("status", "CANCELLED")
-    .neq("status", "COMPLETED")
+    .neq("payment_status", "PAID")
     .or("notes.ilike.%[ORDER_TYPE:PRIVATE]%,order_number.ilike.PRV-%")
     .gte("created_at", cutoffIso)
     .order("created_at", { ascending: false })
@@ -749,7 +732,6 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
       .select("*, order_items(*)")
       .ilike("notes", `%[VISIT_ID:${visitId}]%`)
       .neq("status", "CANCELLED")
-      .neq("status", "COMPLETED")
       .neq("payment_status", "PAID")
       .order("created_at", { ascending: false });
 
@@ -768,7 +750,6 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
         .select("*, order_items(*)")
         .eq("table_number", cleanTable)
         .neq("status", "CANCELLED")
-        .neq("status", "COMPLETED")
         .neq("payment_status", "PAID")
         .order("created_at", { ascending: false });
 
@@ -786,9 +767,9 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
   // Strict hygiene: filter strictly to cleanTable and active
   visitOrders = visitOrders.filter((o) => {
     const isThisTable = normalizeTableNumber(o.tableNumber) === cleanTable;
-    if (!isThisTable || o.status === "CANCELLED" || o.status === "COMPLETED") return false;
+    if (!isThisTable || o.status === "CANCELLED") return false;
     if (o.orderType === "PRIVATE") return true;
-    return o.paymentStatus !== "PAID";
+    return !(o.paymentStatus === "PAID" && o.status === "COMPLETED");
   });
 
   // Sort newest first (created_at DESC)

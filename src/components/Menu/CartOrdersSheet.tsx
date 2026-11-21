@@ -60,10 +60,15 @@ export default function CartOrdersSheet() {
     activeTableOrder,
     notifyAddingFood,
     selectCashPayment,
+    batchSelectCashPayment,
     switchPaymentMethod,
     processOnlinePayment,
   } = useCart();
 
+  const [orderServingMode, setOrderServingMode] = useState<"DINE_IN" | "TAKEAWAY">(
+    tableNumber === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"
+  );
+  const [isPayingAllCash, setIsPayingAllCash] = useState(false);
   const [orderNotes, setOrderNotes] = useState("");
   const [showTableModal, setShowTableModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -102,6 +107,11 @@ export default function CartOrdersSheet() {
   useEffect(() => {
     if (tableNumber) {
       setSelectedTable(tableNumber);
+      if (tableNumber === "TAKEAWAY") {
+        setOrderServingMode("TAKEAWAY");
+      } else {
+        setOrderServingMode("DINE_IN");
+      }
     }
   }, [tableNumber]);
 
@@ -169,6 +179,7 @@ export default function CartOrdersSheet() {
 
     setTableNumber(table);
     setSelectedTable(table);
+    setOrderServingMode("DINE_IN");
     setShowTableModal(false);
 
     if (cart.length > 0) {
@@ -178,8 +189,21 @@ export default function CartOrdersSheet() {
 
   const handleFinalConfirmOrder = async () => {
     setOrderError(null);
-    const targetTable = selectedTable || tableNumber || "A1";
-    const res = await placeOrder(orderNotes, targetTable);
+    let targetTable = selectedTable || tableNumber || "A1";
+
+    if (orderServingMode === "DINE_IN" && (targetTable === "TAKEAWAY" || tableNumber === "TAKEAWAY")) {
+      setShowConfirmModal(false);
+      setShowTableModal(true);
+      return;
+    }
+
+    const isTakeaway = orderServingMode === "TAKEAWAY";
+    let notes = orderNotes.trim();
+    if (isTakeaway && !notes.includes("[TAKEAWAY]")) {
+      notes = `[TAKEAWAY] [PARCEL] ${notes}`.trim();
+    }
+
+    const res = await placeOrder(notes, targetTable, isTakeaway);
     if (!res.success) {
       setOrderError(res.error || "Failed to place order.");
     } else {
@@ -271,18 +295,40 @@ export default function CartOrdersSheet() {
               MY ORDERS
             </h2>
             <div className="flex items-center gap-1.5 text-xs text-[#8C5E51] font-medium">
-              <span>Dining at</span>
-              <button
-                onClick={() => {
-                  setSelectedTable(tableNumber || "A1");
-                  setShowTableModal(true);
-                }}
-                className="font-bold text-[#B73F1D] underline inline-flex items-center gap-1 cursor-pointer hover:text-[#9D3E22]"
-                title="Tap to change table"
-              >
-                <span>{tableNumber}</span>
-                <Edit2 size={11} />
-              </button>
+              {tableNumber === "TAKEAWAY" ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-amber-800 flex items-center gap-1">
+                    <ShoppingBag size={12} />
+                    <span>Take Away Mode</span>
+                  </span>
+                  <button
+                    onClick={() => {
+                      setSelectedTable("A1");
+                      setShowTableModal(true);
+                    }}
+                    className="font-bold text-[#B73F1D] underline inline-flex items-center gap-0.5 cursor-pointer hover:text-[#9D3E22]"
+                    title="Tap to select floor table to dine in"
+                  >
+                    <span>(Switch to Table)</span>
+                    <Edit2 size={11} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span>Dining at</span>
+                  <button
+                    onClick={() => {
+                      setSelectedTable(tableNumber || "A1");
+                      setShowTableModal(true);
+                    }}
+                    className="font-bold text-[#B73F1D] underline inline-flex items-center gap-1 cursor-pointer hover:text-[#9D3E22]"
+                    title="Tap to change table"
+                  >
+                    <span>Table {tableNumber.replace(/^Table\s*/i, "")}</span>
+                    <Edit2 size={11} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -435,6 +481,74 @@ export default function CartOrdersSheet() {
             {/* Bill Summary & Confirm Button */}
             {cart.length > 0 && (
               <div className="mt-4 pt-4 border-t border-[#EBDAD0] flex flex-col gap-3">
+                {/* Serving Mode Selector: Dine-In Table vs Take Away (Parcel) */}
+                <div className="bg-white p-3.5 rounded-2xl border border-[#EBDAD0] shadow-xs flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-heading font-extrabold text-[#4A2117] uppercase tracking-wide">
+                      Order Serving Type
+                    </span>
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-[#FFF8F3] text-[#CA340A] border border-[#CA340A]/20">
+                      {orderServingMode === "DINE_IN" ? "Dine-In Table" : "Take Away (Parcel)"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderServingMode("DINE_IN");
+                        if (tableNumber === "TAKEAWAY" || selectedTable === "TAKEAWAY") {
+                          setShowTableModal(true);
+                        }
+                      }}
+                      className={`py-2 px-3 rounded-xl font-heading font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        orderServingMode === "DINE_IN"
+                          ? "bg-[#B73F1D] text-white border-[#B73F1D] shadow-xs"
+                          : "bg-[#FFF8F3] text-[#8C5E51] border-[#EBDAD0] hover:border-[#B73F1D]/50 hover:text-[#4A2117]"
+                      }`}
+                    >
+                      <Utensils size={14} />
+                      <span>🍽️ Dine-In Table</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderServingMode("TAKEAWAY");
+                      }}
+                      className={`py-2 px-3 rounded-xl font-heading font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        orderServingMode === "TAKEAWAY"
+                          ? "bg-amber-700 text-white border-amber-700 shadow-xs"
+                          : "bg-[#FFF8F3] text-[#8C5E51] border-[#EBDAD0] hover:border-amber-700/50 hover:text-[#4A2117]"
+                      }`}
+                    >
+                      <ShoppingBag size={14} />
+                      <span>🛍️ Take Away (Parcel)</span>
+                    </button>
+                  </div>
+
+                  {/* Contextual guidance */}
+                  {orderServingMode === "DINE_IN" && (tableNumber === "TAKEAWAY" || selectedTable === "TAKEAWAY") ? (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
+                      <span className="text-amber-900 font-medium">Please choose an available table to sit down:</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowTableModal(true)}
+                        className="px-2.5 py-1 bg-[#B73F1D] hover:bg-[#9D3E22] text-white font-heading font-bold text-[11px] rounded-lg shadow-xs cursor-pointer"
+                      >
+                        Choose Table
+                      </button>
+                    </div>
+                  ) : orderServingMode === "TAKEAWAY" && tableNumber && tableNumber !== "TAKEAWAY" ? (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 font-medium flex items-center gap-2">
+                      <CheckCircle2 size={14} className="text-emerald-700 shrink-0" />
+                      <span>
+                        Your parcel will be packed for takeaway and billed with <strong>Table {tableNumber.replace(/^Table\s*/i, "")}</strong>.
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+
                 <div className="bg-white p-3.5 rounded-2xl border border-[#EBDAD0] text-xs flex flex-col gap-1.5">
                   <div className="flex justify-between text-[#8C5E51]">
                     <span>Item Subtotal</span>
@@ -462,7 +576,35 @@ export default function CartOrdersSheet() {
                   </div>
                 )}
 
-                {activeTableOrder ? (
+                {orderServingMode === "TAKEAWAY" && tableNumber && tableNumber !== "TAKEAWAY" ? (
+                  <button
+                    disabled={isPlacingOrder}
+                    onClick={() => {
+                      setSelectedTable(tableNumber);
+                      setShowConfirmModal(true);
+                    }}
+                    className="w-full py-3.5 bg-amber-700 hover:bg-amber-800 text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isPlacingOrder ? (
+                      <span>ADDING PARCEL TO ORDER...</span>
+                    ) : (
+                      <>
+                        <ShoppingBag size={16} />
+                        <span>ADD TAKE AWAY PARCEL TO TABLE {tableNumber.replace(/^Table\s*/i, "")} • ₹{grandTotal}</span>
+                        <ArrowRight size={16} />
+                      </>
+                    )}
+                  </button>
+                ) : orderServingMode === "DINE_IN" && (tableNumber === "TAKEAWAY" || selectedTable === "TAKEAWAY") ? (
+                  <button
+                    onClick={() => setShowTableModal(true)}
+                    className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Utensils size={16} />
+                    <span>CHOOSE FREE TABLE & ORDER • ₹{grandTotal}</span>
+                    <ArrowRight size={16} />
+                  </button>
+                ) : activeTableOrder ? (
                   <div className="flex flex-col gap-2">
                     <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-[11px] text-amber-900 font-medium">
                       <span className="w-2 h-2 rounded-full bg-amber-600 animate-ping shrink-0" />
@@ -482,7 +624,7 @@ export default function CartOrdersSheet() {
                         <span>ADDING TO ORDER...</span>
                       ) : (
                         <>
-                          <span>ADD TO TABLE {tableNumber.replace("Table ", "")} ORDER • ₹{grandTotal}</span>
+                          <span>ADD TO TABLE {tableNumber.replace(/^Table\s*/i, "")} ORDER • ₹{grandTotal}</span>
                           <ArrowRight size={16} />
                         </>
                       )}
@@ -497,7 +639,11 @@ export default function CartOrdersSheet() {
                     }}
                     className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
                   >
-                    <span>PLACE ORDER AT TABLE {(tableNumber || selectedTable || "A1").replace(/^Table\s*/i, "")} • ₹{grandTotal}</span>
+                    <span>
+                      {orderServingMode === "TAKEAWAY"
+                        ? `PLACE TAKE AWAY ORDER • ₹${grandTotal}`
+                        : `PLACE ORDER AT TABLE ${(tableNumber || selectedTable || "A1").replace(/^Table\s*/i, "")} • ₹${grandTotal}`}
+                    </span>
                     <ArrowRight size={16} />
                   </button>
                 )}
@@ -637,6 +783,23 @@ export default function CartOrdersSheet() {
                             <span>{order.tableNumber}</span>
                             <span>•</span>
                             <span>{timeFormatted}</span>
+                            {((order.notes || "").includes("[TAKEAWAY]") ||
+                              (order.notes || "").includes("[PARCEL]") ||
+                              order.tableNumber === "TAKEAWAY") ? (
+                              <>
+                                <span>•</span>
+                                <span className="font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-full text-[10px]">
+                                  🛍️ Take Away (Parcel)
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span>•</span>
+                                <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded-full text-[10px]">
+                                  🍽️ Dine-In Table
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -877,36 +1040,20 @@ export default function CartOrdersSheet() {
                         </div>
                       )}
 
-                      {/* State 4: UNPAID -> Pay at Counter in prominent orange */}
+                      {/* State 4: UNPAID ticket balance */}
                       {order.status !== "CANCELLED" && order.paymentStatus !== "PAID" && order.paymentStatus !== "PENDING_CASH" && (
-                        <div className="p-3.5 bg-gradient-to-br from-[#FFF9F5] to-white border border-[#EBDAD0] rounded-2xl flex flex-col gap-2.5 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 text-[#4A2117] font-heading font-extrabold text-xs">
-                              <Banknote size={14} className="text-[#CA340A]" />
-                              <span>CHOOSE PAYMENT METHOD</span>
-                            </div>
-                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300/70 rounded-full text-[10px] font-extrabold uppercase tracking-wider">
-                              {order.tableNumber === "TAKEAWAY" ? "TAKE AWAY" : "DINE-IN"}
+                        <div className="p-3 bg-[#FFF9F5] border border-[#EBDAD0] rounded-2xl flex items-center justify-between text-xs shadow-xs">
+                          <div className="flex items-center gap-2 text-[#4A2117] font-semibold">
+                            <Banknote size={15} className="text-[#CA340A]" />
+                            <span>Ticket #{order.orderNumber} Balance</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-heading font-extrabold text-sm text-[#CA340A]">
+                              ₹{order.grandTotal}
                             </span>
-                          </div>
-
-                          <p className="text-[11px] text-[#8C5E51]">
-                            Select how you would like to settle Ticket #{order.orderNumber}:
-                          </p>
-
-                          <div className="mt-0.5">
-                            <button
-                              disabled={payingOrderId === order.id}
-                              onClick={() => handleSelectCash(order.id)}
-                              className="w-full py-3 px-4 bg-[#CA340A] text-white hover:bg-[#B73F1D] font-heading font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60"
-                            >
-                              <Banknote size={15} />
-                              <span>PAY AT COUNTER (₹{order.grandTotal})</span>
-                            </button>
-                          </div>
-
-                          <div className="text-[10px] text-center text-[#8C5E51] font-medium pt-0.5">
-                            Pay via Cash or UPI at the counter when your food is ready
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 uppercase">
+                              Unpaid
+                            </span>
                           </div>
                         </div>
                       )}
@@ -915,6 +1062,104 @@ export default function CartOrdersSheet() {
                 );
                 })
               )}
+
+              {/* UNIFIED VISIT SETTLEMENT BAR (Single Pay at Counter Button for All Orders) */}
+              {sortedOrders.length > 0 && (() => {
+                const unpaidOrders = sortedOrders.filter(
+                  (o) => o.status !== "CANCELLED" && o.paymentStatus !== "PAID"
+                );
+                const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.grandTotal, 0);
+                const allCashPending = unpaidOrders.length > 0 && unpaidOrders.every((o) => o.paymentStatus === "PENDING_CASH");
+                const allPaid = sortedOrders.every((o) => o.paymentStatus === "PAID" || o.status === "CANCELLED");
+
+                if (allPaid) {
+                  return (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-3xl text-center flex flex-col items-center gap-2 shadow-xs mt-2">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                        <CheckCircle2 size={22} />
+                      </div>
+                      <div className="font-heading font-extrabold text-sm text-emerald-900">
+                        All Orders Fully Settled
+                      </div>
+                      <p className="text-xs text-emerald-700">
+                        Thank you for dining with Spiral Cafe! Have a wonderful day.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (unpaidTotal > 0) {
+                  return (
+                    <div className="sticky bottom-0 z-10 p-4 bg-white/95 backdrop-blur-md rounded-3xl border-2 border-[#CA340A]/20 shadow-[0_-10px_25px_rgba(74,33,23,0.08)] flex flex-col gap-3 mt-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] font-bold text-[#8C5E51] uppercase tracking-wider">
+                            Total Visit Bill ({unpaidOrders.length} {unpaidOrders.length > 1 ? "Orders" : "Order"})
+                          </div>
+                          <div className="text-[11px] text-[#4A2117] font-medium">
+                            {tableNumber === "TAKEAWAY"
+                              ? "Take Away Counter Order"
+                              : `Table ${tableNumber.replace(/^Table\s*/i, "")} Visit Balance`}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-[#8C5E51] block uppercase font-bold">Total Payable</span>
+                          <span className="font-heading font-extrabold text-2xl text-[#CA340A]">
+                            ₹{unpaidTotal}
+                          </span>
+                        </div>
+                      </div>
+
+                      {allCashPending ? (
+                        <div className="p-3 bg-[#FFFBF7] border border-[#CA340A]/30 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center shrink-0">
+                              <Banknote size={18} />
+                            </div>
+                            <div>
+                              <div className="font-heading font-extrabold text-xs text-[#4A2117] uppercase">
+                                Pay at Counter Selected (₹{unpaidTotal})
+                              </div>
+                              <p className="text-[11px] text-[#8C5E51]">
+                                Please pay ₹{unpaidTotal} at the counter via Cash or UPI when settling your visit.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          disabled={isPayingAllCash}
+                          onClick={async () => {
+                            setIsPayingAllCash(true);
+                            const unpaidIds = unpaidOrders.map((o) => o.id);
+                            await batchSelectCashPayment(unpaidIds);
+                            setIsPayingAllCash(false);
+                          }}
+                          className="w-full py-3.5 px-4 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60"
+                        >
+                          {isPayingAllCash ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>REQUESTING CASH SETTLEMENT...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Banknote size={17} />
+                              <span>PAY AT COUNTER (₹{unpaidTotal})</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      <div className="text-[10px] text-center text-[#8C5E51] font-medium">
+                        Pay via Cash or UPI directly at the cafe counter when settling your bill
+                      </div>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
             </div>
           );
         })()}
@@ -1069,15 +1314,21 @@ export default function CartOrdersSheet() {
               {/* Modal Header */}
               <div className="flex items-center justify-between pb-3 border-b border-[#EBDAD0]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-2xl bg-[#B73F1D]/10 text-[#B73F1D] flex items-center justify-center shrink-0">
-                    <Utensils size={18} />
+                  <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                    orderServingMode === "TAKEAWAY" ? "bg-amber-100 text-amber-800" : "bg-[#B73F1D]/10 text-[#B73F1D]"
+                  }`}>
+                    {orderServingMode === "TAKEAWAY" ? <ShoppingBag size={18} /> : <Utensils size={18} />}
                   </div>
                   <div>
                     <h3 className="font-heading font-extrabold text-base text-[#4A2117]">
-                      CONFIRM YOUR TABLE
+                      {orderServingMode === "TAKEAWAY" ? "CONFIRM TAKE AWAY (PARCEL)" : "Confirm Your Table"}
                     </h3>
                     <p className="text-[11px] text-[#8C5E51] font-medium">
-                      You are at Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}. Place order at Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}?
+                      {orderServingMode === "TAKEAWAY"
+                        ? tableNumber && tableNumber !== "TAKEAWAY"
+                          ? `Packaged for takeaway • Billed with Table ${tableNumber.replace(/^Table\s*/i, "")}`
+                          : "Packaged for takeaway • Counter pickup"
+                        : `You're sitting at Table ${(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}, right?`}
                     </p>
                   </div>
                 </div>
@@ -1091,27 +1342,34 @@ export default function CartOrdersSheet() {
               </div>
 
               {/* Selected Table Card */}
-              <div className="my-3 p-3 bg-white rounded-2xl border border-[#EBDAD0] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#B73F1D] text-white flex items-center justify-center font-heading font-extrabold text-base shadow-sm">
-                    {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold text-[#8C5E51] uppercase tracking-wider">
-                      Your Floor Table
+              {orderServingMode !== "TAKEAWAY" && (
+                <div className="my-3 p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200/90 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-[#B73F1D] text-white flex items-center justify-center font-heading font-extrabold text-base shadow-sm">
+                        {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold text-[#8C5E51] uppercase tracking-wider">
+                          Assigned Table
+                        </div>
+                        <div className="font-heading font-black text-sm text-[#4A2117]">
+                          Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}
+                        </div>
+                      </div>
                     </div>
-                    <div className="font-heading font-extrabold text-sm text-[#4A2117]">
-                      Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}
-                    </div>
+                    <button
+                      onClick={() => setShowContactCounterModal(true)}
+                      className="text-xs font-bold text-[#B73F1D] hover:underline px-2.5 py-1.5 rounded-xl hover:bg-white border border-[#B73F1D]/20 cursor-pointer"
+                    >
+                      Change Table?
+                    </button>
                   </div>
+                  <p className="text-[11px] text-[#8C5E51] leading-relaxed pt-1 border-t border-amber-200/60">
+                    Your order will be sent to Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}. Kindly remain at the same table while we prepare and serve your food.
+                  </p>
                 </div>
-                <button
-                  onClick={() => setShowContactCounterModal(true)}
-                  className="text-xs font-bold text-[#B73F1D] hover:underline px-2.5 py-1.5 rounded-xl hover:bg-[#FFF8F3] border border-[#B73F1D]/20 cursor-pointer"
-                >
-                  Change Table?
-                </button>
-              </div>
+              )}
 
               {/* Items List */}
               <div className="text-[11px] font-bold text-[#8C5E51] uppercase tracking-wider mb-1 px-1">
@@ -1197,7 +1455,11 @@ export default function CartOrdersSheet() {
                     </>
                   ) : (
                     <>
-                      <span>Place Order at Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")} • ₹{grandTotal}</span>
+                      <span>
+                        {orderServingMode === "TAKEAWAY"
+                          ? `Yes, Confirm Take Away Order • ₹${grandTotal}`
+                          : `Yes, Place Order • ₹${grandTotal}`}
+                      </span>
                       <ArrowRight size={16} />
                     </>
                   )}
@@ -1205,10 +1467,10 @@ export default function CartOrdersSheet() {
 
                 <button
                   type="button"
-                  onClick={() => setShowContactCounterModal(true)}
+                  onClick={() => setShowConfirmModal(false)}
                   className="w-full py-2.5 text-center text-xs font-bold text-[#8C5E51] hover:text-[#4A2117] bg-white border border-[#EBDAD0] hover:bg-[#FFF8F3] rounded-xl transition-colors cursor-pointer"
                 >
-                  Want to Change Table? Contact Counter
+                  Go Back
                 </button>
               </div>
             </motion.div>

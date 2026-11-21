@@ -9,6 +9,7 @@ import {
   getOrdersByVisitId,
   addItemsToExistingOrder,
   normalizeTableNumber,
+  Order,
 } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -313,33 +314,73 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, orders: activeOrders, visitId });
     }
 
-    // 2. Table specified (Customer view or Table view)
+    // 2. Customer Query: sessionId provided (authoritative customer session & order tracker)
+    if (sessionId) {
+      // Fetch all orders matching this customer's session ID (Dine-in, Add-on, Takeaway)
+      const sessionOrders = await getSessionOrders(sessionId);
+      const orderMap = new Map<string, Order>();
+      for (const o of sessionOrders) {
+        orderMap.set(o.id, o);
+      }
+
+      let detectedVisitId: string | null = null;
+
+      // If a specific floor table is also requested, check active visit for that table
+      if (table && normalizeTableNumber(table) !== "TAKEAWAY") {
+        const cleanTable = normalizeTableNumber(table);
+        const activeVisit = await getActiveVisitOrdersForTable(cleanTable);
+        detectedVisitId = activeVisit.visitId;
+
+        // Include any table orders belonging to this customer session
+        for (const o of activeVisit.orders) {
+          if (!o.customerSessionId || o.customerSessionId === sessionId) {
+            orderMap.set(o.id, o);
+          }
+        }
+      }
+
+      let resultOrders = Array.from(orderMap.values());
+
+      if (!includeHistory) {
+        // Keep orders until they are BOTH paid and completed
+        resultOrders = resultOrders.filter(
+          (o) =>
+            o.status !== "CANCELLED" &&
+            !(o.paymentStatus === "PAID" && o.status === "COMPLETED")
+        );
+      }
+
+      resultOrders.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          orders: resultOrders,
+          visitId: detectedVisitId || (resultOrders[0] as any)?.visitId || null,
+          activeOrder: resultOrders[0] || null,
+        },
+        { headers: { "Cache-Control": "no-store, max-age=0" } }
+      );
+    }
+
+    // 3. Table specified without sessionId (e.g. Admin or POS display)
     if (table) {
       const cleanTable = normalizeTableNumber(table);
       const activeVisit = await getActiveVisitOrdersForTable(cleanTable);
 
-      // Verify authorization: non-admin callers MUST supply matching sessionId to see orders
       const adminSession = await verifyAdminSession(req);
       if (!adminSession.authenticated) {
-        if (!sessionId) {
-          return NextResponse.json({
+        return NextResponse.json(
+          {
             success: true,
             orders: [],
             visitId: null,
             tableOccupiedByOther: activeVisit.orders.length > 0,
-          });
-        }
-        const matchesSession = activeVisit.orders.some(
-          (o) => o.customerSessionId === sessionId
+          },
+          { headers: { "Cache-Control": "no-store, max-age=0" } }
         );
-        if (!matchesSession) {
-          return NextResponse.json({
-            success: true,
-            orders: [],
-            visitId: null,
-            tableOccupiedByOther: true,
-          });
-        }
       }
 
       return NextResponse.json({
@@ -348,29 +389,6 @@ export async function GET(req: NextRequest) {
         visitId: activeVisit.visitId,
         activeOrder: activeVisit.orders[0] || null,
       });
-    }
-
-    // 3. Session ID specified without table (Customer order tracker)
-    if (sessionId) {
-      if (includeHistory) {
-        const orders = await getSessionOrders(sessionId);
-        return NextResponse.json({ success: true, orders });
-      }
-
-      const allSessionOrders = await getSessionOrders(sessionId);
-      const activeCurrent = allSessionOrders.filter(
-        (o) => o.paymentStatus !== "PAID" && o.status !== "CANCELLED"
-      );
-
-      if (activeCurrent.length > 0) {
-        const mostRecentTable = normalizeTableNumber(activeCurrent[0].tableNumber);
-        const filtered = activeCurrent.filter(
-          (o) => normalizeTableNumber(o.tableNumber) === mostRecentTable
-        );
-        return NextResponse.json({ success: true, orders: filtered });
-      }
-
-      return NextResponse.json({ success: true, orders: [] });
     }
 
     // 4. If no session or table filter provided, return all orders (ADMIN ONLY)

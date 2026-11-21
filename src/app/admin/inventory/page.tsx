@@ -174,7 +174,7 @@ export default function AdminInventoryPage() {
   // Load Ingredients Master
   const fetchIngredientsMaster = async () => {
     try {
-      const res = await fetch("/api/admin/inventory/ingredients");
+      const res = await fetch("/api/admin/inventory/ingredients", { cache: "no-store" });
       const json = await res.json();
       if (json.success) {
         setIngredients(json.ingredients || []);
@@ -521,6 +521,19 @@ export default function AdminInventoryPage() {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || "Failed to update ingredient");
 
+      if (json.ingredient) {
+        setIngredients((prev) =>
+          prev.map((ing) => (ing.id === json.ingredient.id ? json.ingredient : ing))
+        );
+        setItems((prev) =>
+          prev.map((it) =>
+            it.ingredient_id === json.ingredient.id
+              ? { ...it, unit_cost: json.ingredient.cost_per_unit }
+              : it
+          )
+        );
+      }
+
       setShowEditIngredientModal(false);
       setSaveSuccessMessage("Ingredient updated successfully!");
       setTimeout(() => setSaveSuccessMessage(null), 3000);
@@ -545,6 +558,10 @@ export default function AdminInventoryPage() {
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || "Failed to add ingredient");
+
+      if (json.ingredient) {
+        setIngredients((prev) => [...prev, json.ingredient]);
+      }
 
       setShowAddIngredientModal(false);
       setNewIngForm({ name: "", category_id: "", unit: "kg", cost_per_unit: "", min_stock_level: 0, notes: "" });
@@ -1601,7 +1618,7 @@ export default function AdminInventoryPage() {
                         name: i.ingredient_name,
                         category_id: i.category_id,
                         unit: i.unit,
-                        cost_per_unit: i.unit_cost || null,
+                        cost_per_unit: i.unit_cost !== null && i.unit_cost !== undefined ? i.unit_cost : null,
                         min_stock_level: 0,
                         display_order: i.ingredient_number,
                         is_active: true,
@@ -1621,7 +1638,9 @@ export default function AdminInventoryPage() {
                             </td>
                             <td className="py-3 px-4 text-center font-mono text-zinc-700">{ing.unit}</td>
                             <td className="py-3 px-4 text-center font-mono font-bold text-zinc-800">
-                              {ing.cost_per_unit ? `₹${ing.cost_per_unit}` : "—"}
+                              {ing.cost_per_unit !== null && ing.cost_per_unit !== undefined && !isNaN(Number(ing.cost_per_unit))
+                                ? `₹${Number(ing.cost_per_unit)}`
+                                : "—"}
                             </td>
                             <td className="py-3 px-4 text-center font-mono text-zinc-700">
                               {ing.min_stock_level || 0} {ing.unit}

@@ -22,17 +22,20 @@ export async function GET(req: NextRequest) {
     if (sessionId || phone) {
       // Check customer active transfer request or active visit
       const transfers = readLocalTransfers();
-      const myRequest = transfers.find(
+      const myRequests = transfers.filter(
         (t) =>
-          (sessionId && t.customerSessionId === sessionId && t.status === "PENDING") ||
-          (phone && t.customerPhone === phone && t.status === "PENDING")
+          (sessionId && t.customerSessionId === sessionId) ||
+          (phone && t.customerPhone === phone)
       );
+      const pendingRequest = myRequests.find((t) => t.status === "PENDING") || null;
+      const latestRequest = myRequests[0] || null;
 
       const activeVisit = await getActiveCustomerVisit(sessionId || "", phone || undefined);
 
       return NextResponse.json({
         success: true,
-        pendingRequest: myRequest || null,
+        pendingRequest: pendingRequest || null,
+        latestRequest: latestRequest || null,
         activeVisit,
       });
     }
@@ -151,6 +154,7 @@ export async function POST(req: NextRequest) {
       toTable,
       customerSessionId,
       customerPhone,
+      requireApproval: body.requireApproval ?? true,
     });
 
     return NextResponse.json(transferResult);

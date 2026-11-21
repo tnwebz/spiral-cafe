@@ -40,8 +40,10 @@ export class KotReceiptEngine {
     let headerTitle = `TABLE ${data.tableNumber.toUpperCase()}`;
     if (data.isPrivateOrder) {
       headerTitle = "*** PRIVATE ORDER ***";
-    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway) {
+    } else if (data.tableNumber === "TAKEAWAY") {
       headerTitle = "*** TAKE AWAY ***";
+    } else if (data.isTakeaway) {
+      headerTitle = `TABLE ${data.tableNumber.toUpperCase()} (PARCEL)`;
     }
 
     const lines: string[] = [
@@ -231,7 +233,9 @@ export function buildKotData(
     options?.isTakeaway ||
     order.tableNumber === "TAKEAWAY" ||
     (order as any).isTakeaway ||
-    (order as any).orderType === "TAKEAWAY"
+    (order as any).orderType === "TAKEAWAY" ||
+    (order.notes || "").includes("[TAKEAWAY]") ||
+    (order.notes || "").includes("[PARCEL]")
   );
   const isPrivateOrder = Boolean(options?.isPrivateOrder || (order as any).isPrivate);
 

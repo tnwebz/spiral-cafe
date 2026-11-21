@@ -365,20 +365,18 @@ export default function OrderSuccessModal({
             <div className="mt-3 flex flex-col items-center gap-2">
               <div className="rounded-2xl border border-[#F4C9AF] bg-gradient-to-r from-[#FFF6EE] to-[#FFE8D9] px-4 py-3 shadow-sm max-w-xs w-full">
                 <p className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-[#A85A32]">
-                  Approximate Preparation Time
+                  Fresh Food, Made with Love! ❤️
                 </p>
                 <p className="mt-1 text-center text-lg sm:text-xl font-extrabold text-[#D9480F]">
                   ⏳ 10–15 Minutes
                 </p>
-                <p className="mt-1 text-center text-[13px] font-medium text-[#6B4A3F] leading-relaxed">
-                  Freshly made for you. Kindly wait while we prepare your
-                  delicious order.
+                <p className="mt-1 text-center text-[12px] sm:text-[13px] font-medium text-[#6B4A3F] leading-relaxed">
+                  {isTakeaway
+                    ? "Kindly allow approximately 10–15 minutes for preparation. We will announce when your parcel is ready at the counter."
+                    : "Kindly allow approximately 10–15 minutes for preparation. Please remain at your table."}
                 </p>
               </div>
             </div>
-            <span className="text-[10px] text-[#8C5E51] font-medium block mt-1">
-              (Approximate preparation time)
-            </span>
           </motion.div>
 
           {/* Minimalist Summary Card (Keep ONLY: Order ID, Table Number, Total Price) */}

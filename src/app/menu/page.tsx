@@ -13,6 +13,8 @@ import { useCart } from "@/context/CartContext";
 import Link from "next/link";
 import { DynamicMenuItem } from "@/lib/db";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { resolveTableFromParam } from "@/lib/tableResolution";
+import TableSwitchWarningModal from "@/components/Menu/TableSwitchWarningModal";
 
 function MenuContent() {
   const router = useRouter();
@@ -28,6 +30,8 @@ function MenuContent() {
     foodPreference,
     setFoodPreference,
     tableReservation,
+    customerSessionId,
+    activeTableOrder,
   } = useCart();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
@@ -35,6 +39,21 @@ function MenuContent() {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [dynamicItems, setDynamicItems] = useState<DynamicMenuItem[]>([]);
+
+  // Table switch warning state
+  const [showSwitchWarningModal, setShowSwitchWarningModal] = useState(false);
+  const [switchAssignedTable, setSwitchAssignedTable] = useState("");
+  const [switchTargetTable, setSwitchTargetTable] = useState("");
+  const [switchRequestStatus, setSwitchRequestStatus] = useState<"IDLE" | "PENDING" | "APPROVED" | "REJECTED">("IDLE");
+  const [switchStatusMessage, setSwitchStatusMessage] = useState<string | null>(null);
+  const [isSubmittingSwitchRequest, setIsSubmittingSwitchRequest] = useState(false);
+  const switchPollTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (switchPollTimerRef.current) clearInterval(switchPollTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (categoryParam) {
@@ -45,10 +64,119 @@ function MenuContent() {
   }, [categoryParam]);
 
   useEffect(() => {
-    if (tableParam) {
-      setTableNumber(tableParam);
+    if (!tableParam) return;
+    const isQr = searchParams.get("qr") === "true";
+    if (isQr) {
+      try {
+        sessionStorage.removeItem("spiral_entered");
+      } catch {}
     }
-  }, [tableParam, setTableNumber]);
+    const resolved = resolveTableFromParam(tableParam) || tableParam.toUpperCase();
+
+    // Check existing stored table session
+    const existing = typeof window !== "undefined" ? localStorage.getItem("spiral_table_session") : null;
+    const cleanExisting = existing ? existing.replace(/^Table\s*/i, "").trim().toUpperCase() : null;
+    const cleanResolved = resolved.replace(/^Table\s*/i, "").trim().toUpperCase();
+
+    // Check if there are active orders at cleanExisting
+    const storedPlaced = typeof window !== "undefined" ? localStorage.getItem("spiral_placed_orders") : null;
+    let hasActiveExistingOrders = false;
+    if (storedPlaced) {
+      try {
+        const arr = JSON.parse(storedPlaced);
+        if (Array.isArray(arr) && arr.some((o: any) => !(o.paymentStatus === "PAID" && o.status === "COMPLETED") && o.status !== "CANCELLED")) {
+          hasActiveExistingOrders = true;
+        }
+      } catch {}
+    }
+
+    if (cleanExisting && cleanExisting !== cleanResolved && (hasActiveExistingOrders || activeTableOrder)) {
+      // Customer has active dining session at cleanExisting, but scanned cleanResolved!
+      setSwitchAssignedTable(cleanExisting);
+      setSwitchTargetTable(cleanResolved);
+      setShowSwitchWarningModal(true);
+      return;
+    }
+
+    setTableNumber(resolved);
+    try {
+      localStorage.setItem("spiral_table_session", resolved);
+      localStorage.setItem("spiral_table_number", resolved);
+    } catch {}
+  }, [tableParam, setTableNumber, activeTableOrder]);
+
+  const handleContinueAssignedTable = () => {
+    setShowSwitchWarningModal(false);
+    if (switchPollTimerRef.current) clearInterval(switchPollTimerRef.current);
+    router.replace(`/menu?table=${encodeURIComponent(switchAssignedTable)}`);
+  };
+
+  const handleRequestTableChange = async () => {
+    setIsSubmittingSwitchRequest(true);
+    setSwitchRequestStatus("PENDING");
+    setSwitchStatusMessage("Your table-change request has been sent. Please wait for staff approval.");
+
+    const phone = typeof window !== "undefined" ? (localStorage.getItem("spiral_customer_phone") || "") : "";
+
+    try {
+      const res = await fetch("/api/tables/transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "REQUEST",
+          fromTable: switchAssignedTable,
+          toTable: switchTargetTable,
+          customerSessionId,
+          customerPhone: phone,
+          requireApproval: true,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success && data.error) {
+        setSwitchStatusMessage(data.error);
+      }
+    } catch (err: any) {
+      console.warn("Transfer request failed:", err);
+    } finally {
+      setIsSubmittingSwitchRequest(false);
+    }
+
+    // Poll status until approved or rejected
+    if (switchPollTimerRef.current) clearInterval(switchPollTimerRef.current);
+    switchPollTimerRef.current = setInterval(async () => {
+      try {
+        const pollRes = await fetch(
+          `/api/tables/transfer?sessionId=${encodeURIComponent(customerSessionId)}&phone=${encodeURIComponent(phone)}`
+        );
+        const pollData = await pollRes.json();
+        if (pollData.success && pollData.latestRequest) {
+          const req = pollData.latestRequest;
+          if (req.status === "APPROVED" && req.toTable.toUpperCase() === switchTargetTable.toUpperCase()) {
+            if (switchPollTimerRef.current) clearInterval(switchPollTimerRef.current);
+            setSwitchRequestStatus("APPROVED");
+            setSwitchStatusMessage(`Table changed to Table ${switchTargetTable} successfully.`);
+            setTableNumber(switchTargetTable);
+            try {
+              localStorage.setItem("spiral_table_session", switchTargetTable);
+              localStorage.setItem("spiral_table_number", switchTargetTable);
+            } catch {}
+            setTimeout(() => {
+              setShowSwitchWarningModal(false);
+              router.replace(`/menu?table=${encodeURIComponent(switchTargetTable)}`);
+            }, 1800);
+          } else if (req.status === "REJECTED") {
+            if (switchPollTimerRef.current) clearInterval(switchPollTimerRef.current);
+            setSwitchRequestStatus("REJECTED");
+            setSwitchStatusMessage("Table change request was declined by staff.");
+            setTimeout(() => {
+              setShowSwitchWarningModal(false);
+              router.replace(`/menu?table=${encodeURIComponent(switchAssignedTable)}`);
+            }, 2500);
+          }
+        }
+      } catch {}
+    }, 3000);
+  };
 
   const handleSelectCategory = (catId: string | null) => {
     setSelectedCategory(catId);
@@ -243,7 +371,7 @@ function MenuContent() {
                 onClick={openCart}
                 className="text-[11px] font-bold text-[#8C5E51] bg-muted hover:bg-[#EBDAD0] px-2.5 py-1 rounded-full border border-border cursor-pointer transition-colors"
               >
-                {tableNumber}
+                {tableNumber === "TAKEAWAY" ? "🛍️ Takeaway" : `Dining at Table ${tableNumber.replace(/^Table\s*/i, "")}`}
               </button>
               <button
                 onClick={openCart}
@@ -324,7 +452,7 @@ function MenuContent() {
                 className="text-xs font-bold text-[#8C5E51] bg-muted hover:bg-[#EBDAD0] px-3.5 py-1.5 rounded-full border border-border cursor-pointer transition-colors inline-flex items-center gap-1.5"
               >
                 <Utensils className="w-3.5 h-3.5 text-[#8C5E51]" />
-                <span>{tableNumber}</span>
+                <span>{tableNumber === "TAKEAWAY" ? "🛍️ Takeaway" : `Dining at Table ${tableNumber.replace(/^Table\s*/i, "")}`}</span>
               </button>
               <button
                 onClick={openCart}
@@ -606,6 +734,17 @@ function MenuContent() {
         )}
 
       </div>
+
+      <TableSwitchWarningModal
+        isOpen={showSwitchWarningModal}
+        assignedTable={switchAssignedTable}
+        targetTable={switchTargetTable}
+        onContinueAssignedTable={handleContinueAssignedTable}
+        onRequestTableChange={handleRequestTableChange}
+        isSubmittingRequest={isSubmittingSwitchRequest}
+        requestStatus={switchRequestStatus}
+        statusMessage={switchStatusMessage}
+      />
 
       <BottomNav />
     </main>

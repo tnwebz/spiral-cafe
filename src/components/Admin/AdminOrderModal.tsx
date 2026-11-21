@@ -43,7 +43,16 @@ export default function AdminOrderModal({
   defaultTableNumber = "TAKEAWAY",
   onOrderCreated,
 }: AdminOrderModalProps) {
-  const isTakeaway = defaultTableNumber === "TAKEAWAY";
+  const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">(
+    defaultTableNumber === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"
+  );
+  const isTakeaway = orderType === "TAKEAWAY";
+
+  useEffect(() => {
+    if (isOpen) {
+      setOrderType(defaultTableNumber === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN");
+    }
+  }, [isOpen, defaultTableNumber]);
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loadingMenu, setLoadingMenu] = useState(true);
@@ -166,6 +175,10 @@ export default function AdminOrderModal({
         image: c.item.image,
       }));
 
+      const finalNotes = isTakeaway && !orderNotes.includes("[TAKEAWAY]")
+        ? `[TAKEAWAY] [PARCEL] ${orderNotes.trim()}`.trim()
+        : orderNotes.trim();
+
       const res = await fetch("/api/admin/takeaway", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -173,7 +186,7 @@ export default function AdminOrderModal({
           tableNumber: defaultTableNumber,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
-          notes: orderNotes.trim(),
+          notes: finalNotes,
           items: payloadItems,
         }),
       });
@@ -407,6 +420,34 @@ export default function AdminOrderModal({
                     <span>Clear</span>
                   </button>
                 )}
+              </div>
+
+              {/* Order Mode Toggle */}
+              <div className="flex rounded-xl p-1 bg-[#F5EBE1] border border-[#EBDAD0] gap-1">
+                <button
+                  type="button"
+                  onClick={() => setOrderType("DINE_IN")}
+                  className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    orderType === "DINE_IN"
+                      ? "bg-[#CA340A] text-white shadow-xs"
+                      : "text-[#8C5E51] hover:text-[#2C1710]"
+                  }`}
+                >
+                  <UtensilsCrossed size={12} />
+                  <span>Dine-In Table</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderType("TAKEAWAY")}
+                  className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    orderType === "TAKEAWAY"
+                      ? "bg-amber-700 text-white shadow-xs"
+                      : "text-[#8C5E51] hover:text-[#2C1710]"
+                  }`}
+                >
+                  <ShoppingBag size={12} />
+                  <span>Take Away (Parcel)</span>
+                </button>
               </div>
 
               {/* Customer Info Form */}

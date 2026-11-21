@@ -33,7 +33,11 @@ interface LocalStoreSchema {
 }
 
 function getLocalStorePath(): string {
-  return path.join(process.cwd(), "src", "data", "inventory_store.json");
+  const p1 = path.join(process.cwd(), "src", "data", "inventory_store.json");
+  if (fs.existsSync(/*turbopackIgnore: true*/ p1)) return p1;
+  const p2 = path.join(process.cwd(), "menu-card", "src", "data", "inventory_store.json");
+  if (fs.existsSync(/*turbopackIgnore: true*/ p2)) return p2;
+  return p1;
 }
 
 function readLocalStore(): LocalStoreSchema {
@@ -207,6 +211,7 @@ export async function createInventoryIngredient(
     id,
     item_number: nextNumber,
     ...item,
+    cost_per_unit: item.cost_per_unit !== undefined && item.cost_per_unit !== null ? Number(item.cost_per_unit) : null,
     is_active: true,
     display_order: item.display_order || nextNumber,
     created_at: new Date().toISOString(),
@@ -302,7 +307,36 @@ export async function updateInventoryIngredient(
   const store = readLocalStore();
   const idx = store.ingredients.findIndex((i) => i.id === id);
   if (idx === -1) return null;
-  store.ingredients[idx] = { ...store.ingredients[idx], ...patch, updated_at: new Date().toISOString() };
+
+  const parsedCost =
+    patch.cost_per_unit !== undefined
+      ? patch.cost_per_unit === null || isNaN(Number(patch.cost_per_unit))
+        ? null
+        : Number(patch.cost_per_unit)
+      : store.ingredients[idx].cost_per_unit;
+
+  store.ingredients[idx] = {
+    ...store.ingredients[idx],
+    ...patch,
+    cost_per_unit: parsedCost,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (patch.cost_per_unit !== undefined) {
+    for (const item of store.dayItems) {
+      if (item.ingredient_id === id) {
+        if (!item.purchase_entries || item.purchase_entries.length === 0) {
+          item.unit_cost = parsedCost;
+          if (item.closing_actual_qty !== null && parsedCost !== null && parsedCost !== undefined) {
+            item.closing_stock_value = Number((item.closing_actual_qty * parsedCost).toFixed(2));
+          }
+          if (item.calculated_used_qty !== null && parsedCost !== null && parsedCost !== undefined) {
+            item.used_cost = Number((item.calculated_used_qty * parsedCost).toFixed(2));
+          }
+        }
+      }
+    }
+  }
 
   if (patch.category_id) {
     const targetCategory = store.categories.find((c) => c.id === patch.category_id);

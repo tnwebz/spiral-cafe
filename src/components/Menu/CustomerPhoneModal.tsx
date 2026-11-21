@@ -102,6 +102,9 @@ export default function CustomerPhoneModal({
     const clean = rawTable.replace(/^Table\s*/i, "").trim();
     setTableNumber(clean);
     setSelectedTable(clean);
+    try {
+      sessionStorage.setItem("spiral_entered", "true");
+    } catch {}
     setIsOpen(false);
     const savedPhone =
       phone.replace(/\D/g, "").slice(-10) ||
@@ -119,6 +122,7 @@ export default function CustomerPhoneModal({
     try {
       localStorage.setItem("spiral_table_number", "TAKEAWAY");
       localStorage.setItem("spiral_order_mode", "TAKEAWAY");
+      sessionStorage.setItem("spiral_entered", "true");
     } catch {}
     if (onPhoneSaved) {
       const savedPhone =
@@ -130,92 +134,62 @@ export default function CustomerPhoneModal({
     setIsOpen(false);
   };
 
-  // Check returning customer session on load (30-day retention window)
+  // Check customer session on load - prompt entry flow (Phone -> Veg/Non-Veg -> Dine In/Takeaway)
   useEffect(() => {
     if (pathname?.startsWith("/admin") || pathname?.startsWith("/kitchen")) {
       return;
     }
     try {
-      const savedProfileStr = localStorage.getItem("spiral_customer_profile");
       const savedPhone = localStorage.getItem("spiral_customer_phone");
 
       const checkAndTrigger = () => {
-        if (savedProfileStr) {
-          try {
-            const parsed: CustomerProfile = JSON.parse(savedProfileStr);
-            const isExpired = parsed.expiresAt
-              ? Date.now() > new Date(parsed.expiresAt).getTime()
-              : false;
-
-            if (!isExpired && parsed.maskedPhone) {
-              // Returning Customer within 30 days: show Welcome Back Screen
-              fetchTablesList();
-              setStep("welcome_back");
-              setIsOpen(true);
-              return;
-            } else {
-              // Session expired after 30 days -> prompt for phone again
-              localStorage.removeItem("spiral_customer_profile");
-              localStorage.removeItem("spiral_customer_phone");
-              setStep("phone");
-              setIsOpen(true);
-              return;
-            }
-          } catch {
-            setStep("phone");
-            setIsOpen(true);
-            return;
-          }
-        }
-
-        if (savedPhone && savedPhone.length >= 10) {
-          // If legacy raw phone was saved without profile, show welcome back with masked number
-          const masked = `******${savedPhone.slice(-4)}`;
-          const profile: CustomerProfile = {
-            maskedPhone: masked,
-            foodPreference: foodPreference || "ALL",
-            lastVisited: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          };
-          localStorage.setItem("spiral_customer_profile", JSON.stringify(profile));
-          setCustomerProfile(profile);
-          fetchTablesList();
-          setStep("welcome_back");
-          setIsOpen(true);
+        // If customer has already completed the entry flow in this tab/session, don't interrupt
+        const alreadyEntered = sessionStorage.getItem("spiral_entered") === "true";
+        if (alreadyEntered) {
+          setIsOpen(false);
           return;
         }
 
-        // First-time customer: show Phone Entry
+        // Pre-fill phone if previously entered
+        if (savedPhone) {
+          setPhone(savedPhone);
+        }
+
+        // Always ask on enter: Phone -> Veg/Non-Veg -> Dine In/Takeaway
         setStep("phone");
         setIsOpen(true);
       };
 
-      // Coordinate with splash screen
-      const isSplashDone = sessionStorage.getItem("spiral_cafe_splash") === "true";
-      if (isSplashDone) {
+      // Non-root routes (e.g. /menu, /[tableNumber]) trigger immediately without waiting for splash
+      if (pathname !== "/") {
         checkAndTrigger();
       } else {
-        const interval = setInterval(() => {
-          if (sessionStorage.getItem("spiral_cafe_splash") === "true") {
+        const isSplashDone = sessionStorage.getItem("spiral_cafe_splash") === "true";
+        if (isSplashDone) {
+          checkAndTrigger();
+        } else {
+          const interval = setInterval(() => {
+            if (sessionStorage.getItem("spiral_cafe_splash") === "true") {
+              clearInterval(interval);
+              checkAndTrigger();
+            }
+          }, 150);
+
+          const timeout = setTimeout(() => {
             clearInterval(interval);
             checkAndTrigger();
-          }
-        }, 250);
+          }, 3200);
 
-        const timeout = setTimeout(() => {
-          clearInterval(interval);
-          checkAndTrigger();
-        }, 3200);
-
-        return () => {
-          clearInterval(interval);
-          clearTimeout(timeout);
-        };
+          return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+          };
+        }
       }
     } catch {
       setIsOpen(true);
     }
-  }, [setCustomerProfile, foodPreference]);
+  }, [pathname]);
 
   // Handler for First-Time Phone Submission -> Moves to Food Preference Screen
   const handlePhoneSubmit = (e: React.FormEvent) => {
@@ -237,10 +211,10 @@ export default function CustomerPhoneModal({
     }
 
     setError("");
-    setStep("dining_option");
+    setStep("preference");
   };
 
-  // Handler for Food Preference Selection (Saves 30-day session & closes modal)
+  // Handler for Food Preference Selection -> Moves to Dining Option Screen
   const handleSelectPreference = async (pref: FoodPreference) => {
     const clean = phone.replace(/\D/g, "").slice(-10);
     const savedPhone =
@@ -269,9 +243,12 @@ export default function CustomerPhoneModal({
       setFoodPreference(pref);
       setCustomerProfile(profile);
 
-      // 2. Browser Storage (masked for display, full for backend order requests)
+      // 2. Browser Storage
       localStorage.setItem("spiral_customer_phone", clean);
       localStorage.setItem("spiral_customer_profile", JSON.stringify(profile));
+
+      const detected = selectedTable || currentTable || tableNumber || (typeof window !== "undefined" ? localStorage.getItem("spiral_table_session") : null);
+      const targetTable = detected && detected !== "TAKEAWAY" ? detected.replace(/^Table\s*/i, "").trim().toUpperCase() : (selectedTable || "");
 
       // 3. Register with backend
       await fetch("/api/customers/identify", {
@@ -280,24 +257,69 @@ export default function CustomerPhoneModal({
         body: JSON.stringify({
           phoneNumber: clean,
           foodPreference: pref,
-          tableNumber: selectedTable || tableNumber || currentTable || "",
+          tableNumber: targetTable || "",
           sessionId: activeSession,
         }),
       });
 
       if (onPhoneSaved) {
-        onPhoneSaved(clean, selectedTable || tableNumber || currentTable || "");
+        onPhoneSaved(clean, targetTable || "");
       }
 
-      await fetchTablesList(activeSession, clean);
-      setStep("table_select");
+      // Next: Ask Dine In or Take Away
+      setStep("dining_option");
     } catch (err) {
       console.error("Preference save error:", err);
-      await fetchTablesList(activeSession, clean);
-      setStep("table_select");
+      setStep("dining_option");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Handler for Dine In Selection in Dining Option step
+  const handleSelectDineIn = async () => {
+    const clean =
+      phone.replace(/\D/g, "").slice(-10) ||
+      (typeof window !== "undefined" ? localStorage.getItem("spiral_customer_phone") : "") ||
+      "";
+    const detected = selectedTable || currentTable || tableNumber || (typeof window !== "undefined" ? localStorage.getItem("spiral_table_session") : null);
+
+    if (detected && detected !== "TAKEAWAY") {
+      const cleanT = detected.replace(/^Table\s*/i, "").trim().toUpperCase();
+      try {
+        await fetch("/api/tables/reserve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tableNumber: cleanT,
+            customerSessionId,
+            customerPhone: clean,
+          }),
+        });
+      } catch (resErr) {
+        console.warn("Auto-reserve table notice:", resErr);
+      }
+
+      setTableNumber(cleanT);
+      setSelectedTable(cleanT);
+      try {
+        localStorage.setItem("spiral_table_session", cleanT);
+        localStorage.setItem("spiral_table_number", cleanT);
+        localStorage.removeItem("spiral_order_mode");
+        sessionStorage.setItem("spiral_entered", "true");
+      } catch {}
+
+      if (onPhoneSaved && clean) {
+        onPhoneSaved(clean, cleanT);
+      }
+
+      setIsOpen(false);
+      return;
+    }
+
+    // No table detected via QR URL -> show table selector
+    await fetchTablesList(customerSessionId, clean);
+    setStep("table_select");
   };
 
   // Handler for Returning Customer: "Continue"
@@ -320,7 +342,7 @@ export default function CustomerPhoneModal({
       onPhoneSaved(savedPhone, tableNumber || currentTable || "A1");
     }
 
-    fetchTablesList();
+    // Move to dining option to ask Dine In or Take Away
     setStep("dining_option");
   };
 
@@ -361,6 +383,9 @@ export default function CustomerPhoneModal({
       if (d.success) {
         setTableNumber(tableNum);
         setSelectedTable(tableNum);
+        try {
+          sessionStorage.setItem("spiral_entered", "true");
+        } catch {}
         if (onPhoneSaved) {
           onPhoneSaved(clean, tableNum);
         }
@@ -587,101 +612,13 @@ export default function CustomerPhoneModal({
         )}
 
         {/* ========================================================= */}
-        {/* SCENARIO 1 - STEP 2: DINE IN OR TAKE AWAY SELECTION */}
-        {/* ========================================================= */}
-        {step === "dining_option" && (
-          <div className="space-y-4">
-            <div className="text-center space-y-1">
-              <span className="text-[11px] font-extrabold text-[#CA340A] uppercase tracking-wider">
-                Select Dining Option
-              </span>
-              <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
-                DINE IN OR TAKE AWAY?
-              </h2>
-              <p className="text-xs text-[#6B5E55] font-medium">
-                Choose whether you are dining at a table or picking up parcel.
-              </p>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              {/* Option 1: DINE IN */}
-              <button
-                type="button"
-                onClick={() => {
-                  fetchTablesList();
-                  setStep("preference");
-                }}
-                className="w-full p-4 rounded-2xl bg-white border-2 border-[#3A1710]/20 hover:border-[#CA340A] hover:bg-orange-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
-              >
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <UtensilsCrossed size={24} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
-                        DINE IN
-                      </h3>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-[#CA340A]">
-                        Table Seating
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#6B5E55] mt-0.5">
-                      Select your floor table and enjoy table service
-                    </p>
-                  </div>
-                </div>
-                <ArrowRight size={18} className="text-[#CA340A] opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-              </button>
-
-              {/* Option 2: TAKE AWAY / PARCEL */}
-              <button
-                type="button"
-                onClick={handleSelectTakeaway}
-                className="w-full p-4 rounded-2xl bg-white border-2 border-emerald-500/30 hover:border-emerald-600 hover:bg-emerald-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
-              >
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <ShoppingBag size={24} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
-                        TAKE AWAY (PARCEL)
-                      </h3>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                        Counter Pickup
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#6B5E55] mt-0.5">
-                      Skip table reservation and pick up packaged food
-                    </p>
-                  </div>
-                </div>
-                <ArrowRight size={18} className="text-emerald-700 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-              </button>
-            </div>
-
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => setStep("phone")}
-                className="text-xs font-semibold text-[#8C5E51] hover:text-[#CA340A] transition-colors"
-              >
-                ← Back to Mobile Number
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* SCENARIO 1 - SCREEN 2: FOOD PREFERENCE SELECTION */}
+        {/* STEP 2: FOOD PREFERENCE SELECTION (VEG / VEG & NON-VEG) */}
         {/* ========================================================= */}
         {step === "preference" && (
           <div className="space-y-4">
             <div className="text-center space-y-1">
               <span className="text-[11px] font-extrabold text-[#CA340A] uppercase tracking-wider">
-                Step 2 of 2
+                Step 2 of 3 • Food Preference
               </span>
               <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
                 WHAT DO YOU PREFER?
@@ -744,9 +681,104 @@ export default function CustomerPhoneModal({
               </button>
             </div>
 
-            <p className="text-[11px] text-[#8C5E51] text-center pt-1">
-              Remembered for 30 days on this device.
-            </p>
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setStep("phone")}
+                className="text-xs font-semibold text-[#8C5E51] hover:text-[#CA340A] transition-colors"
+              >
+                ← Back to Mobile Number
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* STEP 3: DINE IN OR TAKE AWAY SELECTION */}
+        {/* ========================================================= */}
+        {step === "dining_option" && (
+          <div className="space-y-4">
+            <div className="text-center space-y-1">
+              <span className="text-[11px] font-extrabold text-[#CA340A] uppercase tracking-wider">
+                Step 3 of 3 • Dining Option
+              </span>
+              <h2 className="font-heading font-black text-xl text-[#2C1710] tracking-tight">
+                DINE IN OR TAKE AWAY?
+              </h2>
+              <p className="text-xs text-[#6B5E55] font-medium">
+                Choose whether you are dining at a table or picking up parcel.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              {/* Option 1: DINE IN */}
+              <button
+                type="button"
+                onClick={handleSelectDineIn}
+                className="w-full p-4 rounded-2xl bg-white border-2 border-[#3A1710]/20 hover:border-[#CA340A] hover:bg-orange-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#CA340A]/10 text-[#CA340A] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <UtensilsCrossed size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
+                        DINE IN
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-[#CA340A]">
+                        {selectedTable && selectedTable !== "TAKEAWAY"
+                          ? `Table ${selectedTable.replace(/^Table\s*/i, "")}`
+                          : "Table Seating"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#6B5E55] mt-0.5">
+                      {selectedTable && selectedTable !== "TAKEAWAY"
+                        ? `Enjoy fresh food served directly at Table ${selectedTable.replace(/^Table\s*/i, "")}`
+                        : "Select your floor table and enjoy table service"}
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight size={18} className="text-[#CA340A] opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+
+              {/* Option 2: TAKE AWAY / PARCEL */}
+              <button
+                type="button"
+                onClick={handleSelectTakeaway}
+                className="w-full p-4 rounded-2xl bg-white border-2 border-emerald-500/30 hover:border-emerald-600 hover:bg-emerald-50/40 transition-all text-left flex items-center justify-between group shadow-xs cursor-pointer active:scale-98"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <ShoppingBag size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-heading font-extrabold text-sm text-[#2C1710]">
+                        TAKE AWAY (PARCEL)
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        Counter Pickup
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#6B5E55] mt-0.5">
+                      Skip table reservation and pick up packaged food at counter
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight size={18} className="text-emerald-700 opacity-60 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setStep("preference")}
+                className="text-xs font-semibold text-[#8C5E51] hover:text-[#CA340A] transition-colors"
+              >
+                ← Back to Food Preference
+              </button>
+            </div>
           </div>
         )}
 
@@ -970,6 +1002,16 @@ export default function CustomerPhoneModal({
               <p className="text-[10px] text-amber-900 text-center font-semibold pt-0.5">
                 ⚠️ If your table shows occupied, please contact the counter.
               </p>
+            </div>
+
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => setStep("dining_option")}
+                className="text-xs font-semibold text-[#8C5E51] hover:text-[#CA340A] transition-colors"
+              >
+                ← Back to Dining Option
+              </button>
             </div>
           </div>
         )}

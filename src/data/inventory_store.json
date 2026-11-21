@@ -75,7 +75,10 @@
       "unit": "kg",
       "min_stock_level": 5,
       "display_order": 1,
-      "is_active": true
+      "is_active": true,
+      "cost_per_unit": 260,
+      "notes": null,
+      "updated_at": "2026-11-18T15:53:58.294Z"
     },
     {
       "id": "ing_2",
@@ -922,7 +925,7 @@
       "total_closing_stock_value": 0,
       "total_used_value": 0,
       "total_wastage_value": 0,
-      "total_purchase_value": 0
+      "total_purchase_value": 600
     },
     {
       "id": "day_20261101",
@@ -956,7 +959,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T17:42:25.642Z",
-      "updated_at": "2026-11-13T17:42:25.642Z"
+      "updated_at": "2026-11-13T17:42:25.642Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261120_ing_2",
@@ -2202,7 +2206,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T17:42:25.737Z",
-      "updated_at": "2026-11-13T17:42:25.737Z"
+      "updated_at": "2026-11-13T17:42:25.737Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261121_ing_2",
@@ -3448,7 +3453,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T17:45:12.179Z",
-      "updated_at": "2026-11-13T17:45:12.179Z"
+      "updated_at": "2026-11-13T17:45:12.179Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261112_ing_2",
@@ -4694,7 +4700,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T17:45:12.287Z",
-      "updated_at": "2026-11-13T17:45:12.287Z"
+      "updated_at": "2026-11-13T17:45:12.287Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261112next_ing_2",
@@ -5936,7 +5943,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:36:32.447Z",
-      "updated_at": "2026-11-13T18:36:32.447Z"
+      "updated_at": "2026-11-13T18:36:32.447Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261121next_ing_2",
@@ -7180,7 +7188,10 @@
       "created_at": "2026-11-13T18:54:25.419Z",
       "updated_at": "2026-11-14T03:19:23.789Z",
       "counted_by": "Admin Manager",
-      "counted_at": "2026-11-14T03:19:23.789Z"
+      "counted_at": "2026-11-14T03:19:23.789Z",
+      "unit_cost": 260,
+      "closing_stock_value": 3900,
+      "used_cost": 1820
     },
     {
       "id": "item_day_20261114_ing_2",
@@ -8430,7 +8441,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T03:19:50.028Z",
-      "updated_at": "2026-11-14T03:19:50.028Z"
+      "updated_at": "2026-11-14T03:19:50.028Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261115_ing_2",
@@ -9672,7 +9684,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T05:37:15.159Z",
-      "updated_at": "2026-11-14T05:37:15.159Z"
+      "updated_at": "2026-11-14T05:37:15.159Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261125_ing_2",
@@ -10953,13 +10966,13 @@
       "updated_at": "2026-11-17T11:08:22.574Z",
       "counted_by": "Admin Manager",
       "counted_at": "2026-11-17T11:08:22.574Z",
-      "unit_cost": null,
+      "unit_cost": 260,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
-      "closing_stock_value": null,
-      "used_cost": null,
+      "closing_stock_value": 2600,
+      "used_cost": 5720,
       "wastage_cost": null
     },
     {
@@ -12816,7 +12829,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T05:38:38.469Z",
-      "updated_at": "2026-11-14T05:38:38.469Z"
+      "updated_at": "2026-11-14T05:38:38.469Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261117next_ing_2",
@@ -14166,7 +14180,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T13:40:32.352Z",
-      "updated_at": "2026-11-14T13:40:32.352Z"
+      "updated_at": "2026-11-14T13:40:32.352Z",
+      "unit_cost": 260
     },
     {
       "id": "item_day_20261116_ing_2",
@@ -15438,18 +15453,32 @@
       "category_name": "Chicken & Seafood",
       "unit": "kg",
       "opening_qty": 10,
-      "purchased_qty": 0,
+      "purchased_qty": 1,
       "wastage_qty": 0,
       "closing_actual_qty": null,
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-17T11:08:33.022Z",
-      "updated_at": "2026-11-17T11:08:33.022Z",
+      "updated_at": "2026-11-18T07:41:10.956Z",
       "unit_cost": null,
       "opening_stock_value": null,
-      "total_purchase_cost": 0,
-      "latest_purchase_price": null,
-      "purchase_entries": [],
+      "total_purchase_cost": 600,
+      "latest_purchase_price": 600,
+      "purchase_entries": [
+        {
+          "id": "pur_1794987670955_qcb9",
+          "ingredient_id": "ing_1",
+          "date": "2026-11-18",
+          "quantity": 1,
+          "unit": "kg",
+          "price_per_unit": 600,
+          "total_cost": 600,
+          "supplier": null,
+          "recorded_by": "Admin Manager",
+          "notes": null,
+          "created_at": "2026-11-18T07:41:10.955Z"
+        }
+      ],
       "closing_stock_value": null,
       "used_cost": null,
       "wastage_cost": null
@@ -17291,7 +17320,7 @@
       "is_counted": false,
       "created_at": "2026-11-17T14:47:11.239Z",
       "updated_at": "2026-11-17T14:47:11.239Z",
-      "unit_cost": null,
+      "unit_cost": 260,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -19123,6 +19152,18 @@
   ],
   "movements": [
     {
+      "id": "mov_1794987670955_y5n5",
+      "ingredient_id": "ing_1",
+      "date": "2026-11-18",
+      "movement_type": "PURCHASE",
+      "quantity": 1,
+      "unit": "kg",
+      "supplier": null,
+      "cost": 600,
+      "recorded_by": "Admin Manager",
+      "created_at": "2026-11-18T07:41:10.955Z"
+    },
+    {
       "id": "mov_1794937658851_eyll",
       "ingredient_id": "ing_9",
       "date": "2026-11-17",
@@ -19196,6 +19237,19 @@
       "recorded_by": "Admin Manager",
       "notes": null,
       "created_at": "2026-11-17T17:47:38.851Z"
+    },
+    {
+      "id": "pur_1794987670955_qcb9",
+      "ingredient_id": "ing_1",
+      "date": "2026-11-18",
+      "quantity": 1,
+      "unit": "kg",
+      "price_per_unit": 600,
+      "total_cost": 600,
+      "supplier": null,
+      "recorded_by": "Admin Manager",
+      "notes": null,
+      "created_at": "2026-11-18T07:41:10.955Z"
     }
   ]
 }

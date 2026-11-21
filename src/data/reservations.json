@@ -1,15 +1,5 @@
 [
   {
-    "id": "RES-B5-MW1U0J6Q",
-    "tableNumber": "B5",
-    "customerSessionId": "sess_1793779152880_v5am6fa",
-    "customerPhone": "1234567891",
-    "reservedAt": "2026-11-04T08:05:24.212Z",
-    "expiresAt": "2026-11-04T08:15:24.212Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-B5-MW1U3T7U"
-  },
-  {
     "id": "RES-C3-MWFTV5P5",
     "tableNumber": "C3",
     "customerSessionId": "sess_1794625662237_200af81449124812b8e0f01452442a12",
@@ -29,26 +19,6 @@
     "visitId": "VISIT-B6-MWG4HA3W"
   },
   {
-    "id": "RES-A2-MWG6L2AK",
-    "tableNumber": "A2",
-    "customerSessionId": "sess_1794647161582_7af2d24d55c9479ca290ce593274f1bd",
-    "customerPhone": "",
-    "reservedAt": "2026-11-14T09:06:03.687Z",
-    "expiresAt": "2026-11-14T09:16:03.687Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-A2-MWG6LAQC"
-  },
-  {
-    "id": "RES-B4-MWGG1XPQ",
-    "tableNumber": "B4",
-    "customerSessionId": "sess_1794663064340_04088515c7a84cbb9becb0240a614f8b",
-    "customerPhone": "1122334455",
-    "reservedAt": "2026-11-14T13:31:07.313Z",
-    "expiresAt": "2026-11-14T13:41:07.313Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-B4-MWGG25VY"
-  },
-  {
     "id": "RES-C2-MWGGAJ1S",
     "tableNumber": "C2",
     "customerSessionId": "sess_1794663064340_04088515c7a84cbb9becb0240a614f8b",
@@ -60,42 +30,50 @@
     "notes": "Transferred from B4 by Cashier Staff"
   },
   {
-    "id": "RES-B5-MWHNDUEX",
-    "tableNumber": "B5",
-    "customerSessionId": "admin_1794594459261_57czv",
-    "reservedAt": "2026-11-15T09:44:06.310Z",
-    "expiresAt": "2026-11-15T10:44:06.969Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-A1-ORD_1794",
-    "notes": "Transferred from A1 by Test Runner"
-  },
-  {
-    "id": "RES-B5-MWHNZQYX",
-    "tableNumber": "B5",
-    "customerSessionId": "admin_1794594459261_57czv",
-    "reservedAt": "2026-11-15T10:01:08.271Z",
-    "expiresAt": "2026-11-15T11:01:08.937Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-A1-ORD_1794",
-    "notes": "Transferred from A1 by Automated Tester"
-  },
-  {
-    "id": "RES-A1-MWKU6W95",
-    "tableNumber": "A1",
-    "customerSessionId": "sess_1794928673892_6db8fe760b6449b392c67d70cd52bedb",
-    "customerPhone": "1111111111",
-    "reservedAt": "2026-11-17T15:17:57.909Z",
-    "expiresAt": "2026-11-17T15:27:57.909Z",
-    "status": "CONVERTED",
-    "visitId": "VISIT-A1-MWKU7D13"
-  },
-  {
     "id": "RES-B3-MWLMY37Y",
     "tableNumber": "B3",
     "customerSessionId": "sess_1794976966645_f9352bc24b474beea524f5f211fa4e1b",
     "customerPhone": "9999999999",
     "reservedAt": "2026-11-18T04:42:55.512Z",
     "expiresAt": "2026-11-18T04:52:55.512Z",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "RES-B4-MWLSRJHV",
+    "tableNumber": "B4",
+    "customerSessionId": "sess_1794986741053_15126cbe0bab4c14a936a01fa7501ce7",
+    "customerPhone": "",
+    "reservedAt": "2026-11-18T07:25:48.305Z",
+    "expiresAt": "2026-11-18T07:35:48.305Z",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "RES-A2-MWP91E73",
+    "tableNumber": "A2",
+    "customerSessionId": "sess_1794663515933_c669751c663e439db25ae2dac8f1227b",
+    "customerPhone": "",
+    "reservedAt": "2026-11-20T17:24:39.987Z",
+    "expiresAt": "2026-11-20T17:34:39.987Z",
+    "status": "RELEASED",
+    "notes": "Released by Admin Staff at 2026-11-20T17:25:50.279Z"
+  },
+  {
+    "id": "RES-B5-MWPENEBR",
+    "tableNumber": "B5",
+    "customerSessionId": "sess_1795204859071_6jvqsv5",
+    "customerPhone": "",
+    "reservedAt": "2026-11-20T20:01:44.896Z",
+    "expiresAt": "2026-11-20T20:11:44.896Z",
+    "status": "CONVERTED",
+    "visitId": "VISIT-B5-MWPEPD3P"
+  },
+  {
+    "id": "RES-A1-MWPF858H",
+    "tableNumber": "A1",
+    "customerSessionId": "sess_1793721512886_3hj9irs",
+    "customerPhone": "1234567899",
+    "reservedAt": "2026-11-20T20:17:52.678Z",
+    "expiresAt": "2026-11-20T20:27:52.678Z",
     "status": "ACTIVE"
   }
 ]

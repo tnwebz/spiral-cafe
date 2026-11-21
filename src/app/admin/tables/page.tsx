@@ -812,6 +812,14 @@ export default function AdminTablesPage() {
                         ? ` • ${t.itemsCount} Items`
                         : ""}
                     </p>
+                    {(t as any).hasTakeawayParcel && (
+                      <div className="mt-1 flex items-center justify-center">
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 bg-amber-100 text-amber-900 border border-amber-300 rounded-full flex items-center gap-0.5">
+                          <ShoppingBag size={9} />
+                          <span>Parcel</span>
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Bottom Order Total Row */}

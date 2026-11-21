@@ -151,8 +151,9 @@ interface CartContextType {
   decreaseQuantity: (id: string) => void;
   getItemQuantity: (id: string) => number;
   clearCart: () => void;
-  placeOrder: (notes?: string, overrideTable?: string) => Promise<{ success: boolean; order?: PlacedOrder; error?: string }>;
+  placeOrder: (notes?: string, overrideTable?: string, isTakeaway?: boolean) => Promise<{ success: boolean; order?: PlacedOrder; error?: string }>;
   selectCashPayment: (orderId: string) => Promise<boolean>;
+  batchSelectCashPayment: (orderIds: string[]) => Promise<boolean>;
   switchPaymentMethod: (orderId: string, method: "CASH" | "ONLINE") => Promise<boolean>;
   processOnlinePayment: (orderId: string) => Promise<{ success: boolean; error?: string }>;
   resetCustomerSession: (newPhone?: string) => string;
@@ -171,7 +172,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [activeVisitId, setActiveVisitId] = useState<string>("");
   const [taxPercentage, setTaxPercentage] = useState<number>(5);
   const [packagingFee, setPackagingFee] = useState<number>(0);
-  const [placedOrders, setPlacedOrders] = useState<PlacedOrder[]>([]);
+  const [placedOrders, setPlacedOrders] = useState<PlacedOrder[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("spiral_placed_orders");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [activeSheetTab, setActiveSheetTab] = useState<"cart" | "orders">("cart");
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
@@ -442,6 +454,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       setCustomerSessionId(storedSession);
 
+      // Restore active visit ID
+      const storedVisit = localStorage.getItem("spiral_active_visit_id");
+      if (storedVisit) {
+        setActiveVisitId(storedVisit);
+      }
+
       // 2. Browser-specific Visitor ID (scoped to this browser instance)
       let storedVisitor = localStorage.getItem("spiral_visitor_id");
       if (!storedVisitor) {
@@ -539,35 +557,58 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const query = new URLSearchParams({
         sessionId: customerSessionId,
       });
-      if (activeTable) {
+      if (activeTable && activeTable !== "TAKEAWAY") {
         query.set("table", activeTable);
       }
       if (activeVisitId && !activeVisitId.endsWith("-IDLE") && !activeVisitId.endsWith("-OPEN")) {
         query.set("visitId", activeVisitId);
       }
 
-      const res = await fetch(`/api/orders?${query.toString()}`);
+      const res = await fetch(`/api/orders?${query.toString()}`, { cache: "no-store" });
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
-        // Double check all orders belong to the current table
-        const matchingOrders = activeTable
-          ? data.orders.filter(
-              (o: PlacedOrder) =>
-                o.tableNumber?.toUpperCase() === activeTable.toUpperCase() &&
-                o.paymentStatus !== "PAID" &&
-                o.status !== "CANCELLED"
-            )
-          : data.orders;
+        // Keep active orders until they are BOTH paid and completed (or cancelled)
+        const matchingOrders = data.orders.filter(
+          (o: PlacedOrder) =>
+            o.status !== "CANCELLED" &&
+            !(o.paymentStatus === "PAID" && o.status === "COMPLETED")
+        );
 
         setPlacedOrders(matchingOrders);
+        try {
+          if (matchingOrders.length > 0) {
+            localStorage.setItem("spiral_placed_orders", JSON.stringify(matchingOrders));
+          } else {
+            localStorage.removeItem("spiral_placed_orders");
+          }
+        } catch {}
+
         if (
           data.visitId &&
           (!activeVisitId || activeVisitId.endsWith("-IDLE") || activeVisitId.endsWith("-OPEN"))
         ) {
           setActiveVisitId(data.visitId);
+          try {
+            localStorage.setItem("spiral_active_visit_id", data.visitId);
+          } catch {}
         }
-      } else {
-        setPlacedOrders([]);
+      } else if (data.success && (!data.orders || data.orders.length === 0)) {
+        // Double check against cached local orders
+        setPlacedOrders((prev) => {
+          const remaining = prev.filter(
+            (o) =>
+              o.status !== "CANCELLED" &&
+              !(o.paymentStatus === "PAID" && o.status === "COMPLETED")
+          );
+          try {
+            if (remaining.length > 0) {
+              localStorage.setItem("spiral_placed_orders", JSON.stringify(remaining));
+            } else {
+              localStorage.removeItem("spiral_placed_orders");
+            }
+          } catch {}
+          return remaining;
+        });
       }
     } catch (err) {
       console.error("Failed to fetch session orders:", err);
@@ -691,7 +732,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Place Order with Idempotency Key & Safe Unsubmitted Cart Clearing
   const placeOrder = useCallback(
-    async (notes?: string, overrideTable?: string) => {
+    async (notes?: string, overrideTable?: string, isTakeaway?: boolean) => {
       if (cart.length === 0) {
         return { success: false, error: "Basket is empty." };
       }
@@ -713,6 +754,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       const checkoutId = checkoutIdRef.current;
 
+      let finalNotes = (notes || "").trim();
+      if (isTakeaway && !finalNotes.includes("[TAKEAWAY]")) {
+        finalNotes = `[TAKEAWAY] [PARCEL] ${finalNotes}`.trim();
+      }
+
       setIsPlacingOrder(true);
       try {
         const customerPhone =
@@ -733,7 +779,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             image: it.image,
             notes: it.notes,
           })),
-          notes,
+          notes: finalNotes,
         };
 
         const res = await fetch("/api/orders", {
@@ -753,13 +799,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           setTableReservation(null);
 
           // 3. Keep confirmed order in session orders and backend database (newest first)
-          setPlacedOrders((prev) => [data.order, ...prev.filter((o) => o.id !== data.order.id)]);
+          setPlacedOrders((prev) => {
+            const updated = [data.order, ...prev.filter((o) => o.id !== data.order.id)];
+            try {
+              localStorage.setItem("spiral_placed_orders", JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
 
           // 4. Update active visit ID
-          if (data.visitId) {
-            setActiveVisitId(data.visitId);
-          } else if (data.order.id) {
-            setActiveVisitId(`VISIT-${activeTable}-${data.order.id.slice(0, 8).toUpperCase()}`);
+          const nextVisitId =
+            data.visitId ||
+            (data.order.id ? `VISIT-${activeTable}-${data.order.id.slice(0, 8).toUpperCase()}` : "");
+          if (nextVisitId) {
+            setActiveVisitId(nextVisitId);
+            try {
+              localStorage.setItem("spiral_active_visit_id", nextVisitId);
+            } catch {}
           }
 
           // 5. Open orders tab to track live KOT / preparation status
@@ -801,6 +857,35 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   }, []);
+
+  // Batch Cash payment request for entire visit (sets all orders to PENDING_CASH)
+  const batchSelectCashPayment = useCallback(async (orderIds: string[]) => {
+    if (!orderIds || orderIds.length === 0) return true;
+    try {
+      const res = await fetch("/api/orders/payment-method", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds, method: "CASH" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (Array.isArray(data.orders)) {
+          const updatedMap = new Map<string, PlacedOrder>(
+            data.orders.map((o: PlacedOrder) => [o.id, o])
+          );
+          setPlacedOrders((prev) =>
+            prev.map((o) => updatedMap.get(o.id) || o)
+          );
+        } else {
+          await fetchSessionOrders();
+        }
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [fetchSessionOrders]);
 
   // Switch or reset payment method (e.g. switch back to ONLINE from CASH)
   const switchPaymentMethod = useCallback(async (orderId: string, method: "CASH" | "ONLINE") => {
@@ -914,6 +999,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("spiral_table_session");
       localStorage.removeItem("spiral_customer_profile");
       localStorage.removeItem("spiral_placed_orders");
+      localStorage.removeItem("spiral_active_visit_id");
 
       if (newPhone) {
         localStorage.setItem("spiral_customer_phone", newPhone);
@@ -993,6 +1079,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         placeOrder,
         selectCashPayment,
+        batchSelectCashPayment,
         switchPaymentMethod,
         processOnlinePayment,
         fetchSessionOrders,

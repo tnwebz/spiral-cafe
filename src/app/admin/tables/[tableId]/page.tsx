@@ -38,6 +38,7 @@ import {
   Loader2,
   Info,
   X,
+  ShoppingBag,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -1065,6 +1066,14 @@ export default function TableDetailPage() {
                               NEWEST
                             </span>
                           )}
+                          {((ord.notes || "").includes("[TAKEAWAY]") ||
+                            (ord.notes || "").includes("[PARCEL]") ||
+                            ord.tableNumber === "TAKEAWAY") && (
+                            <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                              <ShoppingBag size={11} />
+                              TAKE AWAY (PARCEL)
+                            </span>
+                          )}
                         </div>
                         <h2 className="font-heading font-extrabold text-lg text-[#2C1710] mt-1">
                           Order #{ord.orderNumber}
@@ -1120,8 +1129,16 @@ export default function TableDetailPage() {
 
                               {/* Details */}
                               <div className="min-w-0">
-                                <h4 className="font-heading font-extrabold text-sm text-[#2C1710] truncate">
-                                  {item.name}
+                                <h4 className="font-heading font-extrabold text-sm text-[#2C1710] truncate flex items-center gap-1.5">
+                                  <span>{item.name}</span>
+                                  {((ord.notes || "").includes("[TAKEAWAY]") ||
+                                    (ord.notes || "").includes("[PARCEL]") ||
+                                    ord.tableNumber === "TAKEAWAY" ||
+                                    (item.notes || "").toLowerCase().includes("(parcel)")) && (
+                                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-md">
+                                      (parcel)
+                                    </span>
+                                  )}
                                 </h4>
 
                                 <p className="text-xs font-bold text-[#52525b] mt-0.5">

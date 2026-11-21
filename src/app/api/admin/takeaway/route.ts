@@ -57,10 +57,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isTakeaway = tableNumber === "TAKEAWAY" || tableNumber.toUpperCase() === "TAKE AWAY";
+    const isTakeaway =
+      tableNumber === "TAKEAWAY" ||
+      tableNumber.toUpperCase() === "TAKE AWAY" ||
+      (notes || "").includes("[TAKEAWAY]") ||
+      (notes || "").includes("[PARCEL]");
     const cleanPhone = customerPhone ? customerPhone.replace(/\D/g, "").slice(-10) : "";
     const guestLabel = customerName.trim() ? `[CUSTOMER_NAME:${customerName.trim()}]` : "";
-    const fullNotes = `${isTakeaway ? "[TAKEAWAY]" : ""} ${guestLabel} ${notes}`.trim();
+    const parcelTag = isTakeaway && !(notes || "").includes("[TAKEAWAY]") ? "[TAKEAWAY] [PARCEL]" : "";
+    const fullNotes = `${parcelTag} ${guestLabel} ${notes}`.trim();
 
     // Map items: if takeaway, tag item name with "(parcel)"
     const processedItems = items.map((it: any) => {
@@ -81,7 +86,10 @@ export async function POST(req: NextRequest) {
     const sessionId = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     const createdOrder = await createOrder({
-      tableNumber: isTakeaway ? "TAKEAWAY" : tableNumber.toUpperCase(),
+      tableNumber:
+        tableNumber === "TAKEAWAY" || tableNumber.toUpperCase() === "TAKE AWAY"
+          ? "TAKEAWAY"
+          : tableNumber.toUpperCase(),
       customerSessionId: sessionId,
       customerPhone: cleanPhone || undefined,
       items: processedItems,
