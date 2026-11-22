@@ -9,7 +9,6 @@ import {
   Minus,
   ShoppingBag,
   UtensilsCrossed,
-  Printer,
   CheckCircle2,
   AlertTriangle,
   Loader2,
@@ -17,6 +16,7 @@ import {
   User,
   Phone,
   FileText,
+  Sparkles,
 } from "lucide-react";
 
 interface MenuItem {
@@ -28,6 +28,12 @@ interface MenuItem {
   categoryName?: string;
   dietType?: string;
   available?: boolean;
+}
+
+interface CartEntry {
+  item: MenuItem;
+  quantity: number;
+  isParcel: boolean;
 }
 
 interface AdminOrderModalProps {
@@ -43,14 +49,17 @@ export default function AdminOrderModal({
   defaultTableNumber = "TAKEAWAY",
   onOrderCreated,
 }: AdminOrderModalProps) {
-  const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">(
-    defaultTableNumber === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"
+  // Mode: "TABLE" (assign to table e.g. B2) vs "SEPARATE_TAKEAWAY" (standalone takeaway)
+  const [orderTargetMode, setOrderTargetMode] = useState<"TABLE" | "SEPARATE_TAKEAWAY">(
+    defaultTableNumber === "TAKEAWAY" ? "SEPARATE_TAKEAWAY" : "TABLE"
   );
-  const isTakeaway = orderType === "TAKEAWAY";
+
+  const isSeparateTakeaway = orderTargetMode === "SEPARATE_TAKEAWAY" || defaultTableNumber === "TAKEAWAY";
+  const effectiveTableNumber = isSeparateTakeaway ? "TAKEAWAY" : defaultTableNumber;
 
   useEffect(() => {
     if (isOpen) {
-      setOrderType(defaultTableNumber === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN");
+      setOrderTargetMode(defaultTableNumber === "TAKEAWAY" ? "SEPARATE_TAKEAWAY" : "TABLE");
     }
   }, [isOpen, defaultTableNumber]);
 
@@ -71,51 +80,10 @@ export default function AdminOrderModal({
   const [customQty, setCustomQty] = useState(1);
   const [customIsParcel, setCustomIsParcel] = useState(false);
 
-  // Cart: Map of item ID -> { item: MenuItem, quantity: number }
-  const [cart, setCart] = useState<Map<string, { item: MenuItem; quantity: number }>>(new Map());
+  // Cart: Map of key `${item.id}__${isParcel ? 'parcel' : 'dinein'}` -> CartEntry
+  const [cart, setCart] = useState<Map<string, CartEntry>>(new Map());
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "SUCCESS" | "ERROR" | "WARNING"; message: string } | null>(null);
-
-  const handleAddCustomToCart = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = customName.trim();
-    const priceNum = parseFloat(customPrice);
-    const qty = Math.max(1, Number(customQty) || 1);
-
-    if (!trimmed) {
-      alert("Please enter a product name.");
-      return;
-    }
-    if (isNaN(priceNum) || priceNum < 0) {
-      alert("Please enter a valid price.");
-      return;
-    }
-
-    const parcelTag = customIsParcel && !trimmed.toLowerCase().includes("(parcel)") ? " - (parcel)" : "";
-    const finalName = `${trimmed}${parcelTag}`;
-    const customId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
-    const customItem: MenuItem = {
-      id: customId,
-      name: finalName,
-      price: priceNum,
-      categoryName: "Custom",
-      dietType: "ALL",
-      available: true,
-    };
-
-    setCart((prev) => {
-      const next = new Map(prev);
-      next.set(customId, { item: customItem, quantity: qty });
-      return next;
-    });
-
-    setCustomName("");
-    setCustomPrice("");
-    setCustomQty(1);
-    setCustomIsParcel(false);
-    setShowCustomProductForm(false);
-  };
 
   // Load Menu items
   useEffect(() => {
@@ -163,88 +131,198 @@ export default function AdminOrderModal({
     });
   }, [menuItems, activeCategory, searchQuery]);
 
+  // Helpers to get item quantities
+  const getDishDineInQty = (dishId: string) => {
+    const entry = cart.get(`${dishId}__dinein`);
+    return entry ? entry.quantity : 0;
+  };
+
+  const getDishParcelQty = (dishId: string) => {
+    const entry = cart.get(`${dishId}__parcel`);
+    return entry ? entry.quantity : 0;
+  };
+
   // Cart operations
-  const handleAddItem = (item: MenuItem) => {
+  const handleAddItem = (item: MenuItem, isParcel: boolean = false) => {
+    const key = `${item.id}__${isParcel ? "parcel" : "dinein"}`;
     setCart((prev) => {
       const next = new Map(prev);
-      const existing = next.get(item.id);
+      const existing = next.get(key);
       if (existing) {
-        next.set(item.id, { item, quantity: existing.quantity + 1 });
+        next.set(key, { ...existing, quantity: existing.quantity + 1 });
       } else {
-        next.set(item.id, { item, quantity: 1 });
+        next.set(key, { item, quantity: 1, isParcel });
       }
       return next;
     });
   };
 
-  const handleRemoveItem = (itemId: string) => {
+  const handleRemoveItem = (dishId: string, isParcel: boolean = false) => {
+    const key = `${dishId}__${isParcel ? "parcel" : "dinein"}`;
     setCart((prev) => {
       const next = new Map(prev);
-      const existing = next.get(itemId);
+      const existing = next.get(key);
       if (!existing) return prev;
       if (existing.quantity <= 1) {
-        next.delete(itemId);
+        next.delete(key);
       } else {
-        next.set(itemId, { item: existing.item, quantity: existing.quantity - 1 });
+        next.set(key, { ...existing, quantity: existing.quantity - 1 });
       }
       return next;
     });
   };
 
-  const handleDeleteCompletely = (itemId: string) => {
+  // Toggle single item between Dine-In and Parcel
+  const handleToggleItemParcel = (cartKey: string) => {
+    setCart((prev) => {
+      const entry = prev.get(cartKey);
+      if (!entry) return prev;
+
+      const next = new Map(prev);
+      next.delete(cartKey);
+
+      const targetIsParcel = !entry.isParcel;
+      const targetKey = `${entry.item.id}__${targetIsParcel ? "parcel" : "dinein"}`;
+      const existingTarget = next.get(targetKey);
+
+      if (existingTarget) {
+        next.set(targetKey, {
+          ...existingTarget,
+          quantity: existingTarget.quantity + entry.quantity,
+        });
+      } else {
+        next.set(targetKey, {
+          ...entry,
+          isParcel: targetIsParcel,
+        });
+      }
+      return next;
+    });
+  };
+
+  // Toggle all items in cart to Parcel or back to Dine-In
+  const allAreParcel = useMemo(() => {
+    const entries = Array.from(cart.values());
+    return entries.length > 0 && entries.every((e) => e.isParcel);
+  }, [cart]);
+
+  const handleToggleAllParcel = () => {
+    const targetParcel = !allAreParcel;
+    setCart((prev) => {
+      const next = new Map<string, CartEntry>();
+      for (const entry of prev.values()) {
+        const key = `${entry.item.id}__${targetParcel ? "parcel" : "dinein"}`;
+        const existing = next.get(key);
+        if (existing) {
+          next.set(key, { ...existing, quantity: existing.quantity + entry.quantity });
+        } else {
+          next.set(key, { ...entry, isParcel: targetParcel });
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteCompletely = (cartKey: string) => {
     setCart((prev) => {
       const next = new Map(prev);
-      next.delete(itemId);
+      next.delete(cartKey);
       return next;
     });
   };
 
   const handleClearCart = () => setCart(new Map());
 
+  // Add Custom / Off-Menu Product
+  const handleAddCustomToCart = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = customName.trim();
+    const priceNum = parseFloat(customPrice);
+    const qty = Math.max(1, Number(customQty) || 1);
+
+    if (!trimmed) {
+      alert("Please enter a product name.");
+      return;
+    }
+    if (isNaN(priceNum) || priceNum < 0) {
+      alert("Please enter a valid price.");
+      return;
+    }
+
+    const customId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const customItem: MenuItem = {
+      id: customId,
+      name: trimmed,
+      price: priceNum,
+      categoryName: "Custom",
+      dietType: "ALL",
+      available: true,
+    };
+
+    const key = `${customId}__${customIsParcel ? "parcel" : "dinein"}`;
+    setCart((prev) => {
+      const next = new Map(prev);
+      next.set(key, { item: customItem, quantity: qty, isParcel: customIsParcel });
+      return next;
+    });
+
+    setCustomName("");
+    setCustomPrice("");
+    setCustomQty(1);
+    setCustomIsParcel(false);
+    setShowCustomProductForm(false);
+  };
+
   // Calculations
-  const cartItemsList = Array.from(cart.values());
-  const totalItemsCount = cartItemsList.reduce((sum, c) => sum + c.quantity, 0);
-  const subtotal = cartItemsList.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
+  const cartEntriesList = Array.from(cart.entries()).map(([key, value]) => ({
+    key,
+    ...value,
+  }));
+  const totalItemsCount = cartEntriesList.reduce((sum, c) => sum + c.quantity, 0);
+  const subtotal = cartEntriesList.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
   const tax = Math.round(subtotal * 0.05); // 5% GST
   const grandTotal = subtotal + tax;
 
-  // Submit Order
+  const hasAnyParcel = cartEntriesList.some((c) => c.isParcel) || isSeparateTakeaway;
+  const hasAnyDineIn = cartEntriesList.some((c) => !c.isParcel) && !isSeparateTakeaway;
+
+  // Submit Order (Places order in PENDING status without printing KOT immediately)
   const handleSubmitOrder = async () => {
     if (cart.size === 0 || submitting) return;
     setSubmitting(true);
     setFeedback(null);
 
     try {
-      const payloadItems = cartItemsList.map((c) => ({
-        id: c.item.id,
-        name: c.item.name,
-        price: c.item.price,
-        quantity: c.quantity,
-        image: c.item.image,
-      }));
-
-      const finalNotes = isTakeaway && !orderNotes.includes("[TAKEAWAY]")
-        ? `[TAKEAWAY] [PARCEL] ${orderNotes.trim()}`.trim()
-        : orderNotes.trim();
+      const payloadItems = cartEntriesList.map((c) => {
+        const itemIsParcel = c.isParcel || isSeparateTakeaway;
+        return {
+          id: c.item.id,
+          name: c.item.name,
+          price: c.item.price,
+          quantity: c.quantity,
+          image: c.item.image,
+          isParcel: itemIsParcel,
+        };
+      });
 
       const res = await fetch("/api/admin/takeaway", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tableNumber: defaultTableNumber,
+          tableNumber: effectiveTableNumber,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
-          notes: finalNotes,
+          notes: orderNotes.trim(),
           items: payloadItems,
+          sendKotImmediately: false, // Place only, do not print KOT yet
         }),
       });
 
       const data = await res.json();
       if (data.success && data.order) {
-        const isKotPrinted = Boolean(data.printedKot);
         setFeedback({
-          type: isKotPrinted ? "SUCCESS" : "WARNING",
-          message: data.message || (isKotPrinted ? "Take Away Order created and Kitchen KOT printed! ✅" : "Take Away Order placed! Kitchen printer offline — KOT pending."),
+          type: "SUCCESS",
+          message: data.message || `Order #${data.order.orderNumber} placed successfully! You can send KOT from the table screen. ✅`,
         });
         setCart(new Map());
         setCustomerName("");
@@ -255,11 +333,11 @@ export default function AdminOrderModal({
         }
         setTimeout(() => {
           onClose();
-        }, isKotPrinted ? 1400 : 3200);
+        }, 1200);
       } else {
         setFeedback({
           type: "ERROR",
-          message: data.error || "Failed to create order.",
+          message: data.error || "Failed to place order.",
         });
       }
     } catch (err: any) {
@@ -276,29 +354,43 @@ export default function AdminOrderModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl h-[90vh] bg-[#FFFBF7] rounded-3xl shadow-2xl border border-[#EBDAD0] flex flex-col overflow-hidden text-[#2C1710]">
+      <div className="relative w-full max-w-5xl h-[92vh] bg-[#FFFBF7] rounded-3xl shadow-2xl border border-[#EBDAD0] flex flex-col overflow-hidden text-[#2C1710]">
         {/* HEADER */}
-        <div className="px-5 py-4 bg-white/80 border-b border-[#EBDAD0] flex items-center justify-between shrink-0">
+        <div className="px-5 py-3.5 bg-white/80 border-b border-[#EBDAD0] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-              isTakeaway ? "bg-amber-100 text-amber-800" : "bg-[#CA340A]/10 text-[#CA340A]"
-            }`}>
-              {isTakeaway ? <ShoppingBag size={20} /> : <UtensilsCrossed size={20} />}
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                isSeparateTakeaway ? "bg-amber-100 text-amber-800" : "bg-[#CA340A]/10 text-[#CA340A]"
+              }`}
+            >
+              {isSeparateTakeaway ? <ShoppingBag size={20} /> : <UtensilsCrossed size={20} />}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-heading font-extrabold text-lg sm:text-xl text-[#2C1710]">
-                  {isTakeaway ? "Create Take Away Order" : `Direct Order — Table ${defaultTableNumber}`}
+                  {isSeparateTakeaway ? "Direct Order — Separate Take Away" : `Direct Order — Table ${defaultTableNumber}`}
                 </h2>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                  isTakeaway ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                }`}>
-                  {isTakeaway ? "Parcel Tagged" : "Dine-In Table"}
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                    isSeparateTakeaway
+                      ? "bg-amber-100 text-amber-900 border border-amber-300"
+                      : hasAnyParcel && hasAnyDineIn
+                      ? "bg-orange-100 text-[#CA340A] border border-orange-300"
+                      : "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                  }`}
+                >
+                  {isSeparateTakeaway
+                    ? "Separate Take Away"
+                    : hasAnyParcel && hasAnyDineIn
+                    ? "Dine-In & Take Away"
+                    : hasAnyParcel
+                    ? "Table Parcel"
+                    : "Dine-In Table"}
                 </span>
               </div>
               <p className="text-xs text-[#8C5E51]">
-                {isTakeaway
-                  ? "Dishes will be marked as (parcel) on kitchen KOT receipts"
+                {isSeparateTakeaway
+                  ? "Standalone counter takeaway order (independent bill, not linked to table)"
                   : `Assign walk-in order directly to Floor Table ${defaultTableNumber}`}
               </p>
             </div>
@@ -307,6 +399,7 @@ export default function AdminOrderModal({
           <button
             onClick={onClose}
             className="w-9 h-9 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-600 flex items-center justify-center transition-colors cursor-pointer"
+            aria-label="Close modal"
           >
             <X size={18} />
           </button>
@@ -314,17 +407,22 @@ export default function AdminOrderModal({
 
         {/* FEEDBACK BANNER */}
         {feedback && (
-          <div className={`px-5 py-2.5 text-xs font-bold flex items-center gap-2 ${
-            feedback.type === "SUCCESS"
-              ? "bg-emerald-50 text-emerald-800 border-b border-emerald-200"
-              : feedback.type === "WARNING"
-              ? "bg-amber-50 text-amber-900 border-b border-amber-300"
-              : "bg-red-50 text-red-800 border-b border-red-200"
-          }`}>
+          <div
+            className={`px-5 py-2.5 text-xs font-bold flex items-center gap-2 ${
+              feedback.type === "SUCCESS"
+                ? "bg-emerald-50 text-emerald-800 border-b border-emerald-200"
+                : feedback.type === "WARNING"
+                ? "bg-amber-50 text-amber-900 border-b border-amber-300"
+                : "bg-red-50 text-red-800 border-b border-red-200"
+            }`}
+          >
             {feedback.type === "SUCCESS" ? (
               <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
             ) : (
-              <AlertTriangle size={16} className={feedback.type === "WARNING" ? "text-amber-600 shrink-0" : "text-red-600 shrink-0"} />
+              <AlertTriangle
+                size={16}
+                className={feedback.type === "WARNING" ? "text-amber-600 shrink-0" : "text-red-600 shrink-0"}
+              />
             )}
             <span>{feedback.message}</span>
           </div>
@@ -470,14 +568,15 @@ export default function AdminOrderModal({
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {filteredItems.map((dish) => {
-                    const cartEntry = cart.get(dish.id);
-                    const qty = cartEntry ? cartEntry.quantity : 0;
+                    const dineInQty = getDishDineInQty(dish.id);
+                    const parcelQty = getDishParcelQty(dish.id);
+                    const hasSelection = dineInQty > 0 || parcelQty > 0;
 
                     return (
                       <div
                         key={dish.id}
                         className={`p-3 bg-white rounded-2xl border transition-all flex flex-col justify-between ${
-                          qty > 0
+                          hasSelection
                             ? "border-[#CA340A] shadow-md shadow-[#CA340A]/10 ring-1 ring-[#CA340A]"
                             : "border-[#EBDAD0] hover:border-zinc-300 shadow-xs"
                         }`}
@@ -504,34 +603,77 @@ export default function AdminOrderModal({
                           </div>
                         </div>
 
-                        {/* Quantity Counter */}
-                        <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-between">
-                          {qty > 0 ? (
-                            <div className="flex items-center justify-between w-full">
-                              <button
-                                onClick={() => handleRemoveItem(dish.id)}
-                                className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center cursor-pointer transition-colors"
-                              >
-                                <Minus size={13} />
-                              </button>
-                              <span className="font-heading font-extrabold text-xs text-[#CA340A]">
-                                {qty}
-                              </span>
-                              <button
-                                onClick={() => handleAddItem(dish)}
-                                className="w-7 h-7 rounded-lg bg-[#CA340A] hover:bg-[#B73F1D] text-white flex items-center justify-center cursor-pointer transition-colors"
-                              >
-                                <Plus size={13} />
-                              </button>
-                            </div>
-                          ) : (
+                        {/* Dual Add Buttons: Dine-In vs Parcel */}
+                        <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-between gap-1 flex-wrap">
+                          {/* 1. Dine-In Add / Counter */}
+                          {dineInQty === 0 ? (
                             <button
-                              onClick={() => handleAddItem(dish)}
-                              className="w-full py-1.5 px-2 bg-zinc-50 hover:bg-[#CA340A] hover:text-white text-zinc-700 font-bold text-xs rounded-xl border border-zinc-200 hover:border-transparent transition-all flex items-center justify-center gap-1 cursor-pointer"
+                              type="button"
+                              onClick={() => handleAddItem(dish, false)}
+                              className="py-1 px-2.5 bg-zinc-50 hover:bg-[#CA340A] hover:text-white text-zinc-700 font-bold text-[11px] rounded-lg border border-zinc-200 hover:border-transparent transition-all flex items-center gap-1 cursor-pointer"
+                              title="Add for Dine-In"
                             >
-                              <Plus size={13} />
+                              <Plus size={12} />
                               <span>Add</span>
                             </button>
+                          ) : (
+                            <div className="flex items-center gap-1 bg-[#FFF8F3] border border-[#CA340A]/30 rounded-lg p-0.5 text-xs text-[#CA340A]">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(dish.id, false)}
+                                className="w-5 h-5 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center cursor-pointer transition-colors"
+                                title="Decrease dine-in"
+                              >
+                                <Minus size={11} />
+                              </button>
+                              <span className="font-bold text-[11px] min-w-[14px] text-center">
+                                {dineInQty}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleAddItem(dish, false)}
+                                className="w-5 h-5 rounded bg-[#CA340A] hover:bg-[#B73F1D] text-white flex items-center justify-center cursor-pointer transition-colors"
+                                title="Increase dine-in"
+                              >
+                                <Plus size={11} />
+                              </button>
+                            </div>
+                          )}
+
+                          {/* 2. Parcel Add / Counter */}
+                          {parcelQty === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleAddItem(dish, true)}
+                              className="py-1 px-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Add as Takeaway Parcel"
+                            >
+                              <ShoppingBag size={11} />
+                              <span>Parcel</span>
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1 bg-amber-50 border border-amber-300 rounded-lg p-0.5 text-xs text-amber-950">
+                              <ShoppingBag size={11} className="text-amber-700 ml-0.5" />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(dish.id, true)}
+                                className="w-5 h-5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 flex items-center justify-center cursor-pointer transition-colors"
+                                title="Decrease parcel"
+                              >
+                                <Minus size={11} />
+                              </button>
+                              <span className="font-bold text-[11px] min-w-[14px] text-center">
+                                {parcelQty}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleAddItem(dish, true)}
+                                className="w-5 h-5 rounded bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center cursor-pointer transition-colors"
+                                title="Increase parcel"
+                              >
+                                <Plus size={11} />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -544,48 +686,69 @@ export default function AdminOrderModal({
 
           {/* RIGHT: ORDER SUMMARY & CUSTOMER INFO */}
           <div className="w-full md:w-80 lg:w-96 bg-white p-4 sm:p-5 flex flex-col justify-between overflow-y-auto shrink-0 border-t md:border-t-0 border-[#EBDAD0]">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-heading font-extrabold text-sm text-[#2C1710] uppercase tracking-wide">
-                  Order Details ({totalItemsCount} items)
-                </h3>
-                {cart.size > 0 && (
+            <div className="space-y-3.5">
+              {/* Order Mode Toggle: Current Table vs Standalone Take Away */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-[#8C5E51]">
+                  Order Assignment
+                </label>
+                <div className="flex rounded-xl p-1 bg-[#F5EBE1] border border-[#EBDAD0] gap-1">
+                  {defaultTableNumber !== "TAKEAWAY" && (
+                    <button
+                      type="button"
+                      onClick={() => setOrderTargetMode("TABLE")}
+                      className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        orderTargetMode === "TABLE"
+                          ? "bg-[#CA340A] text-white shadow-xs"
+                          : "text-[#8C5E51] hover:text-[#2C1710]"
+                      }`}
+                    >
+                      <UtensilsCrossed size={12} />
+                      <span>Table {defaultTableNumber}</span>
+                    </button>
+                  )}
                   <button
-                    onClick={handleClearCart}
-                    className="text-[11px] font-bold text-red-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    type="button"
+                    onClick={() => setOrderTargetMode("SEPARATE_TAKEAWAY")}
+                    className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      orderTargetMode === "SEPARATE_TAKEAWAY" || defaultTableNumber === "TAKEAWAY"
+                        ? "bg-amber-700 text-white shadow-xs"
+                        : "text-[#8C5E51] hover:text-[#2C1710]"
+                    }`}
                   >
-                    <Trash2 size={12} />
-                    <span>Clear</span>
+                    <ShoppingBag size={12} />
+                    <span>Separate Take Away</span>
                   </button>
-                )}
+                </div>
               </div>
 
-              {/* Order Mode Toggle */}
-              <div className="flex rounded-xl p-1 bg-[#F5EBE1] border border-[#EBDAD0] gap-1">
-                <button
-                  type="button"
-                  onClick={() => setOrderType("DINE_IN")}
-                  className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    orderType === "DINE_IN"
-                      ? "bg-[#CA340A] text-white shadow-xs"
-                      : "text-[#8C5E51] hover:text-[#2C1710]"
-                  }`}
-                >
-                  <UtensilsCrossed size={12} />
-                  <span>Dine-In Table</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOrderType("TAKEAWAY")}
-                  className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    orderType === "TAKEAWAY"
-                      ? "bg-amber-700 text-white shadow-xs"
-                      : "text-[#8C5E51] hover:text-[#2C1710]"
-                  }`}
-                >
-                  <ShoppingBag size={12} />
-                  <span>Take Away (Parcel)</span>
-                </button>
+              {/* Order Details Header & Parcel Switch Action */}
+              <div className="flex items-center justify-between pt-1">
+                <h3 className="font-heading font-extrabold text-xs text-[#2C1710] uppercase tracking-wide">
+                  Order Details ({totalItemsCount} items)
+                </h3>
+                <div className="flex items-center gap-1.5">
+                  {cart.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleToggleAllParcel}
+                      className="text-[10px] font-extrabold text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg border border-amber-300 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Turn entire order to Parcel / Dine-In"
+                    >
+                      <ShoppingBag size={11} />
+                      <span>{allAreParcel ? "Turn All Dine-In" : "Turn All Parcel"}</span>
+                    </button>
+                  )}
+                  {cart.size > 0 && (
+                    <button
+                      onClick={handleClearCart}
+                      className="text-[10px] font-bold text-red-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 size={11} />
+                      <span>Clear</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Customer Info Form */}
@@ -641,25 +804,38 @@ export default function AdminOrderModal({
 
               {/* Cart Items List */}
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {cartItemsList.length === 0 ? (
-                  <div className="py-8 text-center text-zinc-400 text-xs">
+                {cartEntriesList.length === 0 ? (
+                  <div className="py-7 text-center text-zinc-400 text-xs">
                     <ShoppingBag size={24} className="mx-auto mb-1.5 opacity-50" />
                     <span>No dishes added to order yet.</span>
                   </div>
                 ) : (
-                  cartItemsList.map(({ item, quantity }) => (
+                  cartEntriesList.map(({ key, item, quantity, isParcel }) => (
                     <div
-                      key={item.id}
-                      className="flex items-center justify-between p-2 rounded-xl bg-zinc-50 border border-zinc-100 text-xs gap-2"
+                      key={key}
+                      className={`flex items-center justify-between p-2 rounded-xl border text-xs gap-2 transition-all ${
+                        isParcel
+                          ? "bg-amber-50/70 border-amber-200/90"
+                          : "bg-zinc-50 border-zinc-200/80"
+                      }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-[#2C1710] truncate">
-                          {item.name}
-                          {isTakeaway && (
-                            <span className="text-[10px] text-amber-700 ml-1 font-semibold">
-                              (parcel)
-                            </span>
-                          )}
+                        <div className="font-bold text-[#2C1710] truncate flex items-center gap-1.5">
+                          <span className="truncate">{item.name}</span>
+                          {/* Clickable Parcel Toggle Pill */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleItemParcel(key)}
+                            className={`px-1.5 py-0.2 rounded-md font-bold text-[10px] flex items-center gap-1 shrink-0 transition-all cursor-pointer ${
+                              isParcel
+                                ? "bg-amber-200 text-amber-950 border border-amber-400 hover:bg-amber-300"
+                                : "bg-zinc-200 text-zinc-600 border border-zinc-300 hover:bg-amber-100 hover:text-amber-900 hover:border-amber-300"
+                            }`}
+                            title={isParcel ? "Click to switch to Dine-In" : "Click to turn to Parcel"}
+                          >
+                            <ShoppingBag size={10} />
+                            <span>{isParcel ? "(parcel)" : "Dine-in"}</span>
+                          </button>
                         </div>
                         <div className="text-[11px] text-zinc-500">
                           ₹{item.price} each
@@ -671,7 +847,7 @@ export default function AdminOrderModal({
                         <div className="flex items-center gap-1 bg-white rounded-lg p-0.5 border border-zinc-200">
                           <button
                             type="button"
-                            onClick={() => handleRemoveItem(item.id)}
+                            onClick={() => handleRemoveItem(item.id, isParcel)}
                             className="w-5 h-5 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-700 flex items-center justify-center cursor-pointer transition-colors"
                             title="Decrease quantity"
                           >
@@ -682,7 +858,7 @@ export default function AdminOrderModal({
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleAddItem(item)}
+                            onClick={() => handleAddItem(item, isParcel)}
                             className="w-5 h-5 rounded bg-[#CA340A] hover:bg-[#B73F1D] text-white flex items-center justify-center cursor-pointer transition-colors"
                             title="Increase quantity"
                           >
@@ -690,14 +866,14 @@ export default function AdminOrderModal({
                           </button>
                         </div>
 
-                        <span className="font-heading font-extrabold text-xs text-[#CA340A] min-w-[50px] text-right">
+                        <span className="font-heading font-extrabold text-xs text-[#CA340A] min-w-[46px] text-right">
                           ₹{item.price * quantity}
                         </span>
 
                         {/* Delete button */}
                         <button
                           type="button"
-                          onClick={() => handleDeleteCompletely(item.id)}
+                          onClick={() => handleDeleteCompletely(key)}
                           className="p-1 rounded-md text-red-500 hover:text-white hover:bg-red-600 bg-red-50 border border-red-200/60 transition-all cursor-pointer"
                           title={`Remove ${item.name}`}
                         >
@@ -710,7 +886,7 @@ export default function AdminOrderModal({
               </div>
             </div>
 
-            {/* Bill Summary & Place Button */}
+            {/* Bill Summary & Place Order Button */}
             <div className="pt-3 border-t border-[#EBDAD0] space-y-3 mt-3">
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between text-zinc-600">
@@ -727,20 +903,22 @@ export default function AdminOrderModal({
                 </div>
               </div>
 
+              {/* Primary Action Button: Only Place Order (Send KOT Later from Table) */}
               <button
+                type="button"
                 disabled={cart.size === 0 || submitting}
                 onClick={handleSubmitOrder}
-                className="w-full py-3 px-4 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-[#CA340A]/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3.5 px-4 bg-[#CA340A] hover:bg-[#B73F1D] text-white font-heading font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-[#CA340A]/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>Placing Order & Printing KOT...</span>
+                    <span>Placing Order...</span>
                   </>
                 ) : (
                   <>
-                    <Printer size={16} />
-                    <span>PLACE ORDER & SEND KOT • ₹{grandTotal}</span>
+                    <CheckCircle2 size={16} />
+                    <span>PLACE ORDER • ₹{grandTotal}</span>
                   </>
                 )}
               </button>
@@ -751,4 +929,3 @@ export default function AdminOrderModal({
     </div>
   );
 }
-

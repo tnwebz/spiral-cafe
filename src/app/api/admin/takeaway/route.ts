@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       customerPhone = "",
       items = [],
       notes = "",
+      sendKotImmediately = false,
     } = body;
 
     if (!items || items.length === 0) {
@@ -57,31 +58,58 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isTakeaway =
+    const isTakeawayOrder =
       tableNumber === "TAKEAWAY" ||
-      tableNumber.toUpperCase() === "TAKE AWAY" ||
-      (notes || "").includes("[TAKEAWAY]") ||
-      (notes || "").includes("[PARCEL]");
+      tableNumber.toUpperCase() === "TAKE AWAY";
+
     const cleanPhone = customerPhone ? customerPhone.replace(/\D/g, "").slice(-10) : "";
     const guestLabel = customerName.trim() ? `[CUSTOMER_NAME:${customerName.trim()}]` : "";
-    const parcelTag = isTakeaway && !(notes || "").includes("[TAKEAWAY]") ? "[TAKEAWAY] [PARCEL]" : "";
-    const fullNotes = `${parcelTag} ${guestLabel} ${notes}`.trim();
 
-    // Map items: if takeaway, tag item name with "(parcel)"
+    // Map items: check item-level isParcel or order-level takeaway
     const processedItems = items.map((it: any) => {
-      let displayName = it.name.trim();
-      if (isTakeaway && !displayName.toLowerCase().includes("(parcel)")) {
+      let displayName = (it.name || "").trim();
+      const isItemParcel =
+        Boolean(it.isParcel) ||
+        displayName.toLowerCase().includes("(parcel)") ||
+        isTakeawayOrder;
+
+      if (isItemParcel && !displayName.toLowerCase().includes("(parcel)")) {
         displayName = `${displayName} - (parcel)`;
+      } else if (!isItemParcel) {
+        displayName = displayName
+          .replace(/\s*-\s*\(parcel\)/gi, "")
+          .replace(/\s*\(parcel\)/gi, "")
+          .trim();
       }
+
+      const itemNotes = isItemParcel
+        ? (it.notes ? `${it.notes} [PARCEL]` : "[PARCEL]")
+        : (it.notes || "");
+
       return {
         productId: it.id || it.productId || `prod_${Date.now()}`,
         name: displayName,
         price: Number(it.price) || 0,
         quantity: Math.max(1, Number(it.quantity) || 1),
         image: it.image || "",
-        notes: it.notes || "",
+        notes: itemNotes,
       };
     });
+
+    const hasParcelItems = processedItems.some((it: { name: string }) => it.name.toLowerCase().includes("(parcel)"));
+    const hasDineInItems = processedItems.some((it: { name: string }) => !it.name.toLowerCase().includes("(parcel)"));
+    const isMixed = hasParcelItems && hasDineInItems;
+
+    let fullNotes = `${guestLabel} ${notes}`.trim();
+    if (isMixed) {
+      if (!fullNotes.includes("DINE_IN_AND_TAKEAWAY")) {
+        fullNotes = `[DINE_IN_AND_TAKEAWAY] ${fullNotes}`.trim();
+      }
+    } else if (isTakeawayOrder || hasParcelItems) {
+      if (!fullNotes.includes("[TAKEAWAY]")) {
+        fullNotes = `[TAKEAWAY] [PARCEL] ${fullNotes}`.trim();
+      }
+    }
 
     const sessionId = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
@@ -96,12 +124,23 @@ export async function POST(req: NextRequest) {
       notes: fullNotes,
     });
 
-    // Automatically attempt to dispatch KOT to the Kitchen Printer via connector
+    // If sendKotImmediately is false (standard manual order placement), do not call printer yet.
+    // Order stays PENDING so admin can review and trigger KOT from the table screen when ready.
+    if (!sendKotImmediately) {
+      return NextResponse.json({
+        success: true,
+        order: createdOrder,
+        printedKot: false,
+        message: `${createdOrder.tableNumber === "TAKEAWAY" ? "Take Away" : `Table ${createdOrder.tableNumber}`} Order #${createdOrder.orderNumber} placed! You can send KOT from the table screen. ✅`,
+      });
+    }
+
+    // Automatically attempt to dispatch KOT to the Kitchen Printer via connector (if explicitly requested)
     let printedKot = false;
     let kotWarning: string | undefined;
 
     try {
-      const kotData = buildKotData(createdOrder, 1, "Billing 1", { isTakeaway });
+      const kotData = buildKotData(createdOrder, 1, "Billing 1", { isTakeaway: isTakeawayOrder || hasParcelItems });
       const attemptId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       const kotPayload = {
@@ -170,8 +209,8 @@ export async function POST(req: NextRequest) {
     }
 
     const feedbackMsg = printedKot
-      ? `${isTakeaway ? "Take Away" : `Table ${tableNumber}`} Order #${createdOrder.orderNumber} placed & Kitchen KOT printed! ✅`
-      : `${isTakeaway ? "Take Away" : `Table ${tableNumber}`} Order #${createdOrder.orderNumber} placed! ⚠️ Kitchen printer offline — KOT pending dispatch.`;
+      ? `${isTakeawayOrder ? "Take Away" : `Table ${tableNumber}`} Order #${createdOrder.orderNumber} placed & Kitchen KOT printed! ✅`
+      : `${isTakeawayOrder ? "Take Away" : `Table ${tableNumber}`} Order #${createdOrder.orderNumber} placed! ⚠️ Kitchen printer offline — KOT pending dispatch.`;
 
     return NextResponse.json({
       success: true,
