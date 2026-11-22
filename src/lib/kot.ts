@@ -36,58 +36,69 @@ export class KotReceiptEngine {
   }
 
   static formatPlainSlip(data: KotData): string {
-    const divider = "-".repeat(this.LINE_WIDTH);
+    const width = 32;
+    const divider = "-".repeat(width);
 
     const hasParcelItem = data.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
     const hasDineInItem = data.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
     const isMixedOrder = Boolean(data.isMixed || (hasParcelItem && hasDineInItem));
 
-    let headerTitle = `TABLE ${data.tableNumber.toUpperCase()}`;
+    const lines: string[] = ["          SPIRAL CAFE"];
+
     if (data.isPrivateOrder) {
-      headerTitle = "*** PRIVATE ORDER ***";
+      lines.push("*** PRIVATE ORDER ***");
     } else if (isMixedOrder) {
-      headerTitle = `*** DINE IN & TAKE AWAY ***\nTABLE ${data.tableNumber.toUpperCase()}`;
-    } else if (data.tableNumber === "TAKEAWAY") {
-      headerTitle = "*** TAKE AWAY ***";
-    } else if (data.isTakeaway || hasParcelItem) {
-      headerTitle = `TABLE ${data.tableNumber.toUpperCase()} (PARCEL)`;
+      lines.push("*** DINE IN & TAKE AWAY ***");
+    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway || (hasParcelItem && !hasDineInItem)) {
+      lines.push("*** TAKE AWAY ***");
     }
 
+    lines.push(`TABLE ${data.tableNumber.toUpperCase()}`);
+    lines.push(divider);
+
     const cleanOrderNum = (data.orderNumber || "").replace(/^#/, "");
-    const lines: string[] = [
-      headerTitle,
-      `Order: ${cleanOrderNum} | ${data.timeStr}`,
-    ];
+    const dateStr = data.dateStr || new Date().toLocaleDateString("en-GB");
+    lines.push(this.formatLine(`Order: #${cleanOrderNum}`, `Date: ${dateStr}`, width));
 
     if (data.round && data.round > 1) {
       lines.push(`Round: ${data.round} (Add-on)`);
     }
 
     lines.push(divider);
-    lines.push(this.formatLine("ITEM", "QTY"));
+    lines.push(this.formatLine("ITEM", "QTY", width));
     lines.push(divider);
 
     data.items.forEach((item) => {
-      const isTakeaway = data.tableNumber === "TAKEAWAY" || data.isTakeaway;
-      let displayName = item.name;
-      if (isTakeaway && !displayName.toLowerCase().includes("(parcel)")) {
-        displayName = `${displayName} - (parcel)`;
-      }
+      const isItemParcel =
+        item.name.toLowerCase().includes("(parcel)") ||
+        (item.notes || "").toLowerCase().includes("parcel") ||
+        data.tableNumber === "TAKEAWAY" ||
+        data.isTakeaway;
+      const cleanName = item.name
+        .replace(/\s*-\s*\(parcel\)/gi, "")
+        .replace(/\s*\(parcel\)/gi, "")
+        .replace(/\s*\(dine in\)/gi, "")
+        .trim();
+      const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
+      const fullName = `${cleanName} ${tag}`;
 
-      // Main item name and quantity on right
-      lines.push(this.formatLine(displayName.substring(0, 26), String(item.quantity)));
+      lines.push(this.formatLine(fullName.substring(0, 26), String(item.quantity), width));
 
-      // Add-on / customization if present, indented below parent
+      // Print legitimate kitchen customization notes, but skip redundant dine-in/parcel tags
       if (item.notes) {
-        const cleanNote = item.notes.replace(/\[[^\]]+\]/g, "").trim();
+        const cleanNote = item.notes
+          .replace(/\[[^\]]+\]/g, "")
+          .replace(/dine-?in\s*(serve\s*first)?/gi, "")
+          .replace(/parcel\s*(for\s*takeaway)?/gi, "")
+          .trim();
         if (cleanNote) {
-          lines.push(this.formatLine(`  + ${cleanNote}`, `x ${item.quantity}`));
+          lines.push(`  + ${cleanNote}`);
         }
       }
     });
 
     lines.push(divider);
-    lines.push(this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`));
+    lines.push(this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`, width));
 
     if (data.specialInstructions && data.specialInstructions.trim()) {
       const cleanInst = data.specialInstructions.trim().replace(/^"+|"+$/g, "");
@@ -96,16 +107,20 @@ export class KotReceiptEngine {
       lines.push(`"${cleanInst}"`);
     }
 
+    lines.push(divider);
+    lines.push("        —— ORDER SLIP ——");
+
     return lines.join("\n");
   }
 
   /**
-   * Generates standard ESC/POS binary command string for 80mm thermal receipt printer (CN811-UEWB)
-   * Formatted with BOLD, double-height dish items and zero clutter for busy kitchen visibility.
+   * Generates standard ESC/POS binary command string for 58mm thermal receipt printer
+   * Formatted to match the approved physical reference design.
    */
   static generateEscPosCommands(data: KotData): string {
     const ESC = "\x1B";
     const GS = "\x1D";
+    const width = 32;
 
     let commands = "";
 
@@ -119,81 +134,110 @@ export class KotReceiptEngine {
     const hasDineInItem = data.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
     const isMixedOrder = Boolean(data.isMixed || (hasParcelItem && hasDineInItem));
 
-    // 3. Double-width & Double-height for Table / Type Header
-    commands += `${ESC}!\x30`; // double width + double height + bold
+    // Centered SPIRAL CAFE in bold
+    commands += `${ESC}a\x01`; // Center
+    commands += `${ESC}E\x01`; // Bold ON
+    commands += `SPIRAL CAFE\n`;
+
+    // Reverse color banner for DINE IN & TAKE AWAY
+    commands += `${GS}B\x01`; // Reverse ON
     if (data.isPrivateOrder) {
-      commands += `*** PRIVATE ORDER ***\n`;
+      commands += ` *** PRIVATE ORDER *** \n`;
     } else if (isMixedOrder) {
-      commands += `*** DINE IN & TAKE AWAY ***\n`;
-      commands += `TABLE ${data.tableNumber.toUpperCase()}\n`;
+      commands += ` *** DINE IN & TAKE AWAY *** \n`;
     } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway || (hasParcelItem && !hasDineInItem)) {
-      commands += `*** TAKE AWAY ***\n`;
+      commands += ` *** TAKE AWAY *** \n`;
     } else {
-      commands += `TABLE ${data.tableNumber.toUpperCase()}\n`;
+      commands += ` *** DINE IN *** \n`;
     }
+    commands += `${GS}B\x00`; // Reverse OFF
 
-    // 4. Reset font to standard Font A
-    commands += `${ESC}!\x00`;
+    // Large Bold Table Number
+    commands += `${GS}!\x11`; // Double size
+    commands += `TABLE ${data.tableNumber.toUpperCase()}\n`;
+    commands += `${GS}!\x00`; // Normal size
+    commands += `${ESC}E\x00`; // Bold OFF
 
-    // 5. Compact Order & Time line (no redundant terminal/hash clutter)
+    // Divider
+    const divider = "-".repeat(width);
+    commands += `${divider}\n`;
+
+    // Order: #106 | Date: DD/MM/YYYY
+    commands += `${ESC}a\x00`; // Align Left
     const cleanOrderNum = (data.orderNumber || "").replace(/^#/, "");
-    commands += `Order: ${cleanOrderNum}  |  ${data.timeStr}\n`;
+    const dateStr = data.dateStr || new Date().toLocaleDateString("en-GB");
+    const orderText = `Order: #${cleanOrderNum}`;
+    const dateText = `Date: ${dateStr}`;
+    const sp = Math.max(1, width - orderText.length - dateText.length);
+    commands += `${ESC}E\x01`;
+    commands += orderText;
+    commands += `${ESC}E\x00`;
+    commands += `${" ".repeat(sp)}${dateText}\n`;
+
     if (data.round && data.round > 1) {
       commands += `Round: ${data.round} (Add-on Order)\n`;
     }
 
-    // 6. Header divider
-    const divider = "-".repeat(32);
     commands += `${divider}\n`;
-    commands += `${ESC}E\x01`; // Bold ON
-    commands += `${this.formatLine("ITEM", "QTY")}\n`;
-    commands += `${ESC}E\x00`; // Bold OFF
+    commands += `${ESC}E\x01`;
+    commands += `${this.formatLine("ITEM", "QTY", width)}\n`;
+    commands += `${ESC}E\x00`;
     commands += `${divider}\n`;
 
-    // 7. Dishes in BOLD & DOUBLE HEIGHT for chefs
+    // Items with (Dine In) / (Parcel)
     const isTakeaway = data.tableNumber === "TAKEAWAY" || data.isTakeaway;
     data.items.forEach((item) => {
-      let displayName = item.name;
-      if (isTakeaway && !displayName.toLowerCase().includes("(parcel)")) {
-        displayName = `${displayName} - (parcel)`;
-      }
+      const isItemParcel =
+        item.name.toLowerCase().includes("(parcel)") ||
+        (item.notes || "").toLowerCase().includes("parcel") ||
+        isTakeaway;
+      const cleanName = item.name
+        .replace(/\s*-\s*\(parcel\)/gi, "")
+        .replace(/\s*\(parcel\)/gi, "")
+        .replace(/\s*\(dine in\)/gi, "")
+        .trim();
+      const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
+      const fullName = `${cleanName} ${tag}`;
 
-      // Double-height + Bold for item line
-      commands += `${ESC}!\x10`; // Double-height
       commands += `${ESC}E\x01`; // Bold ON
-      commands += `${this.formatLine(displayName.substring(0, 24), String(item.quantity))}\n`;
+      commands += `${this.formatLine(fullName.substring(0, 26), String(item.quantity), width)}\n`;
       commands += `${ESC}E\x00`; // Bold OFF
-      commands += `${ESC}!\x00`; // Normal font
 
       if (item.notes) {
-        const cleanNote = item.notes.replace(/\[[^\]]+\]/g, "").trim();
+        const cleanNote = item.notes
+          .replace(/\[[^\]]+\]/g, "")
+          .replace(/dine-?in\s*(serve\s*first)?/gi, "")
+          .replace(/parcel\s*(for\s*takeaway)?/gi, "")
+          .trim();
         if (cleanNote) {
-          commands += `${this.formatLine(`  + ${cleanNote}`, `x ${item.quantity}`)}\n`;
+          commands += `  + ${cleanNote}\n`;
         }
       }
     });
 
-    // 8. Footer divider & totals
     commands += `${divider}\n`;
-    commands += `${ESC}E\x01`; // Bold ON
-    commands += `${this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`)}\n`;
-    commands += `${ESC}E\x00`; // Bold OFF
+    commands += `${ESC}E\x01`;
+    commands += `${this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`, width)}\n`;
+    commands += `${ESC}E\x00`;
 
-    // Special instructions in BOLD with double quotes
     if (data.specialInstructions && data.specialInstructions.trim()) {
       const cleanInst = data.specialInstructions.trim().replace(/^"+|"+$/g, "");
       commands += `${divider}\n`;
-      commands += `${ESC}E\x01`; // Bold ON
+      commands += `${ESC}E\x01`;
       commands += `SPECIAL REQUEST:\n`;
-      commands += `${ESC}!\x10`; // Double-height
+      commands += `${ESC}E\x00`;
       commands += `"${cleanInst}"\n`;
-      commands += `${ESC}!\x00`; // Normal font
-      commands += `${ESC}E\x00`; // Bold OFF
     }
 
-    // 9. Extra line feeds (4 lines) and paper cut
-    commands += `\n\n\n\n`;
-    commands += `${GS}V\x00`; // ESC/POS standard full cut
+    commands += `${divider}\n`;
+    commands += `${ESC}a\x01`; // Center
+    commands += `${ESC}E\x01`;
+    commands += `—— ORDER SLIP ——\n`;
+    commands += `${ESC}E\x00`;
+
+    // Minimal paper feed (2 lines) and cut
+    commands += `\n\n`;
+    commands += `${GS}V\x00`;
 
     return commands;
   }

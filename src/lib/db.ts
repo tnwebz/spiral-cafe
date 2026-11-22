@@ -319,30 +319,47 @@ export function generateOrderNumber(): string {
 
 export async function generate3DigitOrderNumber(): Promise<string> {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Scan recent orders across the entire database to find the true highest numeric order number
     const { data } = await supabaseAdmin
       .from("orders")
       .select("order_number")
-      .gte("created_at", today.toISOString())
       .order("created_at", { ascending: false })
-      .limit(60);
+      .limit(100);
 
     let maxNum = 100;
     if (data && data.length > 0) {
       for (const row of data) {
-        const val = (row.order_number || "").trim().replace(/\D/g, "");
-        if (val.length === 3) {
-          const num = parseInt(val, 10);
-          if (num > maxNum && num < 999) {
+        const raw = (row.order_number || "").trim();
+        // Match pure numeric order numbers (e.g. 101, 102, 106), ignore PRV- and ORD- prefixes
+        if (/^\d{3,5}$/.test(raw)) {
+          const num = parseInt(raw, 10);
+          if (num > maxNum && num < 99999) {
             maxNum = num;
           }
         }
       }
     }
-    const next = maxNum >= 999 ? 101 : maxNum + 1;
-    return String(next);
-  } catch {
+
+    let candidate = maxNum + 1;
+
+    // Verify candidate does NOT conflict with ANY existing order in the database
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const candidateStr = String(candidate);
+      const { data: existing } = await supabaseAdmin
+        .from("orders")
+        .select("id")
+        .eq("order_number", candidateStr)
+        .maybeSingle();
+
+      if (!existing) {
+        return candidateStr;
+      }
+      candidate++;
+    }
+
+    return String(candidate);
+  } catch (err) {
+    console.error("Error generating order number:", err);
     return String(Math.floor(100 + Math.random() * 900));
   }
 }
@@ -1587,32 +1604,69 @@ export async function createOrder(params: {
     }
   }
 
-  // Transaction-safe insert (Try RPC first; fallback to atomic two-step)
+  // Transaction-safe insert (Try RPC first; fallback to atomic two-step with collision self-healing)
   let createdOrder: Order;
+  let finalOrderNumber = orderNumber;
+  let insertSuccess = false;
+  let lastErrorMsg = "";
 
-  const { error: rpcError } = await supabaseAdmin.rpc("create_order_with_items", {
-    order_payload: orderPayload as any,
-    items_payload: itemsPayload as any,
-  });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const currentOrderPayload = {
+      ...orderPayload,
+      order_number: finalOrderNumber,
+    };
 
-  if (rpcError) {
-    // Direct transaction fallback
-    const { error: insertOrderError } = await supabaseAdmin.from("orders").insert(orderPayload);
-    if (insertOrderError) {
-      throw new Error(`Failed to insert order: ${insertOrderError.message}`);
+    const { error: rpcError } = await supabaseAdmin.rpc("create_order_with_items", {
+      order_payload: currentOrderPayload as any,
+      items_payload: itemsPayload as any,
+    });
+
+    if (!rpcError) {
+      insertSuccess = true;
+      break;
     }
 
-    const { error: insertItemsError } = await supabaseAdmin.from("order_items").insert(itemsPayload);
-    if (insertItemsError) {
-      // Rollback order to avoid corrupted partial state
-      await supabaseAdmin.from("orders").delete().eq("id", orderId);
-      throw new Error(`Failed to insert order items: ${insertItemsError.message}`);
+    if (
+      rpcError.message?.includes("orders_order_number_key") ||
+      (rpcError as any).code === "23505"
+    ) {
+      console.warn(`Order number ${finalOrderNumber} collided in RPC. Generating next unique number...`);
+      finalOrderNumber = await generate3DigitOrderNumber();
+      continue;
     }
+
+    // Direct transaction fallback if RPC is not available or errored
+    const { error: insertOrderError } = await supabaseAdmin.from("orders").insert(currentOrderPayload);
+    if (!insertOrderError) {
+      const { error: insertItemsError } = await supabaseAdmin.from("order_items").insert(itemsPayload);
+      if (insertItemsError) {
+        await supabaseAdmin.from("orders").delete().eq("id", orderId);
+        throw new Error(`Failed to insert order items: ${insertItemsError.message}`);
+      }
+      insertSuccess = true;
+      break;
+    }
+
+    if (
+      insertOrderError.message?.includes("orders_order_number_key") ||
+      insertOrderError.code === "23505"
+    ) {
+      console.warn(`Order number ${finalOrderNumber} collided in fallback. Generating next unique number...`);
+      finalOrderNumber = await generate3DigitOrderNumber();
+      continue;
+    }
+
+    lastErrorMsg = insertOrderError.message;
+    break;
+  }
+
+  if (!insertSuccess) {
+    throw new Error(`Failed to insert order: ${lastErrorMsg || "Could not allocate a unique order number"}`);
   }
 
   createdOrder = {
     id: orderId,
-    orderNumber,
+    orderNumber: finalOrderNumber,
     tableNumber: cleanTable,
     customerSessionId: params.customerSessionId,
     customerId: params.customerId,

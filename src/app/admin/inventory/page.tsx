@@ -42,7 +42,127 @@ import {
   InventoryPurchaseRecord,
   getKolkataDateString,
   calculateUsedQty,
+  calculateFifoAllocation,
+  StockBatch,
 } from "@/types/inventory";
+
+// Dynamic Client-Side FIFO Valuation & Breakdown Helper
+function computeClientFifo(
+  item: InventoryDayItem,
+  opening: number,
+  purchased: number,
+  wastage: number,
+  closing: number | null | undefined,
+  baseCost?: number | null
+) {
+  // 1. Determine Opening Unit Cost (initial cost)
+  const openBatch = item.available_batches?.find((b) => b.batch_type === "OPENING");
+  const openingUnitCost =
+    openBatch?.unit_cost ??
+    (item.opening_qty > 0 && item.opening_stock_value != null && item.opening_stock_value > 0
+      ? Number((item.opening_stock_value / item.opening_qty).toFixed(2))
+      : (item.unit_cost ?? baseCost ?? null));
+
+  const batches: StockBatch[] = [];
+  if (opening > 0 && openingUnitCost !== null) {
+    batches.push({
+      id: `batch_open_${item.id}`,
+      ingredient_id: item.ingredient_id,
+      batch_type: "OPENING",
+      date: item.created_at?.slice(0, 10) || "2026-01-01",
+      created_at: "0000-00-00T00:00:00.000Z",
+      original_qty: opening,
+      remaining_qty: opening,
+      unit: item.unit,
+      unit_cost: openingUnitCost,
+      remaining_value: Number((opening * openingUnitCost).toFixed(2)),
+    });
+  }
+
+  // 2. Determine Purchase Batches
+  if (item.purchase_entries && item.purchase_entries.length > 0) {
+    const sorted = [...item.purchase_entries].sort((a, b) =>
+      (a.created_at || a.date).localeCompare(b.created_at || b.date)
+    );
+    for (const p of sorted) {
+      batches.push({
+        id: `batch_purch_${p.id}`,
+        ingredient_id: item.ingredient_id,
+        batch_type: "PURCHASE",
+        date: p.date,
+        created_at: p.created_at || "1970-01-01T12:00:00.000Z",
+        original_qty: p.quantity,
+        remaining_qty: p.quantity,
+        unit: p.unit || item.unit,
+        unit_cost: p.price_per_unit,
+        remaining_value: Number((p.quantity * p.price_per_unit).toFixed(2)),
+      });
+    }
+  } else if (purchased > 0) {
+    const pCost = item.latest_purchase_price ?? item.unit_cost ?? openingUnitCost ?? 0;
+    batches.push({
+      id: `batch_purch_syn_${item.id}`,
+      ingredient_id: item.ingredient_id,
+      batch_type: "PURCHASE",
+      date: item.created_at?.slice(0, 10) || "2026-01-01",
+      created_at: "1970-01-01T12:00:00.000Z",
+      original_qty: purchased,
+      remaining_qty: purchased,
+      unit: item.unit,
+      unit_cost: pCost,
+      remaining_value: Number((purchased * pCost).toFixed(2)),
+    });
+  }
+
+  const latestPurchasePrice =
+    item.latest_purchase_price ??
+    (item.purchase_entries && item.purchase_entries.length > 0
+      ? item.purchase_entries[item.purchase_entries.length - 1].price_per_unit
+      : null);
+
+  const isCounted = closing !== null && closing !== undefined;
+  const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
+
+  if (isCounted && calculatedUsed !== null) {
+    const res = calculateFifoAllocation(batches, wastage, calculatedUsed);
+    return {
+      openingUnitCost,
+      latestPurchasePrice,
+      calculatedUsed,
+      usedCost: res.usedCost,
+      usedBreakdown:
+        res.usedBreakdown ||
+        (res.usedCost !== null && openingUnitCost ? `${calculatedUsed} × ₹${openingUnitCost}` : undefined),
+      closingStockValue: res.closingStockValue,
+      closingBreakdown:
+        res.closingBreakdown ||
+        (closing && latestPurchasePrice ? `${closing} × ₹${latestPurchasePrice}` : undefined),
+      wastageCost: wastage > 0 ? res.wastageCost : null,
+      wastageBreakdown: res.wastageBreakdown,
+      isCounted: true,
+    };
+  } else {
+    let wastageCost: number | null = null;
+    let wastageBreakdown: string | undefined = undefined;
+    if (wastage > 0) {
+      const resWastage = calculateFifoAllocation(batches, wastage, 0);
+      wastageCost = resWastage.wastageCost;
+      wastageBreakdown = resWastage.wastageBreakdown;
+    }
+    return {
+      openingUnitCost,
+      latestPurchasePrice,
+      calculatedUsed,
+      usedCost: null,
+      usedBreakdown: undefined,
+      closingStockValue: null,
+      closingBreakdown: undefined,
+      wastageCost,
+      wastageBreakdown,
+      isCounted: false,
+    };
+  }
+}
 
 export default function AdminInventoryPage() {
   const todayDate = useMemo(() => getKolkataDateString(), []);
@@ -366,6 +486,27 @@ export default function AdminInventoryPage() {
       if (isNaN(qty) || qty <= 0) throw new Error("Please enter a valid purchase quantity (> 0)");
       if (isNaN(price) || price <= 0) throw new Error("Please enter a valid purchase price per unit (₹)");
 
+      // 1. Auto-save any pending draft changes so user inputs (closing, wastage, etc.) are NOT wiped!
+      if (day && Object.keys(draftChanges).length > 0) {
+        const updates = Object.entries(draftChanges).map(([id, patch]) => ({
+          id,
+          ...patch,
+        }));
+        const saveRes = await fetch("/api/admin/inventory/daily", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dayId: day.id,
+            updates,
+          }),
+        });
+        const saveJson = await saveRes.json();
+        if (!saveRes.ok || !saveJson.success) {
+          throw new Error(saveJson.error || "Failed to save pending changes before recording purchase");
+        }
+      }
+
+      // 2. Record the purchase batch
       const res = await fetch("/api/admin/inventory/purchases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -384,9 +525,9 @@ export default function AdminInventoryPage() {
       if (!res.ok || !json.success) throw new Error(json.error || "Failed to record purchase");
 
       setShowAddPurchaseModal(false);
-      setSaveSuccessMessage(`✅ Purchase recorded for ${selectedItemForPurchase.ingredient_name}! Purchased qty & weighted-average cost updated.`);
+      setSaveSuccessMessage(`✅ Purchase recorded for ${selectedItemForPurchase.ingredient_name}! Purchased qty & FIFO valuation updated.`);
       setTimeout(() => setSaveSuccessMessage(null), 4000);
-      fetchDayData(selectedDate);
+      await fetchDayData(selectedDate);
       fetchMovements();
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to record purchase");
@@ -1116,22 +1257,14 @@ export default function AdminInventoryPage() {
                                 ? draft.closing_actual_qty
                                 : item.closing_actual_qty;
 
-                            const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
-                            const isCounted = closing !== null && closing !== undefined;
-
-                            // Calculate closing stock value (FIFO allocation priority)
-                            const closingStockVal =
-                              draft.closing_actual_qty === undefined && item.closing_stock_value !== null && item.closing_stock_value !== undefined
-                                ? item.closing_stock_value
-                                : isCounted && item.unit_cost !== null && item.unit_cost !== undefined
-                                ? Number((closing! * item.unit_cost).toFixed(2))
-                                : null;
+                            const ingDef = ingredients.find((ing) => ing.id === item.ingredient_id);
+                            const clientFifo = computeClientFifo(item, opening, purchased, wastage, closing, ingDef?.cost_per_unit);
 
                             return (
                               <tr
                                 key={item.id}
                                 className={`hover:bg-zinc-50/60 transition ${
-                                  isCounted ? "bg-emerald-50/20" : ""
+                                  clientFifo.isCounted ? "bg-emerald-50/20" : ""
                                 }`}
                               >
                                 {/* Item Number */}
@@ -1151,7 +1284,7 @@ export default function AdminInventoryPage() {
                                   </div>
                                 </td>
 
-                                {/* Opening (Carry-forward balance) */}
+                                {/* Opening (Carry-forward balance + Initial Cost Rate in brackets) */}
                                 <td className="py-3 px-3 text-center">
                                   {isFinalized ? (
                                     <span className="font-bold text-zinc-900">{opening}</span>
@@ -1168,57 +1301,48 @@ export default function AdminInventoryPage() {
                                       className="w-18 text-center py-1.5 px-2 bg-zinc-50 rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
                                     />
                                   )}
+                                  {clientFifo.openingUnitCost !== null && opening > 0 && (
+                                    <div className="text-[10px] text-zinc-500 font-mono mt-0.5 font-medium">
+                                      (₹{clientFifo.openingUnitCost}/pc)
+                                    </div>
+                                  )}
                                 </td>
 
-                                {/* Purchased (Reflects purchases + Clickable breakdown + Add button) */}
+                                {/* Purchased (No input box! Clean display + '+' button + price in brackets) */}
                                 <td className="py-3 px-3 text-center">
                                   <div className="flex items-center justify-center gap-1.5">
-                                    {isFinalized ? (
+                                    <span className={`font-bold text-xs sm:text-sm ${purchased > 0 ? "text-zinc-950 font-mono" : "text-zinc-400"}`}>
+                                      {purchased}
+                                    </span>
+                                    {item.purchase_entries && item.purchase_entries.length > 0 && (
                                       <button
                                         type="button"
                                         onClick={() => openPurchasedBreakdownModal(item)}
-                                        className="font-bold text-zinc-800 hover:text-[#CA340A] underline underline-offset-2 cursor-pointer"
-                                        title="Click to view purchase batches"
+                                        className="px-1.5 py-0.5 rounded bg-orange-100 text-[#CA340A] text-[10px] font-bold hover:bg-orange-200 transition cursor-pointer"
+                                        title="View today's purchase batches"
                                       >
-                                        {purchased}
+                                        {item.purchase_entries.length}
                                       </button>
-                                    ) : (
-                                      <div className="flex items-center gap-1">
-                                        <input
-                                          type="number"
-                                          step="any"
-                                          min="0"
-                                          value={purchased === 0 ? "0" : purchased}
-                                          onFocus={(e) => e.target.select()}
-                                          onChange={(e) =>
-                                            handleCellChange(item.id, "purchased_qty", e.target.value)
-                                          }
-                                          className="w-16 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
-                                        />
-                                        {item.purchase_entries && item.purchase_entries.length > 0 && (
-                                          <button
-                                            type="button"
-                                            onClick={() => openPurchasedBreakdownModal(item)}
-                                            className="px-1.5 py-1 rounded bg-orange-100 text-[#CA340A] text-[10px] font-bold hover:bg-orange-200 transition cursor-pointer"
-                                            title="View today's purchase batches"
-                                          >
-                                            {item.purchase_entries.length}
-                                          </button>
-                                        )}
-                                      </div>
                                     )}
-                                    <button
-                                      type="button"
-                                      onClick={() => openAddPurchaseModal(item)}
-                                      className="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#CA340A] transition border border-orange-200/60 cursor-pointer"
-                                      title="Add purchase / delivery"
-                                    >
-                                      <Plus size={12} />
-                                    </button>
+                                    {!isFinalized && (
+                                      <button
+                                        type="button"
+                                        onClick={() => openAddPurchaseModal(item)}
+                                        className="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#CA340A] transition border border-orange-200/60 cursor-pointer shadow-xs hover:scale-105 active:scale-95"
+                                        title="Add purchase / delivery"
+                                      >
+                                        <Plus size={13} strokeWidth={2.5} />
+                                      </button>
+                                    )}
                                   </div>
+                                  {purchased > 0 && clientFifo.latestPurchasePrice !== null && (
+                                    <div className="text-[10px] text-amber-700 font-mono mt-0.5 font-medium">
+                                      (₹{clientFifo.latestPurchasePrice} new price)
+                                    </div>
+                                  )}
                                 </td>
 
-                                {/* Wastage Input */}
+                                {/* Wastage Input & Cost Breakdown */}
                                 <td className="py-3 px-3 text-center">
                                   {isFinalized ? (
                                     <span className="font-semibold text-zinc-800">{wastage}</span>
@@ -1234,6 +1358,14 @@ export default function AdminInventoryPage() {
                                       }
                                       className="w-16 text-center py-1.5 px-2 bg-white rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-hidden focus:border-[#CA340A]"
                                     />
+                                  )}
+                                  {wastage > 0 && (
+                                    <div className="text-[10px] text-rose-600 font-mono mt-0.5">
+                                      {clientFifo.wastageCost !== null && `₹${clientFifo.wastageCost}`}
+                                      {clientFifo.wastageBreakdown && (
+                                        <span className="text-zinc-500 block text-[9px]">({clientFifo.wastageBreakdown})</span>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
 
@@ -1255,7 +1387,7 @@ export default function AdminInventoryPage() {
                                         handleCellChange(item.id, "closing_actual_qty", e.target.value)
                                       }
                                       className={`w-20 text-center py-1.5 px-2 rounded-lg border text-xs font-bold focus:outline-hidden ${
-                                        isCounted
+                                        clientFifo.isCounted
                                           ? "bg-emerald-50 border-emerald-300 text-emerald-900 focus:border-emerald-500"
                                           : "bg-white border-zinc-300 text-zinc-900 placeholder:text-zinc-400 focus:border-[#CA340A]"
                                       }`}
@@ -1263,13 +1395,23 @@ export default function AdminInventoryPage() {
                                   )}
                                 </td>
 
-                                {/* Stock Value (₹) Column (FIFO Allocation) */}
+                                {/* Stock Value (₹) Column (FIFO Allocation with Bracket Breakdown) */}
                                 <td className="py-3 px-3 text-right">
-                                  {isCounted ? (
-                                    closingStockVal !== null ? (
-                                      <span className="font-mono font-bold text-zinc-950 text-xs">
-                                        ₹{closingStockVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </span>
+                                  {clientFifo.isCounted ? (
+                                    clientFifo.closingStockValue !== null ? (
+                                      <div>
+                                        <span className="font-mono font-bold text-zinc-950 text-xs sm:text-sm">
+                                          ₹{clientFifo.closingStockValue.toLocaleString("en-IN", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
+                                        </span>
+                                        {clientFifo.closingBreakdown && (
+                                          <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                                            ({clientFifo.closingBreakdown})
+                                          </div>
+                                        )}
+                                      </div>
                                     ) : (
                                       <span className="text-zinc-400 font-mono text-xs">₹0.00</span>
                                     )
@@ -1278,25 +1420,29 @@ export default function AdminInventoryPage() {
                                   )}
                                 </td>
 
-                                {/* Used (Calculated Output) */}
+                                {/* Used (Calculated Output + Cost & FIFO Bracket Breakdown) */}
                                 <td className="py-3 px-4 text-center">
-                                  {calculatedUsed !== null ? (
+                                  {clientFifo.calculatedUsed !== null ? (
                                     <div>
                                       <span
                                         className={`font-black text-sm ${
-                                          calculatedUsed < 0
+                                          clientFifo.calculatedUsed < 0
                                             ? "text-red-600"
                                             : "text-[#CA340A]"
                                         }`}
                                       >
-                                        {calculatedUsed}
+                                        {clientFifo.calculatedUsed}
                                       </span>
-                                      {calculatedUsed > 0 && (
-                                        <div className="text-[10px] text-zinc-400 font-mono">
-                                          ₹{(draft.closing_actual_qty === undefined && item.used_cost !== null && item.used_cost !== undefined
-                                            ? item.used_cost
-                                            : (calculatedUsed * (item.unit_cost || 0))
-                                          ).toFixed(0)}
+                                      {clientFifo.calculatedUsed > 0 && (
+                                        <div className="text-[10px] font-mono mt-0.5">
+                                          <span className="text-zinc-700 font-semibold">
+                                            ₹{(clientFifo.usedCost ?? 0).toFixed(0)}
+                                          </span>
+                                          {clientFifo.usedBreakdown && (
+                                            <div className="text-zinc-400 text-[9px] whitespace-nowrap">
+                                              ({clientFifo.usedBreakdown})
+                                            </div>
+                                          )}
                                         </div>
                                       )}
                                     </div>
@@ -1307,7 +1453,7 @@ export default function AdminInventoryPage() {
 
                                 {/* Counted Status */}
                                 <td className="py-3 px-4 text-center">
-                                  {isCounted ? (
+                                  {clientFifo.isCounted ? (
                                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
                                       <CheckCircle2 size={13} />
                                       Done

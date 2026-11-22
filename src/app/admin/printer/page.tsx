@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
+import PrintDesignShowcase from "@/components/Admin/PrintDesignShowcase";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
 import {
   PrinterClient,
@@ -1048,6 +1049,11 @@ export default function AdminPrinterPage() {
               <ArrowRight className="h-3.5 w-3.5 text-zinc-500" />
             </Link>
           </div>
+
+          {/* ================================================================= */}
+          {/* SECTION 7: LIVE 3-COLUMN THERMAL PRINT DESIGN SPEC STUDIO         */}
+          {/* ================================================================= */}
+          <PrintDesignShowcase />
 
         </div>
       </div>

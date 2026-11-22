@@ -72,13 +72,13 @@
       "item_number": 1,
       "name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
-      "unit": "pcs",
-      "min_stock_level": 5,
+      "unit": "kg",
+      "min_stock_level": 6,
       "display_order": 1,
       "is_active": true,
-      "cost_per_unit": 80,
+      "cost_per_unit": 85,
       "notes": null,
-      "updated_at": "2026-11-21T11:22:50.274Z"
+      "updated_at": "2026-11-22T06:17:00.216Z"
     },
     {
       "id": "ing_2",
@@ -98,10 +98,13 @@
       "item_number": 3,
       "name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "min_stock_level": 2,
       "display_order": 3,
-      "is_active": true
+      "is_active": true,
+      "cost_per_unit": 100,
+      "notes": null,
+      "updated_at": "2026-11-22T05:59:04.205Z"
     },
     {
       "id": "ing_4",
@@ -121,10 +124,13 @@
       "item_number": 5,
       "name": "Squid",
       "category_id": "cat_chicken_seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "min_stock_level": 1,
       "display_order": 5,
-      "is_active": true
+      "is_active": true,
+      "cost_per_unit": 100,
+      "notes": null,
+      "updated_at": "2026-11-22T06:04:33.712Z"
     },
     {
       "id": "ing_6",
@@ -864,7 +870,11 @@
       "created_at": "2026-11-13T18:54:25.419Z",
       "updated_at": "2026-11-14T13:42:27.181Z",
       "finalized_by": "Admin Manager",
-      "finalized_at": "2026-11-14T13:42:27.181Z"
+      "finalized_at": "2026-11-14T13:42:27.181Z",
+      "total_closing_stock_value": 3500,
+      "total_used_value": 2960,
+      "total_wastage_value": 940,
+      "total_purchase_value": 0
     },
     {
       "id": "day_20261115",
@@ -954,18 +964,18 @@
     {
       "id": "day_20261122",
       "date": "2026-11-22",
-      "status": "FINALIZED",
+      "status": "DRAFT",
       "checked_by": "Admin Manager",
       "total_active_ingredients": 71,
       "counted_ingredients": 1,
       "created_at": "2026-11-21T10:27:40.875Z",
-      "updated_at": "2026-11-21T11:37:32.990Z",
-      "total_closing_stock_value": 1000,
+      "updated_at": "2026-11-22T06:01:35.883Z",
+      "total_closing_stock_value": 500,
       "total_used_value": 1500,
       "total_wastage_value": 500,
-      "total_purchase_value": 0,
-      "finalized_by": "Admin Manager",
-      "finalized_at": "2026-11-21T11:37:32.990Z"
+      "total_purchase_value": 4200,
+      "finalized_by": null,
+      "finalized_at": null
     },
     {
       "id": "day_20261102",
@@ -1005,7 +1015,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -1043,7 +1053,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -1080,7 +1090,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -2254,7 +2264,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 17,
       "wastage_qty": 0,
@@ -2460,7 +2470,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -2516,7 +2526,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -4394,7 +4404,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -4432,7 +4442,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -4469,7 +4479,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -5643,7 +5653,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -5652,7 +5662,7 @@
       "is_counted": false,
       "created_at": "2026-11-13T17:45:12.287Z",
       "updated_at": "2026-11-13T17:45:12.287Z",
-      "unit_cost": 80
+      "unit_cost": 85
     },
     {
       "id": "item_day_20261112next_ing_2",
@@ -5681,7 +5691,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -5689,7 +5699,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T17:45:12.287Z",
-      "updated_at": "2026-11-13T17:45:12.287Z"
+      "updated_at": "2026-11-13T17:45:12.287Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261112next_ing_4",
@@ -5718,7 +5729,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -5726,7 +5737,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T17:45:12.287Z",
-      "updated_at": "2026-11-13T17:45:12.287Z"
+      "updated_at": "2026-11-13T17:45:12.287Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261112next_ing_6",
@@ -6888,7 +6900,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -6897,7 +6909,7 @@
       "is_counted": false,
       "created_at": "2026-11-13T18:36:32.447Z",
       "updated_at": "2026-11-13T18:36:32.447Z",
-      "unit_cost": 340,
+      "unit_cost": 85,
       "opening_stock_value": 0,
       "closing_stock_value": null,
       "used_cost": null
@@ -6932,7 +6944,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -6941,7 +6953,7 @@
       "is_counted": false,
       "created_at": "2026-11-13T18:36:32.447Z",
       "updated_at": "2026-11-13T18:36:32.447Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "closing_stock_value": null,
       "used_cost": null
@@ -6976,7 +6988,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -6985,7 +6997,7 @@
       "is_counted": false,
       "created_at": "2026-11-13T18:36:32.447Z",
       "updated_at": "2026-11-13T18:36:32.447Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "closing_stock_value": null,
       "used_cost": null
@@ -8406,7 +8418,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 20,
       "purchased_qty": 5,
       "wastage_qty": 3,
@@ -8418,8 +8430,43 @@
       "counted_by": "Admin Manager",
       "counted_at": "2026-11-14T03:19:23.789Z",
       "unit_cost": 80,
-      "closing_stock_value": 1200,
-      "used_cost": 560
+      "closing_stock_value": 800,
+      "used_cost": 560,
+      "purchase_entries": [],
+      "available_batches": [
+        {
+          "id": "batch_open_ing_1_2026-11-14",
+          "ingredient_id": "ing_1",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 20,
+          "remaining_qty": 20,
+          "unit": "kg",
+          "unit_cost": 80,
+          "remaining_value": 1600,
+          "notes": "Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_1_2026-11-14",
+          "ingredient_id": "ing_1",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 20,
+          "remaining_qty": 10,
+          "unit": "kg",
+          "unit_cost": 80,
+          "remaining_value": 800,
+          "notes": "Opening Stock"
+        }
+      ],
+      "opening_stock_value": 1600,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": 360,
+      "wastage_cost": 240
     },
     {
       "id": "item_day_20261114_ing_2",
@@ -8441,8 +8488,43 @@
       "counted_by": "Admin Manager",
       "counted_at": "2026-11-14T03:19:23.789Z",
       "unit_cost": 200,
-      "closing_stock_value": 800,
-      "used_cost": 600
+      "closing_stock_value": 400,
+      "used_cost": 600,
+      "purchase_entries": [],
+      "available_batches": [
+        {
+          "id": "batch_open_ing_2_2026-11-14",
+          "ingredient_id": "ing_2",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 6,
+          "remaining_qty": 6,
+          "unit": "pcs",
+          "unit_cost": 200,
+          "remaining_value": 1200,
+          "notes": "Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_2_2026-11-14",
+          "ingredient_id": "ing_2",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 6,
+          "remaining_qty": 2,
+          "unit": "pcs",
+          "unit_cost": 200,
+          "remaining_value": 400,
+          "notes": "Opening Stock"
+        }
+      ],
+      "opening_stock_value": 1200,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": 320,
+      "wastage_cost": 200
     },
     {
       "id": "item_day_20261114_ing_3",
@@ -8452,7 +8534,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 20,
       "purchased_qty": 10,
       "wastage_qty": 3,
@@ -8462,7 +8544,45 @@
       "created_at": "2026-11-13T18:54:25.419Z",
       "updated_at": "2026-11-14T03:19:23.789Z",
       "counted_by": "Admin Manager",
-      "counted_at": "2026-11-14T03:19:23.789Z"
+      "counted_at": "2026-11-14T03:19:23.789Z",
+      "purchase_entries": [],
+      "available_batches": [
+        {
+          "id": "batch_open_ing_3_2026-11-14",
+          "ingredient_id": "ing_3",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 20,
+          "remaining_qty": 20,
+          "unit": "pcs",
+          "unit_cost": 100,
+          "remaining_value": 2000,
+          "notes": "Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_3_2026-11-14",
+          "ingredient_id": "ing_3",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 20,
+          "remaining_qty": 8,
+          "unit": "pcs",
+          "unit_cost": 100,
+          "remaining_value": 800,
+          "notes": "Opening Stock"
+        }
+      ],
+      "opening_stock_value": 2000,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": 120,
+      "unit_cost": 100,
+      "closing_stock_value": 800,
+      "used_cost": 900,
+      "wastage_cost": 300
     },
     {
       "id": "item_day_20261114_ing_4",
@@ -8484,8 +8604,43 @@
       "counted_by": "Admin Manager",
       "counted_at": "2026-11-14T13:41:39.675Z",
       "unit_cost": 100,
-      "closing_stock_value": 2000,
-      "used_cost": 900
+      "closing_stock_value": 1500,
+      "used_cost": 900,
+      "purchase_entries": [],
+      "available_batches": [
+        {
+          "id": "batch_open_ing_4_2026-11-14",
+          "ingredient_id": "ing_4",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 26,
+          "remaining_qty": 26,
+          "unit": "kg",
+          "unit_cost": 100,
+          "remaining_value": 2600,
+          "notes": "Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_4_2026-11-14",
+          "ingredient_id": "ing_4",
+          "batch_type": "OPENING",
+          "date": "2026-11-14",
+          "created_at": "2026-11-14T00:00:00.000Z",
+          "original_qty": 26,
+          "remaining_qty": 15,
+          "unit": "kg",
+          "unit_cost": 100,
+          "remaining_value": 1500,
+          "notes": "Opening Stock"
+        }
+      ],
+      "opening_stock_value": 2600,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": 120,
+      "wastage_cost": 200
     },
     {
       "id": "item_day_20261114_ing_5",
@@ -8495,7 +8650,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -8505,7 +8660,17 @@
       "created_at": "2026-11-13T18:54:25.419Z",
       "updated_at": "2026-11-14T13:42:17.180Z",
       "counted_by": "Admin Manager",
-      "counted_at": null
+      "counted_at": null,
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": 100,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_6",
@@ -8523,7 +8688,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_7",
@@ -8541,7 +8716,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_8",
@@ -8559,7 +8744,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_9",
@@ -8577,7 +8772,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": 30,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_10",
@@ -8595,7 +8800,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_11",
@@ -8613,7 +8828,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_12",
@@ -8631,7 +8856,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_13",
@@ -8649,7 +8884,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_14",
@@ -8667,7 +8912,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_15",
@@ -8685,7 +8940,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_16",
@@ -8703,7 +8968,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_17",
@@ -8721,7 +8996,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_18",
@@ -8739,7 +9024,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_19",
@@ -8757,7 +9052,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_20",
@@ -8775,7 +9080,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_21",
@@ -8793,7 +9108,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_22",
@@ -8811,7 +9136,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_23",
@@ -8829,7 +9164,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_24",
@@ -8847,7 +9192,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_25",
@@ -8865,7 +9220,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_26",
@@ -8883,7 +9248,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_27",
@@ -8901,7 +9276,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_28",
@@ -8919,7 +9304,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_29",
@@ -8937,7 +9332,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_30",
@@ -8955,7 +9360,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_31",
@@ -8973,7 +9388,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_32",
@@ -8991,7 +9416,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_33",
@@ -9009,7 +9444,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_34",
@@ -9027,7 +9472,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_35",
@@ -9045,7 +9500,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_36",
@@ -9063,7 +9528,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_37",
@@ -9081,7 +9556,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_38",
@@ -9099,7 +9584,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_39",
@@ -9117,7 +9612,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_40",
@@ -9135,7 +9640,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_41",
@@ -9153,7 +9668,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_42",
@@ -9171,7 +9696,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_43",
@@ -9189,7 +9724,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_44",
@@ -9207,7 +9752,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_45",
@@ -9225,7 +9780,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_46",
@@ -9243,7 +9808,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_47",
@@ -9261,7 +9836,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_48",
@@ -9279,7 +9864,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_49",
@@ -9297,7 +9892,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_50",
@@ -9315,7 +9920,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_51",
@@ -9333,7 +9948,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_52",
@@ -9351,7 +9976,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_53",
@@ -9369,7 +10004,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_54",
@@ -9387,7 +10032,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_55",
@@ -9405,7 +10060,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_56",
@@ -9423,7 +10088,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_57",
@@ -9441,7 +10116,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_58",
@@ -9459,7 +10144,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_59",
@@ -9477,7 +10172,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_60",
@@ -9495,7 +10200,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_61",
@@ -9513,7 +10228,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_62",
@@ -9531,7 +10256,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_63",
@@ -9549,7 +10284,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_64",
@@ -9567,7 +10312,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_65",
@@ -9585,7 +10340,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_66",
@@ -9603,7 +10368,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_67",
@@ -9621,7 +10396,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_68",
@@ -9639,7 +10424,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_69",
@@ -9657,7 +10452,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-13T18:54:25.419Z",
-      "updated_at": "2026-11-13T18:54:25.419Z"
+      "updated_at": "2026-11-13T18:54:25.419Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261115_ing_1",
@@ -9667,7 +10472,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 15,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -9676,7 +10481,7 @@
       "is_counted": false,
       "created_at": "2026-11-14T03:19:50.028Z",
       "updated_at": "2026-11-14T03:19:50.028Z",
-      "unit_cost": 80
+      "unit_cost": 85
     },
     {
       "id": "item_day_20261115_ing_2",
@@ -9705,7 +10510,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 18,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -9713,7 +10518,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T03:19:50.028Z",
-      "updated_at": "2026-11-14T03:19:50.028Z"
+      "updated_at": "2026-11-14T03:19:50.028Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261115_ing_4",
@@ -9742,7 +10548,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -9750,7 +10556,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T03:19:50.028Z",
-      "updated_at": "2026-11-14T03:19:50.028Z"
+      "updated_at": "2026-11-14T03:19:50.028Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261115_ing_6",
@@ -10912,7 +11719,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -10921,7 +11728,7 @@
       "is_counted": false,
       "created_at": "2026-11-14T05:37:15.159Z",
       "updated_at": "2026-11-14T05:37:15.159Z",
-      "unit_cost": 340,
+      "unit_cost": 85,
       "opening_stock_value": 0,
       "closing_stock_value": null,
       "used_cost": null
@@ -10956,7 +11763,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -10965,7 +11772,7 @@
       "is_counted": false,
       "created_at": "2026-11-14T05:37:15.159Z",
       "updated_at": "2026-11-14T05:37:15.159Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "closing_stock_value": null,
       "used_cost": null
@@ -11000,7 +11807,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -11009,7 +11816,7 @@
       "is_counted": false,
       "created_at": "2026-11-14T05:37:15.159Z",
       "updated_at": "2026-11-14T05:37:15.159Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "closing_stock_value": null,
       "used_cost": null
@@ -12474,7 +13281,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 25,
       "purchased_qty": 10,
       "wastage_qty": 3,
@@ -12528,7 +13335,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -12580,7 +13387,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -14340,7 +15147,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -14349,7 +15156,7 @@
       "is_counted": false,
       "created_at": "2026-11-14T05:38:38.469Z",
       "updated_at": "2026-11-14T05:38:38.469Z",
-      "unit_cost": 80
+      "unit_cost": 85
     },
     {
       "id": "item_day_20261117next_ing_2",
@@ -14378,7 +15185,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -14386,7 +15193,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T05:38:38.469Z",
-      "updated_at": "2026-11-14T05:38:38.469Z"
+      "updated_at": "2026-11-14T05:38:38.469Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261117next_ing_4",
@@ -14415,7 +15223,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -14423,7 +15231,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T05:38:38.469Z",
-      "updated_at": "2026-11-14T05:38:38.469Z"
+      "updated_at": "2026-11-14T05:38:38.469Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261117next_ing_6",
@@ -15629,7 +16438,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T08:17:27.448Z",
-      "updated_at": "2026-11-14T08:17:27.448Z"
+      "updated_at": "2026-11-14T08:17:27.448Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261114_ing_71_daj3",
@@ -15647,7 +16466,17 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T08:17:27.448Z",
-      "updated_at": "2026-11-14T08:17:27.448Z"
+      "updated_at": "2026-11-14T08:17:27.448Z",
+      "purchase_entries": [],
+      "available_batches": [],
+      "closing_batches": [],
+      "opening_stock_value": 0,
+      "total_purchase_cost": 0,
+      "latest_purchase_price": null,
+      "unit_cost": null,
+      "closing_stock_value": null,
+      "used_cost": null,
+      "wastage_cost": null
     },
     {
       "id": "item_day_20261115_ing_70_51l6",
@@ -15693,7 +16522,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -15702,7 +16531,7 @@
       "is_counted": false,
       "created_at": "2026-11-14T13:40:32.352Z",
       "updated_at": "2026-11-14T13:40:32.352Z",
-      "unit_cost": 80
+      "unit_cost": 85
     },
     {
       "id": "item_day_20261116_ing_2",
@@ -15731,7 +16560,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -15739,7 +16568,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T13:40:32.352Z",
-      "updated_at": "2026-11-14T13:40:32.352Z"
+      "updated_at": "2026-11-14T13:40:32.352Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261116_ing_4",
@@ -15768,7 +16598,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -15776,7 +16606,8 @@
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-14T13:40:32.352Z",
-      "updated_at": "2026-11-14T13:40:32.352Z"
+      "updated_at": "2026-11-14T13:40:32.352Z",
+      "unit_cost": 100
     },
     {
       "id": "item_day_20261116_ing_6",
@@ -16974,7 +17805,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 10,
       "purchased_qty": 1,
       "wastage_qty": 0,
@@ -17040,7 +17871,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -17049,7 +17880,7 @@
       "is_counted": false,
       "created_at": "2026-11-17T11:08:33.022Z",
       "updated_at": "2026-11-17T11:08:33.022Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -17092,7 +17923,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -17101,7 +17932,7 @@
       "is_counted": false,
       "created_at": "2026-11-17T11:08:33.022Z",
       "updated_at": "2026-11-17T11:08:33.022Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -18834,7 +19665,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -18843,7 +19674,7 @@
       "is_counted": false,
       "created_at": "2026-11-17T14:47:11.239Z",
       "updated_at": "2026-11-17T14:47:11.239Z",
-      "unit_cost": 80,
+      "unit_cost": 85,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -18886,7 +19717,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -18895,7 +19726,7 @@
       "is_counted": false,
       "created_at": "2026-11-17T14:47:11.239Z",
       "updated_at": "2026-11-17T14:47:11.239Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -18938,7 +19769,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -18947,7 +19778,7 @@
       "is_counted": false,
       "created_at": "2026-11-17T14:47:11.239Z",
       "updated_at": "2026-11-17T14:47:11.239Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -20736,23 +21567,67 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
-      "purchased_qty": 0,
+      "purchased_qty": 10,
       "wastage_qty": 0,
       "closing_actual_qty": null,
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-21T10:27:40.875Z",
-      "updated_at": "2026-11-21T10:27:40.875Z",
-      "unit_cost": 340,
+      "updated_at": "2026-11-22T05:59:41.486Z",
+      "unit_cost": 360,
       "opening_stock_value": 0,
-      "total_purchase_cost": 0,
-      "latest_purchase_price": 340,
-      "purchase_entries": [],
+      "total_purchase_cost": 3600,
+      "latest_purchase_price": 360,
+      "purchase_entries": [
+        {
+          "id": "pur_1795327181486_1ax6",
+          "ingredient_id": "ing_1",
+          "date": "2026-11-22",
+          "quantity": 10,
+          "unit": "kg",
+          "price_per_unit": 360,
+          "total_cost": 3600,
+          "supplier": null,
+          "recorded_by": "Admin Manager",
+          "notes": null,
+          "created_at": "2026-11-22T05:59:41.486Z"
+        }
+      ],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [
+        {
+          "id": "batch_purch_pur_1795327181486_1ax6",
+          "ingredient_id": "ing_1",
+          "batch_type": "PURCHASE",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T05:59:41.486Z",
+          "original_qty": 10,
+          "remaining_qty": 10,
+          "unit": "kg",
+          "unit_cost": 360,
+          "remaining_value": 3600,
+          "purchase_id": "pur_1795327181486_1ax6"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_purch_pur_1795327181486_1ax6",
+          "ingredient_id": "ing_1",
+          "batch_type": "PURCHASE",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T05:59:41.486Z",
+          "original_qty": 10,
+          "remaining_qty": 10,
+          "unit": "kg",
+          "unit_cost": 360,
+          "remaining_value": 3600,
+          "purchase_id": "pur_1795327181486_1ax6"
+        }
+      ]
     },
     {
       "id": "item_day_20261122_ing_2",
@@ -20778,7 +21653,9 @@
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_3",
@@ -20788,23 +21665,67 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
-      "purchased_qty": 0,
+      "purchased_qty": 5,
       "wastage_qty": 0,
       "closing_actual_qty": null,
       "calculated_used_qty": null,
       "is_counted": false,
       "created_at": "2026-11-21T10:27:40.875Z",
-      "updated_at": "2026-11-21T10:27:40.875Z",
-      "unit_cost": null,
-      "opening_stock_value": null,
-      "total_purchase_cost": 0,
-      "latest_purchase_price": null,
-      "purchase_entries": [],
+      "updated_at": "2026-11-22T06:01:35.883Z",
+      "unit_cost": 120,
+      "opening_stock_value": 0,
+      "total_purchase_cost": 600,
+      "latest_purchase_price": 120,
+      "purchase_entries": [
+        {
+          "id": "pur_1795327295882_eglq",
+          "ingredient_id": "ing_3",
+          "date": "2026-11-22",
+          "quantity": 5,
+          "unit": "pcs",
+          "price_per_unit": 120,
+          "total_cost": 600,
+          "supplier": null,
+          "recorded_by": "Admin Manager",
+          "notes": null,
+          "created_at": "2026-11-22T06:01:35.882Z"
+        }
+      ],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [
+        {
+          "id": "batch_purch_pur_1795327295882_eglq",
+          "ingredient_id": "ing_3",
+          "batch_type": "PURCHASE",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T06:01:35.882Z",
+          "original_qty": 5,
+          "remaining_qty": 5,
+          "unit": "pcs",
+          "unit_cost": 120,
+          "remaining_value": 600,
+          "purchase_id": "pur_1795327295882_eglq"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_purch_pur_1795327295882_eglq",
+          "ingredient_id": "ing_3",
+          "batch_type": "PURCHASE",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T06:01:35.882Z",
+          "original_qty": 5,
+          "remaining_qty": 5,
+          "unit": "pcs",
+          "unit_cost": 120,
+          "remaining_value": 600,
+          "purchase_id": "pur_1795327295882_eglq"
+        }
+      ]
     },
     {
       "id": "item_day_20261122_ing_4",
@@ -20826,13 +21747,43 @@
       "unit_cost": 100,
       "opening_stock_value": 2500,
       "total_purchase_cost": 0,
-      "latest_purchase_price": null,
+      "latest_purchase_price": 120,
       "purchase_entries": [],
-      "closing_stock_value": 1000,
+      "closing_stock_value": 500,
       "used_cost": 1500,
       "wastage_cost": 500,
       "counted_by": "Admin Manager",
-      "counted_at": "2026-11-21T11:37:28.196Z"
+      "counted_at": "2026-11-21T11:37:28.196Z",
+      "available_batches": [
+        {
+          "id": "batch_open_ing_4_2026-11-22",
+          "ingredient_id": "ing_4",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 25,
+          "remaining_qty": 25,
+          "unit": "kg",
+          "unit_cost": 100,
+          "remaining_value": 2500,
+          "notes": "Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_4_2026-11-22",
+          "ingredient_id": "ing_4",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 25,
+          "remaining_qty": 5,
+          "unit": "kg",
+          "unit_cost": 100,
+          "remaining_value": 500,
+          "notes": "Opening Stock"
+        }
+      ]
     },
     {
       "id": "item_day_20261122_ing_5",
@@ -20842,7 +21793,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -20851,14 +21802,16 @@
       "is_counted": false,
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
-      "unit_cost": null,
-      "opening_stock_value": null,
+      "unit_cost": 100,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_6",
@@ -20878,13 +21831,43 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [
+        {
+          "id": "batch_open_ing_6_2026-11-22",
+          "ingredient_id": "ing_6",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 15,
+          "remaining_qty": 15,
+          "unit": "kg",
+          "unit_cost": 0,
+          "remaining_value": 0,
+          "notes": "Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_6_2026-11-22",
+          "ingredient_id": "ing_6",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 15,
+          "remaining_qty": 15,
+          "unit": "kg",
+          "unit_cost": 0,
+          "remaining_value": 0,
+          "notes": "Opening Stock"
+        }
+      ]
     },
     {
       "id": "item_day_20261122_ing_7",
@@ -20904,13 +21887,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_8",
@@ -20930,13 +21915,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_9",
@@ -20956,13 +21943,43 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": 30,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [
+        {
+          "id": "batch_open_ing_9_2026-11-22",
+          "ingredient_id": "ing_9",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 24,
+          "remaining_qty": 24,
+          "unit": "pcs",
+          "unit_cost": 0,
+          "remaining_value": 0,
+          "notes": "Manual Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_9_2026-11-22",
+          "ingredient_id": "ing_9",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 24,
+          "remaining_qty": 24,
+          "unit": "pcs",
+          "unit_cost": 0,
+          "remaining_value": 0,
+          "notes": "Manual Opening Stock"
+        }
+      ]
     },
     {
       "id": "item_day_20261122_ing_10",
@@ -20982,13 +21999,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_11",
@@ -21008,13 +22027,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_12",
@@ -21034,13 +22055,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_13",
@@ -21060,13 +22083,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_14",
@@ -21086,13 +22111,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_15",
@@ -21112,13 +22139,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_16",
@@ -21138,13 +22167,43 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [
+        {
+          "id": "batch_open_ing_16_2026-11-22",
+          "ingredient_id": "ing_16",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 6,
+          "remaining_qty": 6,
+          "unit": "L",
+          "unit_cost": 0,
+          "remaining_value": 0,
+          "notes": "Manual Opening Stock"
+        }
+      ],
+      "closing_batches": [
+        {
+          "id": "batch_open_ing_16_2026-11-22",
+          "ingredient_id": "ing_16",
+          "batch_type": "OPENING",
+          "date": "2026-11-22",
+          "created_at": "2026-11-22T00:00:00.000Z",
+          "original_qty": 6,
+          "remaining_qty": 6,
+          "unit": "L",
+          "unit_cost": 0,
+          "remaining_value": 0,
+          "notes": "Manual Opening Stock"
+        }
+      ]
     },
     {
       "id": "item_day_20261122_ing_17",
@@ -21164,13 +22223,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_18",
@@ -21190,13 +22251,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_19",
@@ -21216,13 +22279,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_20",
@@ -21242,13 +22307,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_21",
@@ -21268,13 +22335,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_22",
@@ -21294,13 +22363,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_23",
@@ -21320,13 +22391,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_24",
@@ -21346,13 +22419,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_25",
@@ -21372,13 +22447,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_26",
@@ -21398,13 +22475,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_27",
@@ -21424,13 +22503,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_28",
@@ -21450,13 +22531,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_29",
@@ -21476,13 +22559,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_30",
@@ -21502,13 +22587,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_31",
@@ -21528,13 +22615,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_32",
@@ -21554,13 +22643,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_33",
@@ -21580,13 +22671,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_34",
@@ -21606,13 +22699,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_35",
@@ -21632,13 +22727,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_36",
@@ -21658,13 +22755,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_37",
@@ -21684,13 +22783,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_38",
@@ -21710,13 +22811,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_39",
@@ -21736,13 +22839,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_40",
@@ -21762,13 +22867,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_41",
@@ -21788,13 +22895,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_42",
@@ -21814,13 +22923,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_43",
@@ -21840,13 +22951,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_44",
@@ -21866,13 +22979,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_45",
@@ -21892,13 +23007,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_46",
@@ -21918,13 +23035,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_47",
@@ -21944,13 +23063,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_48",
@@ -21970,13 +23091,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_49",
@@ -21996,13 +23119,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_50",
@@ -22022,13 +23147,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_51",
@@ -22048,13 +23175,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_52",
@@ -22074,13 +23203,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_53",
@@ -22100,13 +23231,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_54",
@@ -22126,13 +23259,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_55",
@@ -22152,13 +23287,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_56",
@@ -22178,13 +23315,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_57",
@@ -22204,13 +23343,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_58",
@@ -22230,13 +23371,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_59",
@@ -22256,13 +23399,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_60",
@@ -22282,13 +23427,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_61",
@@ -22308,13 +23455,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_62",
@@ -22334,13 +23483,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_63",
@@ -22360,13 +23511,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_64",
@@ -22386,13 +23539,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_65",
@@ -22412,13 +23567,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_66",
@@ -22438,13 +23595,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_67",
@@ -22464,13 +23623,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_68",
@@ -22490,13 +23651,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_69",
@@ -22516,13 +23679,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_70_51l6",
@@ -22542,13 +23707,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261122_ing_71_daj3",
@@ -22568,13 +23735,15 @@
       "created_at": "2026-11-21T10:27:40.875Z",
       "updated_at": "2026-11-21T10:27:40.875Z",
       "unit_cost": null,
-      "opening_stock_value": null,
+      "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
       "purchase_entries": [],
       "closing_stock_value": null,
       "used_cost": null,
-      "wastage_cost": null
+      "wastage_cost": null,
+      "available_batches": [],
+      "closing_batches": []
     },
     {
       "id": "item_day_20261102_ing_1",
@@ -22584,7 +23753,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -22593,7 +23762,7 @@
       "is_counted": false,
       "created_at": "2026-11-21T11:37:37.923Z",
       "updated_at": "2026-11-21T11:37:37.923Z",
-      "unit_cost": 80,
+      "unit_cost": 85,
       "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": 340,
@@ -22636,7 +23805,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -22645,7 +23814,7 @@
       "is_counted": false,
       "created_at": "2026-11-21T11:37:37.923Z",
       "updated_at": "2026-11-21T11:37:37.923Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -22688,7 +23857,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -22697,7 +23866,7 @@
       "is_counted": false,
       "created_at": "2026-11-21T11:37:37.923Z",
       "updated_at": "2026-11-21T11:37:37.923Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -24430,7 +25599,7 @@
       "ingredient_name": "Chicken Breast",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "pcs",
+      "unit": "kg",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -24439,7 +25608,7 @@
       "is_counted": false,
       "created_at": "2026-11-21T11:37:38.339Z",
       "updated_at": "2026-11-21T11:37:38.339Z",
-      "unit_cost": 340,
+      "unit_cost": 85,
       "opening_stock_value": 0,
       "total_purchase_cost": 0,
       "latest_purchase_price": 340,
@@ -24482,7 +25651,7 @@
       "ingredient_name": "Chicken Wings",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -24491,7 +25660,7 @@
       "is_counted": false,
       "created_at": "2026-11-21T11:37:38.339Z",
       "updated_at": "2026-11-21T11:37:38.339Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -24548,7 +25717,7 @@
       "ingredient_name": "Squid",
       "category_id": "cat_chicken_seafood",
       "category_name": "Chicken & Seafood",
-      "unit": "kg",
+      "unit": "pcs",
       "opening_qty": 0,
       "purchased_qty": 0,
       "wastage_qty": 0,
@@ -24557,7 +25726,7 @@
       "is_counted": false,
       "created_at": "2026-11-21T11:37:38.339Z",
       "updated_at": "2026-11-21T11:37:38.339Z",
-      "unit_cost": null,
+      "unit_cost": 100,
       "opening_stock_value": null,
       "total_purchase_cost": 0,
       "latest_purchase_price": null,
@@ -26285,6 +27454,30 @@
   ],
   "movements": [
     {
+      "id": "mov_1795327295882_dlgc",
+      "ingredient_id": "ing_3",
+      "date": "2026-11-22",
+      "movement_type": "PURCHASE",
+      "quantity": 5,
+      "unit": "pcs",
+      "supplier": null,
+      "cost": 600,
+      "recorded_by": "Admin Manager",
+      "created_at": "2026-11-22T06:01:35.882Z"
+    },
+    {
+      "id": "mov_1795327181486_my7c",
+      "ingredient_id": "ing_1",
+      "date": "2026-11-22",
+      "movement_type": "PURCHASE",
+      "quantity": 10,
+      "unit": "pcs",
+      "supplier": null,
+      "cost": 3600,
+      "recorded_by": "Admin Manager",
+      "created_at": "2026-11-22T05:59:41.486Z"
+    },
+    {
       "id": "mov_1795261081900_joqy",
       "ingredient_id": "ing_4",
       "date": "2026-11-23",
@@ -26448,7 +27641,7 @@
       "ingredient_id": "ing_1",
       "date": "2026-11-18",
       "quantity": 1,
-      "unit": "pcs",
+      "unit": "kg",
       "price_per_unit": 600,
       "total_cost": 600,
       "supplier": null,
@@ -26474,7 +27667,7 @@
       "ingredient_id": "ing_1",
       "date": "2026-11-21",
       "quantity": 5,
-      "unit": "pcs",
+      "unit": "kg",
       "price_per_unit": 340,
       "total_cost": 1700,
       "supplier": null,
@@ -26500,7 +27693,7 @@
       "ingredient_id": "ing_1",
       "date": "2026-11-21",
       "quantity": 5,
-      "unit": "pcs",
+      "unit": "kg",
       "price_per_unit": 340,
       "total_cost": 1700,
       "supplier": null,
@@ -26513,7 +27706,7 @@
       "ingredient_id": "ing_1",
       "date": "2026-11-21",
       "quantity": 7,
-      "unit": "pcs",
+      "unit": "kg",
       "price_per_unit": 340,
       "total_cost": 2380,
       "supplier": null,
@@ -26533,6 +27726,32 @@
       "recorded_by": "Admin Manager",
       "notes": null,
       "created_at": "2026-11-21T11:38:01.900Z"
+    },
+    {
+      "id": "pur_1795327181486_1ax6",
+      "ingredient_id": "ing_1",
+      "date": "2026-11-22",
+      "quantity": 10,
+      "unit": "kg",
+      "price_per_unit": 360,
+      "total_cost": 3600,
+      "supplier": null,
+      "recorded_by": "Admin Manager",
+      "notes": null,
+      "created_at": "2026-11-22T05:59:41.486Z"
+    },
+    {
+      "id": "pur_1795327295882_eglq",
+      "ingredient_id": "ing_3",
+      "date": "2026-11-22",
+      "quantity": 5,
+      "unit": "pcs",
+      "price_per_unit": 120,
+      "total_cost": 600,
+      "supplier": null,
+      "recorded_by": "Admin Manager",
+      "notes": null,
+      "created_at": "2026-11-22T06:01:35.882Z"
     }
   ],
   "stockBatches": []

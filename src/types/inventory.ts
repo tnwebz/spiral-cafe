@@ -102,6 +102,9 @@ export interface InventoryDayItem {
   closing_stock_value?: number | null;
   used_cost?: number | null;
   wastage_cost?: number | null;
+  used_breakdown?: string | null;
+  closing_breakdown?: string | null;
+  wastage_breakdown?: string | null;
   latest_purchase_price?: number | null;
   avg_purchase_price?: number | null;
   purchase_entries?: InventoryPurchaseRecord[];
@@ -291,17 +294,22 @@ export function calculateUsedQty(
  * Consumes oldest eligible batches first for wastage and usage.
  * Closing stock is valued from actual remaining batches.
  */
-export function calculateFifoAllocation(
-  availableBatches: StockBatch[],
-  wastageQty: number,
-  usedQty: number | null
-): {
+export interface FifoAllocationResult {
   wastageCost: number;
+  wastageBreakdown?: string;
   usedCost: number | null;
+  usedBreakdown?: string;
   closingStockQty: number;
   closingStockValue: number;
+  closingBreakdown?: string;
   remainingBatches: StockBatch[];
-} {
+}
+
+export function calculateFifoAllocation(
+  availableBatches: StockBatch[],
+  wastageQty: number = 0,
+  usedQty: number | null = null
+): FifoAllocationResult {
   const sortedBatches: StockBatch[] = availableBatches
     .map((b) => ({ ...b }))
     .sort((a, b) => {
@@ -314,6 +322,7 @@ export function calculateFifoAllocation(
 
   let remainingWastage = Math.max(0, Number((wastageQty || 0).toFixed(4)));
   let wastageCost = 0;
+  const wastageSlices: Array<{ qty: number; unit_cost: number }> = [];
 
   // 1. Consume wastage first from oldest batches
   for (const b of sortedBatches) {
@@ -322,6 +331,7 @@ export function calculateFifoAllocation(
 
     const take = Math.min(b.remaining_qty, remainingWastage);
     wastageCost += take * b.unit_cost;
+    wastageSlices.push({ qty: take, unit_cost: b.unit_cost });
     b.remaining_qty = Number((b.remaining_qty - take).toFixed(4));
     b.remaining_value = Number((b.remaining_qty * b.unit_cost).toFixed(2));
     remainingWastage = Number((remainingWastage - take).toFixed(4));
@@ -329,6 +339,7 @@ export function calculateFifoAllocation(
 
   // 2. Consume used qty from oldest remaining batches
   let usedCost: number | null = null;
+  const usedSlices: Array<{ qty: number; unit_cost: number }> = [];
   if (usedQty !== null && usedQty !== undefined && !isNaN(usedQty)) {
     let remainingUsed = Math.max(0, Number((usedQty || 0).toFixed(4)));
     let costAcc = 0;
@@ -339,6 +350,7 @@ export function calculateFifoAllocation(
 
       const take = Math.min(b.remaining_qty, remainingUsed);
       costAcc += take * b.unit_cost;
+      usedSlices.push({ qty: take, unit_cost: b.unit_cost });
       b.remaining_qty = Number((b.remaining_qty - take).toFixed(4));
       b.remaining_value = Number((b.remaining_qty * b.unit_cost).toFixed(2));
       remainingUsed = Number((remainingUsed - take).toFixed(4));
@@ -354,11 +366,40 @@ export function calculateFifoAllocation(
     remainingBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2)
   );
 
+  const formatSlices = (slices: Array<{ qty: number; unit_cost: number }>) => {
+    if (slices.length === 0) return "";
+    const combined: Array<{ qty: number; unit_cost: number }> = [];
+    for (const s of slices) {
+      const existing = combined.find((c) => Math.abs(c.unit_cost - s.unit_cost) < 0.001);
+      if (existing) {
+        existing.qty += s.qty;
+      } else {
+        combined.push({ qty: s.qty, unit_cost: s.unit_cost });
+      }
+    }
+    return combined
+      .map(
+        (c) =>
+          `${Number(c.qty.toFixed(3))} × ₹${
+            Math.round(c.unit_cost) === c.unit_cost ? c.unit_cost : c.unit_cost.toFixed(2)
+          }`
+      )
+      .join(" + ");
+  };
+
+  const closingSlices = remainingBatches.map((b) => ({
+    qty: b.remaining_qty,
+    unit_cost: b.unit_cost,
+  }));
+
   return {
     wastageCost: Number(wastageCost.toFixed(2)),
+    wastageBreakdown: formatSlices(wastageSlices),
     usedCost,
+    usedBreakdown: formatSlices(usedSlices),
     closingStockQty,
     closingStockValue,
+    closingBreakdown: formatSlices(closingSlices),
     remainingBatches,
   };
 }

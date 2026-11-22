@@ -400,10 +400,13 @@ export async function updateInventoryIngredient(
   // 4. Synchronize Base Cost across day items without conflicting actual purchase batches or finalized days
   if (patch.cost_per_unit !== undefined) {
     const finalizedDayIds = new Set(
-      store.days.filter((d) => d.status === "FINALIZED").map((d) => d.id)
+      store.days.filter((d) => d.status === "FINALIZED").map((d) => d.id),
     );
     for (const item of store.dayItems) {
-      if (item.ingredient_id === id && !finalizedDayIds.has(item.inventory_day_id)) {
+      if (
+        item.ingredient_id === id &&
+        !finalizedDayIds.has(item.inventory_day_id)
+      ) {
         if (!item.purchase_entries || item.purchase_entries.length === 0) {
           item.unit_cost = parsedCost;
           if (
@@ -460,7 +463,7 @@ export async function archiveInventoryIngredient(id: string): Promise<boolean> {
 
 export function getPreviousFinalizedDayContext(
   store: LocalStoreSchema,
-  beforeDate: string
+  beforeDate: string,
 ): {
   prevDay: InventoryDay | undefined;
   prevClosingMap: Record<string, number>;
@@ -477,7 +480,9 @@ export function getPreviousFinalizedDayContext(
   const prevClosingBatchesMap: Record<string, StockBatch[]> = {};
 
   if (prevDay) {
-    const prevItems = store.dayItems.filter((di) => di.inventory_day_id === prevDay.id);
+    const prevItems = store.dayItems.filter(
+      (di) => di.inventory_day_id === prevDay.id,
+    );
     for (const pi of prevItems) {
       if (
         pi.closing_actual_qty !== null &&
@@ -493,7 +498,11 @@ export function getPreviousFinalizedDayContext(
       ) {
         prevCostMap[pi.ingredient_id] = Number(pi.unit_cost);
       }
-      if (pi.closing_batches && Array.isArray(pi.closing_batches) && pi.closing_batches.length > 0) {
+      if (
+        pi.closing_batches &&
+        Array.isArray(pi.closing_batches) &&
+        pi.closing_batches.length > 0
+      ) {
         prevClosingBatchesMap[pi.ingredient_id] = pi.closing_batches;
       }
     }
@@ -514,7 +523,7 @@ export function computeItemFifoValuation(
   prevClosingBatches: StockBatch[] | undefined,
   fallbackCost: number | null | undefined,
   dayPurchases: InventoryPurchaseRecord[],
-  targetDate: string
+  targetDate: string,
 ): {
   availableBatches: StockBatch[];
   closingBatches: StockBatch[];
@@ -525,11 +534,17 @@ export function computeItemFifoValuation(
   totalPurchaseCost: number;
   unitCost: number | null;
   latestPurchasePrice: number | null;
+  usedBreakdown?: string;
+  closingBreakdown?: string;
+  wastageBreakdown?: string;
 } {
   // 1. Build opening batches
   let openingBatches: StockBatch[] = [];
   if (prevClosingBatches && prevClosingBatches.length > 0) {
-    const totalPrevQty = prevClosingBatches.reduce((acc, b) => acc + (b.remaining_qty || 0), 0);
+    const totalPrevQty = prevClosingBatches.reduce(
+      (acc, b) => acc + (b.remaining_qty || 0),
+      0,
+    );
     // If opening qty matches carry-forward, carry forward the exact remaining batches
     if (Math.abs(totalPrevQty - item.opening_qty) < 0.001) {
       openingBatches = prevClosingBatches.map((b) => ({
@@ -538,7 +553,10 @@ export function computeItemFifoValuation(
         remaining_value: Number((b.remaining_qty * b.unit_cost).toFixed(2)),
       }));
     } else if (item.opening_qty > 0) {
-      const unitCost = fallbackCost ?? (prevClosingBatches[0]?.unit_cost || 0);
+      const unitCost =
+        item.opening_qty > 0 && item.opening_stock_value != null && item.opening_stock_value > 0
+          ? Number((item.opening_stock_value / item.opening_qty).toFixed(2))
+          : (fallbackCost ?? (prevClosingBatches[0]?.unit_cost || 0));
       openingBatches = [
         {
           id: `batch_open_${item.ingredient_id}_${targetDate}`,
@@ -556,7 +574,10 @@ export function computeItemFifoValuation(
       ];
     }
   } else if (item.opening_qty > 0) {
-    const unitCost = fallbackCost ?? 0;
+    const unitCost =
+      item.opening_qty > 0 && item.opening_stock_value != null && item.opening_stock_value > 0
+        ? Number((item.opening_stock_value / item.opening_qty).toFixed(2))
+        : (fallbackCost ?? 0);
     openingBatches = [
       {
         id: `batch_open_${item.ingredient_id}_${targetDate}`,
@@ -597,27 +618,39 @@ export function computeItemFifoValuation(
     notes: p.notes || undefined,
   }));
 
-  const availableBatches: StockBatch[] = [...openingBatches, ...purchaseBatches];
+  const availableBatches: StockBatch[] = [
+    ...openingBatches,
+    ...purchaseBatches,
+  ];
 
   const openingStockValue = Number(
-    openingBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2)
+    openingBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2),
   );
   const totalPurchaseCost = Number(
-    purchaseBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2)
+    purchaseBatches.reduce((acc, b) => acc + b.remaining_value, 0).toFixed(2),
   );
   const latestPurchasePrice =
-    purchaseBatches.length > 0 ? purchaseBatches[purchaseBatches.length - 1].unit_cost : null;
+    purchaseBatches.length > 0
+      ? purchaseBatches[purchaseBatches.length - 1].unit_cost
+      : null;
 
   // 3. FIFO Allocation
-  if (item.closing_actual_qty !== null && item.closing_actual_qty !== undefined) {
+  if (
+    item.closing_actual_qty !== null &&
+    item.closing_actual_qty !== undefined
+  ) {
     const calculatedUsed = calculateUsedQty(
       item.opening_qty,
       item.purchased_qty,
       item.wastage_qty,
-      item.closing_actual_qty
+      item.closing_actual_qty,
     );
 
-    const fifo = calculateFifoAllocation(availableBatches, item.wastage_qty, calculatedUsed);
+    const fifo = calculateFifoAllocation(
+      availableBatches,
+      item.wastage_qty,
+      calculatedUsed,
+    );
 
     const effectiveUnitCost: number | null =
       fifo.closingStockQty > 0
@@ -634,12 +667,21 @@ export function computeItemFifoValuation(
       totalPurchaseCost,
       unitCost: effectiveUnitCost,
       latestPurchasePrice,
+      usedBreakdown: fifo.usedBreakdown,
+      closingBreakdown: fifo.closingBreakdown,
+      wastageBreakdown: fifo.wastageBreakdown,
     };
   } else {
     let wastageCost: number | null = null;
+    let wastageBreakdown: string | undefined = undefined;
     if (item.wastage_qty > 0) {
-      const fifoWastage = calculateFifoAllocation(availableBatches, item.wastage_qty, 0);
+      const fifoWastage = calculateFifoAllocation(
+        availableBatches,
+        item.wastage_qty,
+        0,
+      );
       wastageCost = fifoWastage.wastageCost;
+      wastageBreakdown = fifoWastage.wastageBreakdown;
     }
 
     return {
@@ -652,6 +694,9 @@ export function computeItemFifoValuation(
       totalPurchaseCost,
       unitCost: latestPurchasePrice ?? fallbackCost ?? null,
       latestPurchasePrice,
+      usedBreakdown: undefined,
+      closingBreakdown: undefined,
+      wastageBreakdown,
     };
   }
 }
@@ -823,7 +868,7 @@ export async function getOrCreateDayRegister(
       prevBatches,
       prevCost,
       itemPurchasesToday,
-      targetDate
+      targetDate,
     );
 
     item.available_batches = fifoRes.availableBatches;
@@ -838,6 +883,10 @@ export async function getOrCreateDayRegister(
     item.unit_cost = fifoRes.unitCost;
     item.closing_stock_value = fifoRes.closingStockValue;
     item.used_cost = fifoRes.usedCost;
+    item.wastage_cost = fifoRes.wastageCost;
+    item.used_breakdown = fifoRes.usedBreakdown;
+    item.closing_breakdown = fifoRes.closingBreakdown;
+    item.wastage_breakdown = fifoRes.wastageBreakdown;
     item.wastage_cost = fifoRes.wastageCost;
 
     if (item.closing_stock_value !== null) {
@@ -929,7 +978,7 @@ export async function updateDayItemsBatch(
   const day = store.days[dayIndex];
   const { prevClosingBatchesMap, prevCostMap } = getPreviousFinalizedDayContext(
     store,
-    day.date
+    day.date,
   );
   const updatedItems: InventoryDayItem[] = [];
 
@@ -972,15 +1021,22 @@ export async function updateDayItemsBatch(
       isCounted = up.is_counted;
     }
 
-    const calculatedUsed = calculateUsedQty(opening, purchased, wastage, closing);
+    const calculatedUsed = calculateUsedQty(
+      opening,
+      purchased,
+      wastage,
+      closing,
+    );
     const ing = store.ingredients.find((i) => i.id === current.ingredient_id);
     const fallbackCost =
       up.unit_cost !== undefined
         ? up.unit_cost
-        : prevCostMap[current.ingredient_id] ??
-          (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : current.unit_cost);
+        : (prevCostMap[current.ingredient_id] ??
+          (ing?.cost_per_unit != null
+            ? Number(ing.cost_per_unit)
+            : current.unit_cost));
     const dayPurchases = (store.purchases || []).filter(
-      (p) => p.date === day.date && p.ingredient_id === current.ingredient_id
+      (p) => p.date === day.date && p.ingredient_id === current.ingredient_id,
     );
     const prevBatches = prevClosingBatchesMap[current.ingredient_id];
 
@@ -998,7 +1054,7 @@ export async function updateDayItemsBatch(
       prevBatches,
       fallbackCost,
       dayPurchases,
-      day.date
+      day.date,
     );
 
     const updated: InventoryDayItem = {
@@ -1012,9 +1068,13 @@ export async function updateDayItemsBatch(
       closing_stock_value: fifoRes.closingStockValue,
       used_cost: fifoRes.usedCost,
       wastage_cost: fifoRes.wastageCost,
+      used_breakdown: fifoRes.usedBreakdown,
+      closing_breakdown: fifoRes.closingBreakdown,
+      wastage_breakdown: fifoRes.wastageBreakdown,
       opening_stock_value: fifoRes.openingStockValue,
       total_purchase_cost: fifoRes.totalPurchaseCost,
-      latest_purchase_price: fifoRes.latestPurchasePrice ?? current.latest_purchase_price,
+      latest_purchase_price:
+        fifoRes.latestPurchasePrice ?? current.latest_purchase_price,
       available_batches: fifoRes.availableBatches,
       closing_batches: fifoRes.closingBatches,
       purchase_entries: dayPurchases,
@@ -1217,14 +1277,15 @@ export async function finalizeDayRegister(
           prevItem.closing_batches,
           prevItem.unit_cost,
           itemPurchases,
-          nextDay.date
+          nextDay.date,
         );
         nextItem.available_batches = fifoRes.availableBatches;
         nextItem.closing_batches = fifoRes.closingBatches;
         nextItem.unit_cost = fifoRes.unitCost;
         nextItem.opening_stock_value = fifoRes.openingStockValue;
         nextItem.total_purchase_cost = fifoRes.totalPurchaseCost;
-        nextItem.latest_purchase_price = fifoRes.latestPurchasePrice ?? nextItem.latest_purchase_price;
+        nextItem.latest_purchase_price =
+          fifoRes.latestPurchasePrice ?? nextItem.latest_purchase_price;
         nextItem.closing_stock_value = fifoRes.closingStockValue;
         nextItem.used_cost = fifoRes.usedCost;
         nextItem.wastage_cost = fifoRes.wastageCost;
@@ -1374,16 +1435,16 @@ export async function recordInventoryPurchase(
         store.dayItems[itemIndex].closing_actual_qty,
       );
 
-      const { prevClosingBatchesMap, prevCostMap } = getPreviousFinalizedDayContext(
-        store,
-        day.date
-      );
+      const { prevClosingBatchesMap, prevCostMap } =
+        getPreviousFinalizedDayContext(store, day.date);
       const ing = store.ingredients.find(
         (i) => i.id === purchase.ingredient_id,
       );
       const fallbackCost =
         prevCostMap[purchase.ingredient_id] ??
-        (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : store.dayItems[itemIndex].unit_cost);
+        (ing?.cost_per_unit != null
+          ? Number(ing.cost_per_unit)
+          : store.dayItems[itemIndex].unit_cost);
       const prevBatches = prevClosingBatchesMap[purchase.ingredient_id];
 
       const fifoRes = computeItemFifoValuation(
@@ -1391,7 +1452,7 @@ export async function recordInventoryPurchase(
         prevBatches,
         fallbackCost,
         allItemPurchases,
-        day.date
+        day.date,
       );
 
       store.dayItems[itemIndex].available_batches = fifoRes.availableBatches;
@@ -1404,12 +1465,17 @@ export async function recordInventoryPurchase(
       store.dayItems[itemIndex].closing_stock_value = fifoRes.closingStockValue;
       store.dayItems[itemIndex].used_cost = fifoRes.usedCost;
       store.dayItems[itemIndex].wastage_cost = fifoRes.wastageCost;
+      store.dayItems[itemIndex].used_breakdown = fifoRes.usedBreakdown;
+      store.dayItems[itemIndex].closing_breakdown = fifoRes.closingBreakdown;
+      store.dayItems[itemIndex].wastage_breakdown = fifoRes.wastageBreakdown;
       store.dayItems[itemIndex].purchase_entries = allItemPurchases;
       store.dayItems[itemIndex].updated_at = new Date().toISOString();
       updatedDayItem = store.dayItems[itemIndex];
 
       // Recompute day stats
-      const allDayItems = store.dayItems.filter((di) => di.inventory_day_id === day.id);
+      const allDayItems = store.dayItems.filter(
+        (di) => di.inventory_day_id === day.id,
+      );
       let totalClosing = 0;
       let totalUsed = 0;
       let totalWastage = 0;
@@ -1476,14 +1542,14 @@ export async function deleteInventoryPurchase(
         store.dayItems[itemIndex].wastage_qty,
         store.dayItems[itemIndex].closing_actual_qty,
       );
-      const { prevClosingBatchesMap, prevCostMap } = getPreviousFinalizedDayContext(
-        store,
-        day.date
-      );
+      const { prevClosingBatchesMap, prevCostMap } =
+        getPreviousFinalizedDayContext(store, day.date);
       const ing = store.ingredients.find((i) => i.id === removed.ingredient_id);
       const fallbackCost =
         prevCostMap[removed.ingredient_id] ??
-        (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : store.dayItems[itemIndex].unit_cost);
+        (ing?.cost_per_unit != null
+          ? Number(ing.cost_per_unit)
+          : store.dayItems[itemIndex].unit_cost);
       const prevBatches = prevClosingBatchesMap[removed.ingredient_id];
 
       const fifoRes = computeItemFifoValuation(
@@ -1491,23 +1557,29 @@ export async function deleteInventoryPurchase(
         prevBatches,
         fallbackCost,
         remainingPurchases,
-        day.date
+        day.date,
       );
 
       store.dayItems[itemIndex].available_batches = fifoRes.availableBatches;
       store.dayItems[itemIndex].closing_batches = fifoRes.closingBatches;
       store.dayItems[itemIndex].unit_cost = fifoRes.unitCost;
-      store.dayItems[itemIndex].latest_purchase_price = fifoRes.latestPurchasePrice;
+      store.dayItems[itemIndex].latest_purchase_price =
+        fifoRes.latestPurchasePrice;
       store.dayItems[itemIndex].total_purchase_cost = fifoRes.totalPurchaseCost;
       store.dayItems[itemIndex].opening_stock_value = fifoRes.openingStockValue;
       store.dayItems[itemIndex].closing_stock_value = fifoRes.closingStockValue;
       store.dayItems[itemIndex].used_cost = fifoRes.usedCost;
       store.dayItems[itemIndex].wastage_cost = fifoRes.wastageCost;
+      store.dayItems[itemIndex].used_breakdown = fifoRes.usedBreakdown;
+      store.dayItems[itemIndex].closing_breakdown = fifoRes.closingBreakdown;
+      store.dayItems[itemIndex].wastage_breakdown = fifoRes.wastageBreakdown;
       store.dayItems[itemIndex].purchase_entries = remainingPurchases;
       store.dayItems[itemIndex].updated_at = new Date().toISOString();
 
       // Recompute day stats
-      const allDayItems = store.dayItems.filter((di) => di.inventory_day_id === day.id);
+      const allDayItems = store.dayItems.filter(
+        (di) => di.inventory_day_id === day.id,
+      );
       let totalClosing = 0;
       let totalUsed = 0;
       let totalWastage = 0;

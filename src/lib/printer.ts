@@ -49,52 +49,79 @@ export class ThermalReceiptFormatter {
     const divider = "-".repeat(this.LINE_WIDTH);
     const doubleDivider = "=".repeat(this.LINE_WIDTH);
 
+    const isEstimate = data.paymentStatus !== "PAID" || !data.invoiceNumber || data.invoiceNumber.startsWith("EST");
+    const topLabel = isEstimate ? "Estimate" : "Invoice";
+    const cafeName = "Spiral Cafe";
+    const topSp = Math.max(1, this.LINE_WIDTH - topLabel.length - cafeName.length);
+
+    const cleanTable = (data.tableNumber || "A1").toUpperCase();
+    const tableDateLine = `TABLE: ${cleanTable}  |  DATE: ${data.date}`;
+    const tableDatePad = Math.max(0, Math.floor((this.LINE_WIDTH - tableDateLine.length) / 2));
+
     const lines: string[] = [
-      doubleDivider,
-      this.centerText(data.cafeName || "SPIRAL CAFE"),
-      this.centerText("ROOFTOP DINE-IN EXPERIENCE"),
-      this.centerText("Chengalpattu, Tamil Nadu"),
+      `${topLabel}${" ".repeat(topSp)}${cafeName}`,
       divider,
-      this.formatLine("Invoice :", data.invoiceNumber),
-      this.formatLine("Order   :", data.orderNumber),
-      this.formatLine("Table   :", data.tableNumber),
-      this.formatLine("Date    :", data.date),
-      this.formatLine("Time    :", data.time),
+      `${" ".repeat(tableDatePad)}${tableDateLine}`,
+      divider,
+      "Item         Qty  Pr.(Rs) Amt(Rs)",
+      divider,
     ];
 
-    if (data.customerPhone) {
-      lines.push(this.formatLine("Customer:", data.customerPhone));
-    }
-
-    lines.push(divider);
-    lines.push(this.formatLine("ITEM", "QTY   AMOUNT"));
-    lines.push(divider);
-
     data.items.forEach((item) => {
-      lines.push(item.name.substring(0, 32));
-      const qtyAndPrice = `${item.quantity} x ₹${item.unitPrice}`;
-      const total = `₹${item.lineTotal}`;
-      lines.push(this.formatLine(`  ${qtyAndPrice}`, total));
+      const cleanName = item.name
+        .replace(/\s*-\s*\(parcel\)/gi, "")
+        .replace(/\s*\(parcel\)/gi, "")
+        .replace(/\s*\(dine in\)/gi, "")
+        .trim();
+      const isItemParcel = item.name.toLowerCase().includes("(parcel)") || cleanTable === "TAKEAWAY";
+      const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
+
+      const qtyStr = String(item.quantity).padStart(3, " ");
+      const prStr = item.unitPrice.toFixed(2).padStart(7, " ");
+      const amtStr = item.lineTotal.toFixed(2).padStart(8, " ");
+      const rightCol = `${qtyStr} ${prStr} ${amtStr}`;
+
+      const fullName = `${cleanName} ${tag}`;
+      if (fullName.length <= 13) {
+        lines.push(`${fullName.padEnd(13, " ")} ${rightCol}`);
+      } else {
+        lines.push(`${fullName.substring(0, 13)} ${rightCol}`);
+        lines.push(fullName.substring(13));
+      }
     });
 
     lines.push(divider);
-    lines.push(this.formatLine("Subtotal:", `₹${data.subtotal}`));
-    lines.push(this.formatLine("GST (5%):", `₹${data.tax}`));
+
+    const totalQty = data.items.reduce((s, it) => s + it.quantity, 0);
+    const totQtyStr = `Total Qty: ${totalQty}`;
+    lines.push(totQtyStr);
+
+    const subVal = data.subtotal.toFixed(2);
+    const subSp = Math.max(1, this.LINE_WIDTH - "Total Summary".length - subVal.length);
+    lines.push(`Total Summary${" ".repeat(subSp)}${subVal}`);
+
+    if (data.tax && data.tax > 0) {
+      const taxVal = data.tax.toFixed(2);
+      const taxSp = Math.max(1, this.LINE_WIDTH - "GST Tax (5%)".length - taxVal.length);
+      lines.push(`GST Tax (5%)${" ".repeat(taxSp)}${taxVal}`);
+    }
 
     if (data.packagingFee && data.packagingFee > 0) {
-      lines.push(this.formatLine("Packaging:", `₹${data.packagingFee}`));
+      const packVal = data.packagingFee.toFixed(2);
+      const packSp = Math.max(1, this.LINE_WIDTH - "Packaging Fee".length - packVal.length);
+      lines.push(`Packaging Fee${" ".repeat(packSp)}${packVal}`);
     }
 
     lines.push(doubleDivider);
-    lines.push(this.formatLine("TOTAL:", `₹${data.grandTotal}`));
-    lines.push(doubleDivider);
 
-    lines.push(this.formatLine("Payment Method:", data.paymentMethod.toUpperCase()));
-    lines.push(this.formatLine("Payment Status:", data.paymentStatus.toUpperCase()));
-    lines.push(divider);
-    lines.push(this.centerText("THANK YOU FOR DINING WITH US"));
-    lines.push(this.centerText("SPIRAL CAFE"));
-    lines.push(divider);
+    const gVal = `Rs ${data.grandTotal.toFixed(2)}`;
+    const gSp = Math.max(1, this.LINE_WIDTH - "GRAND TOTAL".length - gVal.length);
+    lines.push(`GRAND TOTAL${" ".repeat(gSp)}${gVal}`);
+
+    lines.push(`Payment Mode: ${(data.paymentMethod || "CASH").toUpperCase()}`);
+    lines.push("- ".repeat(16));
+
+    lines.push(this.centerText("Thanks visit again!!!"));
 
     return lines.join("\n");
   }
