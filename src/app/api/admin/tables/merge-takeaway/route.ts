@@ -100,14 +100,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Also update order_items to flag them as takeaway parcel items
+    // Sync visitId across existing target table orders if missing
     try {
-      await supabaseAdmin
+      for (const ord of tableOrders) {
+        if (!(ord.notes || "").includes("[VISIT_ID:")) {
+          const syncedNotes = `${ord.notes || ""} [VISIT_ID:${visitId}]`.trim();
+          await supabaseAdmin
+            .from("orders" as any)
+            .update({ notes: syncedNotes, updated_at: nowIso })
+            .eq("id", ord.id);
+        }
+      }
+    } catch (syncErr) {
+      console.warn("Notice: could not sync visitId to sister orders:", syncErr);
+    }
+
+    // Also update order_items to flag them as takeaway parcel items with (parcel) label
+    try {
+      const { data: currentItems } = await supabaseAdmin
         .from("order_items" as any)
-        .update({
-          order_type: "TAKEAWAY",
-        })
+        .select("id, name, notes")
         .eq("order_id", takeawayOrderId);
+
+      for (const it of (currentItems as any[] || [])) {
+        let itName = it.name || "";
+        let itNotes = it.notes || "";
+        if (!itName.toLowerCase().includes("(parcel)")) {
+          itName = `${itName.trim()} (parcel)`;
+        }
+        if (!itNotes.includes("[PARCEL]")) {
+          itNotes = `${itNotes} [PARCEL]`.trim();
+        }
+        await supabaseAdmin
+          .from("order_items" as any)
+          .update({
+            name: itName,
+            notes: itNotes,
+            order_type: "TAKEAWAY",
+          })
+          .eq("id", it.id);
+      }
     } catch {}
 
     // Audit log

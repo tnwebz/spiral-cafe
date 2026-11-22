@@ -49,19 +49,8 @@ export default function AdminOrderModal({
   defaultTableNumber = "TAKEAWAY",
   onOrderCreated,
 }: AdminOrderModalProps) {
-  // Mode: "TABLE" (assign to table e.g. B2) vs "SEPARATE_TAKEAWAY" (standalone takeaway)
-  const [orderTargetMode, setOrderTargetMode] = useState<"TABLE" | "SEPARATE_TAKEAWAY">(
-    defaultTableNumber === "TAKEAWAY" ? "SEPARATE_TAKEAWAY" : "TABLE"
-  );
-
-  const isSeparateTakeaway = orderTargetMode === "SEPARATE_TAKEAWAY" || defaultTableNumber === "TAKEAWAY";
-  const effectiveTableNumber = isSeparateTakeaway ? "TAKEAWAY" : defaultTableNumber;
-
-  useEffect(() => {
-    if (isOpen) {
-      setOrderTargetMode(defaultTableNumber === "TAKEAWAY" ? "SEPARATE_TAKEAWAY" : "TABLE");
-    }
-  }, [isOpen, defaultTableNumber]);
+  const isSeparateTakeaway = defaultTableNumber === "TAKEAWAY";
+  const effectiveTableNumber = defaultTableNumber;
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loadingMenu, setLoadingMenu] = useState(true);
@@ -687,41 +676,6 @@ export default function AdminOrderModal({
           {/* RIGHT: ORDER SUMMARY & CUSTOMER INFO */}
           <div className="w-full md:w-80 lg:w-96 bg-white p-4 sm:p-5 flex flex-col justify-between overflow-y-auto shrink-0 border-t md:border-t-0 border-[#EBDAD0]">
             <div className="space-y-3.5">
-              {/* Order Mode Toggle: Current Table vs Standalone Take Away */}
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-extrabold uppercase tracking-wider text-[#8C5E51]">
-                  Order Assignment
-                </label>
-                <div className="flex rounded-xl p-1 bg-[#F5EBE1] border border-[#EBDAD0] gap-1">
-                  {defaultTableNumber !== "TAKEAWAY" && (
-                    <button
-                      type="button"
-                      onClick={() => setOrderTargetMode("TABLE")}
-                      className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        orderTargetMode === "TABLE"
-                          ? "bg-[#CA340A] text-white shadow-xs"
-                          : "text-[#8C5E51] hover:text-[#2C1710]"
-                      }`}
-                    >
-                      <UtensilsCrossed size={12} />
-                      <span>Table {defaultTableNumber}</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setOrderTargetMode("SEPARATE_TAKEAWAY")}
-                    className={`flex-1 py-1.5 text-xs font-heading font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      orderTargetMode === "SEPARATE_TAKEAWAY" || defaultTableNumber === "TAKEAWAY"
-                        ? "bg-amber-700 text-white shadow-xs"
-                        : "text-[#8C5E51] hover:text-[#2C1710]"
-                    }`}
-                  >
-                    <ShoppingBag size={12} />
-                    <span>Separate Take Away</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Order Details Header & Parcel Switch Action */}
               <div className="flex items-center justify-between pt-1">
                 <h3 className="font-heading font-extrabold text-xs text-[#2C1710] uppercase tracking-wide">

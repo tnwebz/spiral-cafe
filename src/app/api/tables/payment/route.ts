@@ -88,33 +88,43 @@ export async function POST(req: NextRequest) {
       });
     } catch {}
 
-    // Settle any sister orders sharing the same visit on this table
+    // Settle all active unpaid sister orders sharing this visit or table
+    const cleanTable = normalizeTableLabel(order.tableNumber);
+    const activeCutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
     const visitId = order.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1];
-    if (visitId) {
-      try {
-        const { data: sisterOrders } = await supabaseAdmin
-          .from("orders" as any)
-          .select("id")
-          .ilike("notes", `%[VISIT_ID:${visitId}]%`)
-          .neq("id", order.id)
-          .neq("payment_status", "PAID");
 
-        if (Array.isArray(sisterOrders) && sisterOrders.length > 0) {
-          for (const sister of sisterOrders as any[]) {
-            await updateOrderPayment(
-              sister.id,
-              paymentMethod,
-              "PAID",
-              true,
-              adminUser,
-              txnId,
-              provider
-            );
-          }
-        }
-      } catch (err) {
-        console.warn("Sister order payment update warning:", err);
+    try {
+      let sisterQuery = supabaseAdmin
+        .from("orders" as any)
+        .select("id")
+        .neq("id", order.id)
+        .neq("status", "CANCELLED")
+        .neq("payment_status", "PAID")
+        .gte("created_at", activeCutoffIso);
+
+      if (visitId) {
+        sisterQuery = sisterQuery.or(`notes.ilike.%[VISIT_ID:${visitId}]%,table_number.eq.${cleanTable}`);
+      } else {
+        sisterQuery = sisterQuery.eq("table_number", cleanTable);
       }
+
+      const { data: sisterOrders } = await sisterQuery;
+
+      if (Array.isArray(sisterOrders) && sisterOrders.length > 0) {
+        for (const sister of sisterOrders as any[]) {
+          await updateOrderPayment(
+            sister.id,
+            paymentMethod,
+            "PAID",
+            true,
+            adminUser,
+            txnId,
+            provider
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("Sister order payment update warning:", err);
     }
 
     // Release table reservations and return table to AVAILABLE / WHITE

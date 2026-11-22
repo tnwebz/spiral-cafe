@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateOrderItemQuantityOrDelete, addOrderItemToOrder, getOrderById } from "@/lib/db";
+import { updateOrderItemQuantityOrDelete, addOrderItemToOrder, getOrderById, toggleOrderItemParcel } from "@/lib/db";
 import { requireAdminAuth } from "@/lib/auth";
 
 export async function POST(
@@ -58,7 +58,30 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const { itemId, itemName, quantity, adminUser = "Admin" } = body;
+    const { itemId, itemName, quantity, action, isParcel, adminUser = "Admin" } = body;
+
+    // Handle Parcel status toggle
+    if (action === "toggleParcel" || action === "toggle_parcel" || isParcel !== undefined) {
+      if (!itemId && !itemName) {
+        return NextResponse.json(
+          { success: false, error: "Either itemId or itemName must be provided to toggle parcel." },
+          { status: 400 }
+        );
+      }
+
+      const updatedOrder = await toggleOrderItemParcel({
+        orderId: id,
+        itemId,
+        itemName,
+        adminUser,
+      });
+
+      return NextResponse.json({
+        success: true,
+        order: updatedOrder,
+        message: `Updated parcel status for item in order #${updatedOrder.orderNumber}`,
+      });
+    }
 
     if (quantity === undefined || typeof quantity !== "number") {
       return NextResponse.json(

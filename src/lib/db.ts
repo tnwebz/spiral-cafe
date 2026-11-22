@@ -765,51 +765,72 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
     };
   }
 
-  // 2. Extract visit ID from notes or property for customer visits
-  const visitId =
-    latestActive.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
-    (latestActive as any).visit_id ||
-    `VISIT-${cleanTable}-${latestActive.id.slice(0, 8).toUpperCase()}`;
+  // Active dining window (last 16 hours)
+  const activeCutoffIso = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
 
-  // 3. Query all orders that share this visitId
-  let visitOrders: Order[] = [];
+  // 2. Query ALL active unpaid orders currently assigned to this table
+  let tableOrdersData: any[] = [];
   try {
     const { data } = await supabaseAdmin
+      .from("orders" as any)
+      .select("*, order_items(*)")
+      .eq("table_number", cleanTable)
+      .neq("status", "CANCELLED")
+      .neq("payment_status", "PAID")
+      .gte("created_at", activeCutoffIso)
+      .order("created_at", { ascending: false });
+    if (Array.isArray(data)) tableOrdersData = data;
+  } catch (err) {
+    console.warn("Error fetching table orders in getActiveVisitOrdersForTable:", err);
+  }
+
+  // 3. Extract or determine visit ID from existing orders
+  let visitId =
+    latestActive.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
+    (latestActive as any).visit_id;
+
+  if (!visitId && tableOrdersData.length > 0) {
+    for (const row of tableOrdersData) {
+      const match = (row.notes || "").match(/\[VISIT_ID:([^\]]+)\]/);
+      if (match) {
+        visitId = match[1];
+        break;
+      }
+    }
+  }
+
+  if (!visitId) {
+    visitId = `VISIT-${cleanTable}-${latestActive.id.slice(0, 8).toUpperCase()}`;
+  }
+
+  // 4. Also query any orders that share this visitId tag
+  let visitOrdersByTag: any[] = [];
+  try {
+    const { data: tagData } = await supabaseAdmin
       .from("orders" as any)
       .select("*, order_items(*)")
       .ilike("notes", `%[VISIT_ID:${visitId}]%`)
       .neq("status", "CANCELLED")
       .neq("payment_status", "PAID")
+      .gte("created_at", activeCutoffIso)
       .order("created_at", { ascending: false });
-
-    if (Array.isArray(data) && data.length > 0) {
-      visitOrders = data.map((row: any) => mapDbOrderToOrder(row));
-    }
+    if (Array.isArray(tagData)) visitOrdersByTag = tagData;
   } catch (err) {
     console.warn("Error fetching visit orders by tag:", err);
   }
 
-  // 4. Fallback: if no orders found by visit tag, query all unpaid orders for this specific table
-  if (visitOrders.length === 0) {
-    try {
-      const { data } = await supabaseAdmin
-        .from("orders" as any)
-        .select("*, order_items(*)")
-        .eq("table_number", cleanTable)
-        .neq("status", "CANCELLED")
-        .neq("payment_status", "PAID")
-        .order("created_at", { ascending: false });
-
-      if (Array.isArray(data) && data.length > 0) {
-        visitOrders = data.map((row: any) => mapDbOrderToOrder(row));
-      }
-    } catch {}
+  // 5. Merge all unique orders by order ID so NO table order is ever dropped
+  const orderMap = new Map<string, Order>();
+  for (const row of [...tableOrdersData, ...visitOrdersByTag]) {
+    const ord = mapDbOrderToOrder(row);
+    orderMap.set(ord.id, ord);
   }
 
-  // Ensure latestActive is present
-  if (visitOrders.length === 0) {
-    visitOrders = [latestActive];
+  if (!orderMap.has(latestActive.id)) {
+    orderMap.set(latestActive.id, latestActive);
   }
+
+  let visitOrders = Array.from(orderMap.values());
 
   // Strict hygiene: filter strictly to cleanTable and active
   visitOrders = visitOrders.filter((o) => {
@@ -1292,6 +1313,127 @@ export async function addOrderItemToOrder(params: {
     throw new Error(`Failed to reload order ${current.id} after adding item`);
   }
   return updated;
+}
+
+export async function toggleOrderItemParcel(params: {
+  orderId: string;
+  itemId?: string;
+  itemName?: string;
+  adminUser?: string;
+}): Promise<Order> {
+  const current = await getOrderById(params.orderId);
+  if (!current) {
+    throw new Error(`Order not found: ${params.orderId}`);
+  }
+
+  const targetItem = (current.items || []).find((it) => {
+    if (params.itemId && it.id === params.itemId) return true;
+    if (params.itemId && it.productId === params.itemId) return true;
+    if (params.itemName && it.name.trim().toLowerCase() === params.itemName.trim().toLowerCase()) return true;
+    return false;
+  });
+
+  if (!targetItem) {
+    throw new Error(`Item not found in order #${current.orderNumber}`);
+  }
+
+  const isCurrentlyParcel =
+    targetItem.name.toLowerCase().includes("(parcel)") ||
+    (targetItem.notes || "").toLowerCase().includes("parcel");
+
+  const cleanName = targetItem.name
+    .replace(/\s*-\s*\(parcel\)/gi, "")
+    .replace(/\s*\(parcel\)/gi, "")
+    .replace(/\s*\(dine in\)/gi, "")
+    .trim();
+
+  const newName = isCurrentlyParcel ? cleanName : `${cleanName} (parcel)`;
+  let newNotes = (targetItem.notes || "").replace(/\[PARCEL\]/gi, "").trim();
+  if (!isCurrentlyParcel) {
+    newNotes = newNotes ? `${newNotes} [PARCEL]` : "[PARCEL]";
+  }
+
+  // Update order_items row in Supabase
+  let updateQuery = supabaseAdmin
+    .from("order_items")
+    .update({
+      name: newName,
+      notes: newNotes || null,
+    })
+    .eq("order_id", current.id);
+
+  if (targetItem.id) {
+    updateQuery = updateQuery.eq("id", targetItem.id);
+  } else {
+    updateQuery = updateQuery.eq("name", targetItem.name);
+  }
+
+  const { error: updErr } = await updateQuery;
+  if (updErr) {
+    await supabaseAdmin
+      .from("order_items")
+      .update({ name: newName, notes: newNotes || null })
+      .eq("order_id", current.id)
+      .eq("name", targetItem.name);
+  }
+
+  // Check remaining items to update order-level notes
+  const { data: allItemsData } = await supabaseAdmin
+    .from("order_items")
+    .select("*")
+    .eq("order_id", current.id);
+
+  const allItems = allItemsData || [];
+  const hasParcel = allItems.some(
+    (it: any) =>
+      (it.name || "").toLowerCase().includes("(parcel)") ||
+      (it.notes || "").toLowerCase().includes("parcel")
+  );
+  const hasDineIn = allItems.some(
+    (it: any) =>
+      !(it.name || "").toLowerCase().includes("(parcel)") &&
+      !(it.notes || "").toLowerCase().includes("parcel")
+  );
+
+  let updatedOrderNotes = current.notes || "";
+  updatedOrderNotes = updatedOrderNotes.replace(/\[DINE_IN_AND_TAKEAWAY\]/g, "").trim();
+
+  if (hasParcel && hasDineIn) {
+    updatedOrderNotes = `${updatedOrderNotes} [DINE_IN_AND_TAKEAWAY]`.trim();
+  } else if (hasParcel && !hasDineIn) {
+    if (!updatedOrderNotes.includes("[TAKEAWAY]")) {
+      updatedOrderNotes = `${updatedOrderNotes} [TAKEAWAY] [PARCEL]`.trim();
+    }
+  } else {
+    // Only dine-in
+    updatedOrderNotes = updatedOrderNotes
+      .replace(/\[TAKEAWAY\]/g, "")
+      .replace(/\[PARCEL\]/g, "")
+      .trim();
+  }
+
+  await supabaseAdmin
+    .from("orders")
+    .update({
+      notes: updatedOrderNotes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", current.id);
+
+  try {
+    await recordAuditLog(
+      params.adminUser || "admin",
+      "TOGGLE_ORDER_ITEM_PARCEL",
+      "ORDER",
+      current.id,
+      `Toggled product "${targetItem.name}" to ${isCurrentlyParcel ? "Dine-In" : "Parcel"} in order #${current.orderNumber}`
+    );
+  } catch (auditErr) {
+    console.warn("Audit log warning on item parcel toggle:", auditErr);
+  }
+
+  const updated = await getOrderById(current.id);
+  return updated || current;
 }
 
 export async function getTablesStatus(): Promise<

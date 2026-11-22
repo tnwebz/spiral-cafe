@@ -41,6 +41,7 @@ import {
   Info,
   X,
   ShoppingBag,
+  ArrowRight,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -455,6 +456,45 @@ export default function TableDetailPage() {
       await fetchTableData();
     } catch (err: any) {
       showNotification("error", err.message || "Failed to delete item.");
+      await fetchTableData();
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  // Handler: Toggle Individual Item between Dine-In and Parcel (Takeaway)
+  const handleToggleItemParcel = async (orderId: string, item: OrderItem) => {
+    const itemKey = item.id || item.name;
+    setUpdatingItemId(itemKey);
+
+    const isCurrentlyParcel =
+      item.name.toLowerCase().includes("(parcel)") ||
+      (item.notes || "").toLowerCase().includes("parcel");
+
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: item.id,
+          itemName: item.name,
+          action: "toggleParcel",
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        showNotification("error", data.error || "Failed to toggle parcel status.");
+      } else {
+        showNotification(
+          "success",
+          `"${item.name.replace(/\s*-\s*\(parcel\)/gi, "").replace(/\s*\(parcel\)/gi, "").trim()}" is now set to ${
+            isCurrentlyParcel ? "Dine-In" : "Parcel (Takeaway)"
+          }`
+        );
+      }
+      await fetchTableData();
+    } catch (err: any) {
+      showNotification("error", err.message || "Failed to toggle parcel status.");
       await fetchTableData();
     } finally {
       setUpdatingItemId(null);
@@ -1050,6 +1090,34 @@ export default function TableDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* LEFT PANEL — ORDERED ITEMS & IMAGES (60% / 7 cols) */}
             <div className="lg:col-span-7 space-y-5">
+              {/* + ADD NEW SEPARATE ORDER RECTANGULAR DOTTED BOX */}
+              <button
+                type="button"
+                onClick={() => setAdminOrderModalOpen(true)}
+                className="w-full py-4 px-5 rounded-3xl border-2 border-dashed border-[#CA340A]/40 hover:border-[#CA340A] bg-[#FFF9F5]/80 hover:bg-[#FFF2EB] transition-all flex items-center justify-between group cursor-pointer shadow-xs active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-white border border-[#CA340A]/20 text-[#CA340A] flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 group-hover:bg-[#CA340A] group-hover:text-white transition-all">
+                    <Plus size={22} strokeWidth={2.5} />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-heading font-extrabold text-sm text-[#2C1710] group-hover:text-[#CA340A] transition-colors flex items-center gap-2 flex-wrap">
+                      <span>+ Add New Order to Table {tableId}</span>
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#CA340A]/10 text-[#CA340A]">
+                        Separate Order Slip / KOT
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#8C5E51] font-medium mt-0.5">
+                      Click to add new products & send as a separate order with its own KOT ticket
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-[#CA340A] bg-white px-3 py-1.5 rounded-xl border border-[#CA340A]/20 shadow-2xs group-hover:bg-[#CA340A] group-hover:text-white transition-all">
+                  <span>Open Menu</span>
+                  <ArrowRight size={14} />
+                </div>
+              </button>
+
               {/* RENDER ALL ORDERS IN SESSION — NEWEST AT THE TOP */}
               {orders.map((ord, oIdx) => {
                 const isOrderPending =
@@ -1161,6 +1229,15 @@ export default function TableDetailPage() {
                       {ord.items.map((item, idx) => {
                         const cleanNote = (item.notes || "").replace(/\[[^\]]+\]/g, "").trim();
                         const isUpdatingThis = updatingItemId === (item.id || item.name);
+                        const cleanDisplayName = item.name
+                          .replace(/\s*-\s*\(parcel\)/gi, "")
+                          .replace(/\s*\(parcel\)/gi, "")
+                          .replace(/\s*\(dine in\)/gi, "")
+                          .trim();
+                        const isItemParcel =
+                          item.name.toLowerCase().includes("(parcel)") ||
+                          (item.notes || "").toLowerCase().includes("parcel") ||
+                          (ord.tableNumber === "TAKEAWAY" && !(ord.notes || "").includes("DINE_IN_AND_TAKEAWAY"));
 
                         return (
                           <div
@@ -1186,39 +1263,32 @@ export default function TableDetailPage() {
                               </div>
 
                               {/* Details */}
-                              {(() => {
-                                const cleanDisplayName = item.name
-                                  .replace(/\s*-\s*\(parcel\)/gi, "")
-                                  .replace(/\s*\(parcel\)/gi, "")
-                                  .replace(/\s*\(dine in\)/gi, "")
-                                  .trim();
-                                const isItemParcel =
-                                  item.name.toLowerCase().includes("(parcel)") ||
-                                  (item.notes || "").toLowerCase().includes("parcel") ||
-                                  (ord.tableNumber === "TAKEAWAY" && !(ord.notes || "").includes("DINE_IN_AND_TAKEAWAY"));
-                                return (
-                                  <div className="min-w-0">
-                                    <h4 className="font-heading font-extrabold text-sm text-[#2C1710] truncate flex items-center gap-1.5">
-                                      <span>{cleanDisplayName}</span>
-                                      {isItemParcel && (
-                                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-md">
-                                          (parcel)
-                                        </span>
-                                      )}
-                                    </h4>
+                              <div className="min-w-0">
+                                <h4 className="font-heading font-extrabold text-sm text-[#2C1710] truncate flex items-center gap-1.5">
+                                  <span>{cleanDisplayName}</span>
+                                  {isItemParcel && (
+                                    <button
+                                      type="button"
+                                      disabled={isUpdatingThis}
+                                      onClick={() => handleToggleItemParcel(ord.id, item)}
+                                      className="text-[10px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-1.5 py-0.5 rounded-md cursor-pointer transition-colors shadow-2xs"
+                                      title="Click to switch back to Dine-In"
+                                    >
+                                      (parcel)
+                                    </button>
+                                  )}
+                                </h4>
 
-                                    <p className="text-xs font-bold text-[#52525b] mt-0.5">
-                                      Price: <span className="text-[#2C1710]">₹{item.price} each</span>
-                                    </p>
+                                <p className="text-xs font-bold text-[#52525b] mt-0.5">
+                                  Price: <span className="text-[#2C1710]">₹{item.price} each</span>
+                                </p>
 
-                                    {cleanNote && (
-                                      <p className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg inline-block mt-1 border border-amber-200">
-                                        + {cleanNote}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                                {cleanNote && (
+                                  <p className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg inline-block mt-1 border border-amber-200">
+                                    + {cleanNote}
+                                  </p>
+                                )}
+                              </div>
                             </div>
 
                             {/* Quantity Adjuster, Total, and Delete Button */}
@@ -1253,6 +1323,34 @@ export default function TableDetailPage() {
                                   <Plus size={13} />
                                 </button>
                               </div>
+
+                              {/* Parcel Option Toggle right near the + icon */}
+                              <button
+                                type="button"
+                                disabled={isUpdatingThis}
+                                onClick={() => handleToggleItemParcel(ord.id, item)}
+                                className={`px-2.5 py-1.5 rounded-xl border text-xs font-heading font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs disabled:opacity-50 ${
+                                  isItemParcel
+                                    ? "bg-amber-100 text-amber-950 border-amber-300 hover:bg-amber-200"
+                                    : "bg-white text-zinc-600 border-zinc-200 hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300"
+                                }`}
+                                title={
+                                  isItemParcel
+                                    ? "Currently set to Parcel. Click to switch to Dine-In"
+                                    : "Currently Dine-In. Click to switch to Parcel"
+                                }
+                              >
+                                <ShoppingBag
+                                  size={13}
+                                  className={isItemParcel ? "text-amber-800" : "text-zinc-500"}
+                                />
+                                <span>{isItemParcel ? "Parcel" : "Parcel"}</span>
+                                {isItemParcel && (
+                                  <span className="text-[10px] font-extrabold bg-amber-200/90 text-amber-900 rounded px-1">
+                                    ✓
+                                  </span>
+                                )}
+                              </button>
 
                               {/* Price Breakdown */}
                               <div className="text-right min-w-[65px]">
