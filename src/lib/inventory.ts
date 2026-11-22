@@ -33,6 +33,7 @@ interface LocalStoreSchema {
   movements: InventoryMovement[];
   purchases: InventoryPurchaseRecord[];
   stockBatches?: StockBatch[];
+  priceHistory?: any[];
 }
 
 function getLocalStorePath(): string {
@@ -407,8 +408,34 @@ export async function updateInventoryIngredient(
         item.ingredient_id === id &&
         !finalizedDayIds.has(item.inventory_day_id)
       ) {
-        if (!item.purchase_entries || item.purchase_entries.length === 0) {
+        const hasPurchasesToday = item.purchase_entries && item.purchase_entries.length > 0;
+        if (!hasPurchasesToday) {
           item.unit_cost = parsedCost;
+          if (parsedCost !== null && parsedCost !== undefined) {
+            item.opening_stock_value = Number((item.opening_qty * parsedCost).toFixed(2));
+            if (item.available_batches) {
+              item.available_batches = item.available_batches.map((b) =>
+                b.batch_type === "OPENING"
+                  ? {
+                      ...b,
+                      unit_cost: parsedCost,
+                      remaining_value: Number((b.remaining_qty * parsedCost).toFixed(2)),
+                    }
+                  : b,
+              );
+            }
+            if (item.closing_batches) {
+              item.closing_batches = item.closing_batches.map((b) =>
+                b.batch_type === "OPENING"
+                  ? {
+                      ...b,
+                      unit_cost: parsedCost,
+                      remaining_value: Number((b.remaining_qty * parsedCost).toFixed(2)),
+                    }
+                  : b,
+              );
+            }
+          }
           if (
             item.closing_actual_qty !== null &&
             parsedCost !== null &&
@@ -858,10 +885,12 @@ export async function getOrCreateDayRegister(
       item.closing_actual_qty,
     );
 
-    const prevCost =
-      prevCostMap[item.ingredient_id] ??
-      (ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null);
     const prevBatches = prevClosingBatchesMap[item.ingredient_id];
+    const baseCost = ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null;
+    const prevCost =
+      (prevBatches && prevBatches.length > 0)
+        ? (prevBatches[0].unit_cost ?? prevCostMap[item.ingredient_id] ?? baseCost)
+        : (prevCostMap[item.ingredient_id] ?? baseCost ?? null);
 
     const fifoRes = computeItemFifoValuation(
       item,
@@ -877,8 +906,8 @@ export async function getOrCreateDayRegister(
     item.total_purchase_cost = fifoRes.totalPurchaseCost;
     item.latest_purchase_price =
       fifoRes.latestPurchasePrice ??
-      (allItemPurchases.length > 0
-        ? allItemPurchases[allItemPurchases.length - 1].price_per_unit
+      (itemPurchasesToday.length > 0
+        ? itemPurchasesToday[itemPurchasesToday.length - 1].price_per_unit
         : null);
     item.unit_cost = fifoRes.unitCost;
     item.closing_stock_value = fifoRes.closingStockValue;
@@ -1028,17 +1057,17 @@ export async function updateDayItemsBatch(
       closing,
     );
     const ing = store.ingredients.find((i) => i.id === current.ingredient_id);
+    const prevBatches = prevClosingBatchesMap[current.ingredient_id];
+    const baseCost = ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null;
     const fallbackCost =
       up.unit_cost !== undefined
         ? up.unit_cost
-        : (prevCostMap[current.ingredient_id] ??
-          (ing?.cost_per_unit != null
-            ? Number(ing.cost_per_unit)
-            : current.unit_cost));
+        : (prevBatches && prevBatches.length > 0
+          ? (prevBatches[0].unit_cost ?? prevCostMap[current.ingredient_id] ?? baseCost)
+          : (prevCostMap[current.ingredient_id] ?? current.unit_cost ?? baseCost ?? null));
     const dayPurchases = (store.purchases || []).filter(
       (p) => p.date === day.date && p.ingredient_id === current.ingredient_id,
     );
-    const prevBatches = prevClosingBatchesMap[current.ingredient_id];
 
     const tempItem: InventoryDayItem = {
       ...current,
@@ -1440,12 +1469,12 @@ export async function recordInventoryPurchase(
       const ing = store.ingredients.find(
         (i) => i.id === purchase.ingredient_id,
       );
-      const fallbackCost =
-        prevCostMap[purchase.ingredient_id] ??
-        (ing?.cost_per_unit != null
-          ? Number(ing.cost_per_unit)
-          : store.dayItems[itemIndex].unit_cost);
       const prevBatches = prevClosingBatchesMap[purchase.ingredient_id];
+      const baseCost = ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null;
+      const fallbackCost =
+        (prevBatches && prevBatches.length > 0)
+          ? (prevBatches[0].unit_cost ?? baseCost)
+          : (baseCost ?? prevCostMap[purchase.ingredient_id] ?? store.dayItems[itemIndex].unit_cost);
 
       const fifoRes = computeItemFifoValuation(
         store.dayItems[itemIndex],
@@ -1545,12 +1574,12 @@ export async function deleteInventoryPurchase(
       const { prevClosingBatchesMap, prevCostMap } =
         getPreviousFinalizedDayContext(store, day.date);
       const ing = store.ingredients.find((i) => i.id === removed.ingredient_id);
-      const fallbackCost =
-        prevCostMap[removed.ingredient_id] ??
-        (ing?.cost_per_unit != null
-          ? Number(ing.cost_per_unit)
-          : store.dayItems[itemIndex].unit_cost);
       const prevBatches = prevClosingBatchesMap[removed.ingredient_id];
+      const baseCost = ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null;
+      const fallbackCost =
+        (prevBatches && prevBatches.length > 0)
+          ? (prevBatches[0].unit_cost ?? baseCost)
+          : (baseCost ?? prevCostMap[removed.ingredient_id] ?? store.dayItems[itemIndex].unit_cost);
 
       const fifoRes = computeItemFifoValuation(
         store.dayItems[itemIndex],
@@ -1623,6 +1652,127 @@ export async function getInventoryPurchases(
     list = list.filter((p) => p.date === date);
   }
   return list.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export async function clearAllPurchasesAndPriceHistory(
+  ingredientId?: string,
+): Promise<{ success: boolean; message: string; count: number }> {
+  const store = readLocalStore();
+  let count = 0;
+
+  if (ingredientId) {
+    const initialLen = (store.purchases || []).length;
+    store.purchases = (store.purchases || []).filter(
+      (p) => p.ingredient_id !== ingredientId,
+    );
+    count = initialLen - store.purchases.length;
+
+    if (store.priceHistory) {
+      store.priceHistory = store.priceHistory.filter(
+        (ph) => ph.ingredient_id !== ingredientId,
+      );
+    }
+
+    const ing = store.ingredients.find((i) => i.id === ingredientId);
+    const baseCost = ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null;
+
+    // Reset dayItems for this ingredient across unfinalized days
+    const finalizedDayIds = new Set(
+      store.days.filter((d) => d.status === "FINALIZED").map((d) => d.id),
+    );
+    for (const item of store.dayItems) {
+      if (
+        item.ingredient_id === ingredientId &&
+        !finalizedDayIds.has(item.inventory_day_id)
+      ) {
+        item.purchase_entries = [];
+        item.purchased_qty = 0;
+        item.total_purchase_cost = 0;
+        item.latest_purchase_price = null;
+        item.unit_cost = baseCost;
+        if (baseCost !== null) {
+          item.opening_stock_value = Number(
+            (item.opening_qty * baseCost).toFixed(2),
+          );
+          if (item.available_batches) {
+            item.available_batches = item.available_batches
+              .map((b) =>
+                b.batch_type === "OPENING"
+                  ? {
+                      ...b,
+                      unit_cost: baseCost,
+                      remaining_value: Number(
+                        (b.remaining_qty * baseCost).toFixed(2),
+                      ),
+                    }
+                  : b,
+              )
+              .filter((b) => b.batch_type === "OPENING");
+          }
+          item.closing_batches = item.available_batches;
+        }
+      }
+    }
+  } else {
+    count = (store.purchases || []).length;
+    store.purchases = [];
+    store.priceHistory = [];
+
+    const finalizedDayIds = new Set(
+      store.days.filter((d) => d.status === "FINALIZED").map((d) => d.id),
+    );
+
+    const ingMap = new Map<string, InventoryIngredient>();
+    for (const ing of store.ingredients) {
+      ingMap.set(ing.id, ing);
+    }
+
+    for (const item of store.dayItems) {
+      if (!finalizedDayIds.has(item.inventory_day_id)) {
+        const ing = ingMap.get(item.ingredient_id);
+        const baseCost =
+          ing?.cost_per_unit != null ? Number(ing.cost_per_unit) : null;
+        item.purchase_entries = [];
+        item.purchased_qty = 0;
+        item.total_purchase_cost = 0;
+        item.latest_purchase_price = null;
+        item.unit_cost = baseCost;
+        if (baseCost !== null) {
+          item.opening_stock_value = Number(
+            (item.opening_qty * baseCost).toFixed(2),
+          );
+          item.available_batches =
+            item.opening_qty > 0
+              ? [
+                  {
+                    id: `batch_open_${item.id}`,
+                    ingredient_id: item.ingredient_id,
+                    batch_type: "OPENING",
+                    date: "2026-01-01",
+                    created_at: "0000-00-00T00:00:00.000Z",
+                    original_qty: item.opening_qty,
+                    remaining_qty: item.opening_qty,
+                    unit: item.unit,
+                    unit_cost: baseCost,
+                    remaining_value: Number(
+                      (item.opening_qty * baseCost).toFixed(2),
+                    ),
+                    notes: "Opening Stock",
+                  },
+                ]
+              : [];
+          item.closing_batches = item.available_batches;
+        }
+      }
+    }
+  }
+
+  writeLocalStore(store);
+  return {
+    success: true,
+    message: `Cleared ${count} purchases and reset price history`,
+    count,
+  };
 }
 
 // 9. Category Management (Edit, Reorder, Archive, Move Ingredients)

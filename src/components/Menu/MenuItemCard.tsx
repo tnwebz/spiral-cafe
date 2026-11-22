@@ -157,47 +157,30 @@ export default function MenuItemCard({
               <span className="inline-block px-3 py-1.5 bg-zinc-200 text-zinc-600 font-heading font-extrabold text-[11px] rounded-full uppercase tracking-wider cursor-not-allowed">
                 SOLD OUT
               </span>
-            ) : totalQty === 0 ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() =>
-                    addToCart({
-                      id: itemId,
-                      name,
-                      price,
-                      image,
-                      description,
-                      isParcel: false,
-                    })
-                  }
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-cream hover:bg-primary-dark font-heading font-bold text-xs rounded-full shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
-                  title="Eat here (Dine In)"
-                >
-                  <Plus size={12} strokeWidth={3} />
-                  <span>Add</span>
-                </button>
-                <button
-                  onClick={() =>
-                    addToCart({
-                      id: itemId,
-                      name,
-                      price,
-                      image,
-                      description,
-                      isParcel: true,
-                    })
-                  }
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-heading font-bold text-xs rounded-full shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
-                  title="Pack for Takeaway (Parcel)"
-                >
-                  <span>🛍️ Parcel</span>
-                </button>
-              </div>
             ) : (
-              <div className="flex flex-col gap-1 items-end">
-                {dineInQty > 0 && (
-                  <div className="flex items-center gap-1.5 bg-[#FFF8F3] border border-[#B73F1D]/40 rounded-full px-1.5 py-0.5 shadow-2xs text-[11px]">
-                    <span className="text-[10px] font-extrabold text-[#8C5E51] uppercase">Dine:</span>
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                {/* 1. Dine-In Control (Always visible & accessible) */}
+                {dineInQty === 0 ? (
+                  <button
+                    onClick={() =>
+                      addToCart({
+                        id: itemId,
+                        name,
+                        price,
+                        image,
+                        description,
+                        isParcel: false,
+                      })
+                    }
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-cream hover:bg-primary-dark font-heading font-bold text-xs rounded-full shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
+                    title="Eat here (Dine In)"
+                  >
+                    <Plus size={12} strokeWidth={3} />
+                    <span>Add</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1 bg-[#FFF8F3] border border-[#B73F1D]/40 rounded-full px-1.5 py-0.5 shadow-2xs text-[11px]">
+                    <span className="text-[10px] font-extrabold text-[#8C5E51] uppercase">🍽️</span>
                     <button
                       onClick={() => decreaseQuantity(itemId)}
                       className="w-5 h-5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-cream flex items-center justify-center font-bold cursor-pointer"
@@ -218,9 +201,27 @@ export default function MenuItemCard({
                   </div>
                 )}
 
-                {parcelQty > 0 && (
-                  <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 rounded-full px-1.5 py-0.5 shadow-2xs text-[11px]">
-                    <span className="text-[10px] font-extrabold text-amber-900 uppercase">🛍️:</span>
+                {/* 2. Take Away / Parcel Control (Always visible & accessible) */}
+                {parcelQty === 0 ? (
+                  <button
+                    onClick={() =>
+                      addToCart({
+                        id: itemId,
+                        name,
+                        price,
+                        image,
+                        description,
+                        isParcel: true,
+                      })
+                    }
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 font-heading font-bold text-xs rounded-full shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
+                    title="Pack for Takeaway (Parcel)"
+                  >
+                    <span>🛍️ Parcel</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1 bg-amber-50 border border-amber-300 rounded-full px-1.5 py-0.5 shadow-2xs text-[11px]">
+                    <span className="text-[10px] font-extrabold text-amber-900 uppercase">🛍️</span>
                     <button
                       onClick={() => decreaseQuantity(`${itemId}__parcel`)}
                       className="w-5 h-5 rounded-full bg-amber-200/70 text-amber-900 hover:bg-amber-800 hover:text-white flex items-center justify-center font-bold cursor-pointer"
@@ -239,42 +240,6 @@ export default function MenuItemCard({
                       <Plus size={10} strokeWidth={3} />
                     </button>
                   </div>
-                )}
-
-                {dineInQty === 0 && (
-                  <button
-                    onClick={() =>
-                      addToCart({
-                        id: itemId,
-                        name,
-                        price,
-                        image,
-                        description,
-                        isParcel: false,
-                      })
-                    }
-                    className="text-[10px] font-bold text-[#B73F1D] hover:underline cursor-pointer"
-                  >
-                    + Add Dine-In
-                  </button>
-                )}
-
-                {parcelQty === 0 && (
-                  <button
-                    onClick={() =>
-                      addToCart({
-                        id: itemId,
-                        name,
-                        price,
-                        image,
-                        description,
-                        isParcel: true,
-                      })
-                    }
-                    className="text-[10px] font-bold text-amber-800 hover:underline cursor-pointer"
-                  >
-                    + 🛍️ Add Parcel
-                  </button>
                 )}
               </div>
             )}

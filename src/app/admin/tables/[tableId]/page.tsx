@@ -1186,29 +1186,39 @@ export default function TableDetailPage() {
                               </div>
 
                               {/* Details */}
-                              <div className="min-w-0">
-                                <h4 className="font-heading font-extrabold text-sm text-[#2C1710] truncate flex items-center gap-1.5">
-                                  <span>{item.name}</span>
-                                  {((ord.notes || "").includes("[TAKEAWAY]") ||
-                                    (ord.notes || "").includes("[PARCEL]") ||
-                                    ord.tableNumber === "TAKEAWAY" ||
-                                    (item.notes || "").toLowerCase().includes("(parcel)")) && (
-                                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-md">
-                                      (parcel)
-                                    </span>
-                                  )}
-                                </h4>
+                              {(() => {
+                                const cleanDisplayName = item.name
+                                  .replace(/\s*-\s*\(parcel\)/gi, "")
+                                  .replace(/\s*\(parcel\)/gi, "")
+                                  .replace(/\s*\(dine in\)/gi, "")
+                                  .trim();
+                                const isItemParcel =
+                                  item.name.toLowerCase().includes("(parcel)") ||
+                                  (item.notes || "").toLowerCase().includes("parcel") ||
+                                  (ord.tableNumber === "TAKEAWAY" && !(ord.notes || "").includes("DINE_IN_AND_TAKEAWAY"));
+                                return (
+                                  <div className="min-w-0">
+                                    <h4 className="font-heading font-extrabold text-sm text-[#2C1710] truncate flex items-center gap-1.5">
+                                      <span>{cleanDisplayName}</span>
+                                      {isItemParcel && (
+                                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-md">
+                                          (parcel)
+                                        </span>
+                                      )}
+                                    </h4>
 
-                                <p className="text-xs font-bold text-[#52525b] mt-0.5">
-                                  Price: <span className="text-[#2C1710]">₹{item.price} each</span>
-                                </p>
+                                    <p className="text-xs font-bold text-[#52525b] mt-0.5">
+                                      Price: <span className="text-[#2C1710]">₹{item.price} each</span>
+                                    </p>
 
-                                {cleanNote && (
-                                  <p className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg inline-block mt-1 border border-amber-200">
-                                    + {cleanNote}
-                                  </p>
-                                )}
-                              </div>
+                                    {cleanNote && (
+                                      <p className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg inline-block mt-1 border border-amber-200">
+                                        + {cleanNote}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             {/* Quantity Adjuster, Total, and Delete Button */}

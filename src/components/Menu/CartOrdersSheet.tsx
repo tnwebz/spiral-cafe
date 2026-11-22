@@ -66,15 +66,29 @@ export default function CartOrdersSheet() {
     isViewOnlyMenu,
   } = useCart();
 
-  const [orderServingMode, setOrderServingMode] = useState<"DINE_IN" | "TAKEAWAY">(
-    tableNumber === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"
-  );
   const [isPayingAllCash, setIsPayingAllCash] = useState(false);
   const [orderNotes, setOrderNotes] = useState("");
   const [showTableModal, setShowTableModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showContactCounterModal, setShowContactCounterModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState(tableNumber || "A1");
+
+  // Dynamic automatic order serving type calculation based on basket contents
+  const hasParcel = cart.some(
+    (it) => it.isParcel || it.id.includes("__parcel") || it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel")
+  );
+  const hasDineIn = cart.some(
+    (it) => !it.isParcel && !it.id.includes("__parcel") && !it.name.toLowerCase().includes("(parcel)") && !(it.notes || "").toLowerCase().includes("parcel")
+  );
+
+  const autoServingType: "DINE_IN" | "TAKEAWAY" | "MIXED" =
+    tableNumber === "TAKEAWAY"
+      ? "TAKEAWAY"
+      : (hasParcel && hasDineIn)
+      ? "MIXED"
+      : hasParcel
+      ? "TAKEAWAY"
+      : "DINE_IN";
   const [availableTables, setAvailableTables] = useState<string[]>(DEFAULT_FLOOR_TABLES);
   const [overviewTables, setOverviewTables] = useState<
     Array<{
@@ -108,11 +122,6 @@ export default function CartOrdersSheet() {
   useEffect(() => {
     if (tableNumber) {
       setSelectedTable(tableNumber);
-      if (tableNumber === "TAKEAWAY") {
-        setOrderServingMode("TAKEAWAY");
-      } else {
-        setOrderServingMode("DINE_IN");
-      }
     }
   }, [tableNumber]);
 
@@ -208,7 +217,6 @@ export default function CartOrdersSheet() {
 
     setTableNumber(table);
     setSelectedTable(table);
-    setOrderServingMode("DINE_IN");
     setShowTableModal(false);
 
     if (cart.length > 0) {
@@ -220,15 +228,19 @@ export default function CartOrdersSheet() {
     setOrderError(null);
     let targetTable = selectedTable || tableNumber || "A1";
 
-    if (orderServingMode === "DINE_IN" && (targetTable === "TAKEAWAY" || tableNumber === "TAKEAWAY")) {
+    if (autoServingType === "DINE_IN" && (targetTable === "TAKEAWAY" || tableNumber === "TAKEAWAY")) {
       setShowConfirmModal(false);
       setShowTableModal(true);
       return;
     }
 
-    const isTakeaway = orderServingMode === "TAKEAWAY";
+    const isTakeaway = autoServingType === "TAKEAWAY";
     let notes = orderNotes.trim();
-    if (isTakeaway && !notes.includes("[TAKEAWAY]")) {
+    if (autoServingType === "MIXED") {
+      if (!notes.includes("DINE_IN_AND_TAKEAWAY")) {
+        notes = `[DINE_IN_AND_TAKEAWAY] ${notes}`.trim();
+      }
+    } else if (isTakeaway && !notes.includes("[TAKEAWAY]")) {
       notes = `[TAKEAWAY] [PARCEL] ${notes}`.trim();
     }
 
@@ -432,8 +444,13 @@ export default function CartOrdersSheet() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-heading font-bold text-sm text-[#4A2117] truncate">
-                          {item.name}
+                        <h4 className="font-heading font-bold text-sm text-[#4A2117] truncate flex items-center gap-1.5">
+                          <span>{item.name}</span>
+                          {item.isParcel && (
+                            <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                              🛍️ Parcel
+                            </span>
+                          )}
                         </h4>
                         <div className="text-xs text-[#B73F1D] font-bold mt-0.5">
                           ₹{item.price}
@@ -496,72 +513,44 @@ export default function CartOrdersSheet() {
             {/* Bill Summary & Confirm Button */}
             {cart.length > 0 && (
               <div className="mt-4 pt-4 border-t border-[#EBDAD0] flex flex-col gap-3">
-                {/* Serving Mode Selector: Dine-In Table vs Take Away (Parcel) */}
+                {/* Automatic Serving Type Detection Card */}
                 <div className="bg-white p-3.5 rounded-2xl border border-[#EBDAD0] shadow-xs flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-heading font-extrabold text-[#4A2117] uppercase tracking-wide">
                       Order Serving Type
                     </span>
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-[#FFF8F3] text-[#CA340A] border border-[#CA340A]/20">
-                      {orderServingMode === "DINE_IN" ? "Dine-In Table" : "Take Away (Parcel)"}
+                    <span className="text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-[#FFF8F3] text-[#CA340A] border border-[#CA340A]/20">
+                      {autoServingType === "MIXED"
+                        ? "🍽️ Dine-In & 🛍️ Take Away"
+                        : autoServingType === "TAKEAWAY"
+                        ? "🛍️ Take Away (Parcel)"
+                        : "🍽️ Dine-In Table"}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOrderServingMode("DINE_IN");
-                        if (tableNumber === "TAKEAWAY" || selectedTable === "TAKEAWAY") {
-                          setShowTableModal(true);
-                        }
-                      }}
-                      className={`py-2 px-3 rounded-xl font-heading font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-                        orderServingMode === "DINE_IN"
-                          ? "bg-[#B73F1D] text-white border-[#B73F1D] shadow-xs"
-                          : "bg-[#FFF8F3] text-[#8C5E51] border-[#EBDAD0] hover:border-[#B73F1D]/50 hover:text-[#4A2117]"
-                      }`}
-                    >
-                      <Utensils size={14} />
-                      <span>🍽️ Dine-In Table</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOrderServingMode("TAKEAWAY");
-                      }}
-                      className={`py-2 px-3 rounded-xl font-heading font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
-                        orderServingMode === "TAKEAWAY"
-                          ? "bg-amber-700 text-white border-amber-700 shadow-xs"
-                          : "bg-[#FFF8F3] text-[#8C5E51] border-[#EBDAD0] hover:border-amber-700/50 hover:text-[#4A2117]"
-                      }`}
-                    >
-                      <ShoppingBag size={14} />
-                      <span>🛍️ Take Away (Parcel)</span>
-                    </button>
-                  </div>
-
                   {/* Contextual guidance */}
-                  {orderServingMode === "DINE_IN" && (tableNumber === "TAKEAWAY" || selectedTable === "TAKEAWAY") ? (
-                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
-                      <span className="text-amber-900 font-medium">Please choose an available table to sit down:</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowTableModal(true)}
-                        className="px-2.5 py-1 bg-[#B73F1D] hover:bg-[#9D3E22] text-white font-heading font-bold text-[11px] rounded-lg shadow-xs cursor-pointer"
-                      >
-                        Choose Table
-                      </button>
+                  {autoServingType === "MIXED" ? (
+                    <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-xl text-[11px] text-amber-950 font-medium flex items-center gap-2">
+                      <Sparkles size={14} className="text-[#CA340A] shrink-0" />
+                      <span>
+                        <strong>Mixed Order:</strong> Items marked 🛍️ Parcel will be packaged for takeaway; other items will be served hot at <strong>Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}</strong>.
+                      </span>
                     </div>
-                  ) : orderServingMode === "TAKEAWAY" && tableNumber && tableNumber !== "TAKEAWAY" ? (
+                  ) : autoServingType === "TAKEAWAY" && tableNumber && tableNumber !== "TAKEAWAY" ? (
                     <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 font-medium flex items-center gap-2">
                       <CheckCircle2 size={14} className="text-emerald-700 shrink-0" />
                       <span>
-                        Your parcel will be packed for takeaway and billed with <strong>Table {tableNumber.replace(/^Table\s*/i, "")}</strong>.
+                        All items will be packed for takeaway and billed with <strong>Table {tableNumber.replace(/^Table\s*/i, "")}</strong>.
                       </span>
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="p-2 bg-[#FFF8F3] border border-[#EBDAD0] rounded-xl text-[11px] text-[#4A2117] font-medium flex items-center gap-2">
+                      <Utensils size={14} className="text-[#B73F1D] shrink-0" />
+                      <span>
+                        All items will be freshly prepared and served at <strong>Table {(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}</strong>.
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-white p-3.5 rounded-2xl border border-[#EBDAD0] text-xs flex flex-col gap-1.5">
@@ -591,26 +580,7 @@ export default function CartOrdersSheet() {
                   </div>
                 )}
 
-                {orderServingMode === "TAKEAWAY" && tableNumber && tableNumber !== "TAKEAWAY" ? (
-                  <button
-                    disabled={isPlacingOrder}
-                    onClick={() => {
-                      setSelectedTable(tableNumber);
-                      setShowConfirmModal(true);
-                    }}
-                    className="w-full py-3.5 bg-amber-700 hover:bg-amber-800 text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {isPlacingOrder ? (
-                      <span>ADDING PARCEL TO ORDER...</span>
-                    ) : (
-                      <>
-                        <ShoppingBag size={16} />
-                        <span>ADD TAKE AWAY PARCEL TO TABLE {tableNumber.replace(/^Table\s*/i, "")} • ₹{grandTotal}</span>
-                        <ArrowRight size={16} />
-                      </>
-                    )}
-                  </button>
-                ) : orderServingMode === "DINE_IN" && (tableNumber === "TAKEAWAY" || selectedTable === "TAKEAWAY") ? (
+                {autoServingType === "DINE_IN" && (tableNumber === "TAKEAWAY" || selectedTable === "TAKEAWAY") ? (
                   <button
                     onClick={() => setShowTableModal(true)}
                     className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
@@ -639,7 +609,11 @@ export default function CartOrdersSheet() {
                         <span>ADDING TO ORDER...</span>
                       ) : (
                         <>
-                          <span>ADD TO TABLE {tableNumber.replace(/^Table\s*/i, "")} ORDER • ₹{grandTotal}</span>
+                          <span>
+                            {autoServingType === "MIXED"
+                              ? `ADD DINE-IN & PARCEL TO TABLE ${tableNumber.replace(/^Table\s*/i, "")} • ₹${grandTotal}`
+                              : `ADD TO TABLE ${tableNumber.replace(/^Table\s*/i, "")} ORDER • ₹${grandTotal}`}
+                          </span>
                           <ArrowRight size={16} />
                         </>
                       )}
@@ -655,7 +629,9 @@ export default function CartOrdersSheet() {
                     className="w-full py-3.5 bg-[#B73F1D] hover:bg-[#9D3E22] text-[#FFF8F3] font-heading font-extrabold text-sm rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
                   >
                     <span>
-                      {orderServingMode === "TAKEAWAY"
+                      {autoServingType === "MIXED"
+                        ? `PLACE DINE-IN & TAKE AWAY ORDER • ₹${grandTotal}`
+                        : autoServingType === "TAKEAWAY"
                         ? `PLACE TAKE AWAY ORDER • ₹${grandTotal}`
                         : `PLACE ORDER AT TABLE ${(tableNumber || selectedTable || "A1").replace(/^Table\s*/i, "")} • ₹${grandTotal}`}
                     </span>
@@ -1337,19 +1313,35 @@ export default function CartOrdersSheet() {
               <div className="flex items-center justify-between pb-3 border-b border-[#EBDAD0]">
                 <div className="flex items-center gap-2.5">
                   <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
-                    orderServingMode === "TAKEAWAY" ? "bg-amber-100 text-amber-800" : "bg-[#B73F1D]/10 text-[#B73F1D]"
+                    autoServingType === "TAKEAWAY"
+                      ? "bg-amber-100 text-amber-800"
+                      : autoServingType === "MIXED"
+                      ? "bg-orange-100 text-[#CA340A]"
+                      : "bg-[#B73F1D]/10 text-[#B73F1D]"
                   }`}>
-                    {orderServingMode === "TAKEAWAY" ? <ShoppingBag size={18} /> : <Utensils size={18} />}
+                    {autoServingType === "TAKEAWAY" ? (
+                      <ShoppingBag size={18} />
+                    ) : autoServingType === "MIXED" ? (
+                      <Sparkles size={18} />
+                    ) : (
+                      <Utensils size={18} />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-heading font-extrabold text-base text-[#4A2117]">
-                      {orderServingMode === "TAKEAWAY" ? "CONFIRM TAKE AWAY (PARCEL)" : "Confirm Your Table"}
+                      {autoServingType === "TAKEAWAY"
+                        ? "CONFIRM TAKE AWAY (PARCEL)"
+                        : autoServingType === "MIXED"
+                        ? "CONFIRM DINE-IN & TAKE AWAY"
+                        : "Confirm Your Table"}
                     </h3>
                     <p className="text-[11px] text-[#8C5E51] font-medium">
-                      {orderServingMode === "TAKEAWAY"
+                      {autoServingType === "TAKEAWAY"
                         ? tableNumber && tableNumber !== "TAKEAWAY"
                           ? `Packaged for takeaway • Billed with Table ${tableNumber.replace(/^Table\s*/i, "")}`
                           : "Packaged for takeaway • Counter pickup"
+                        : autoServingType === "MIXED"
+                        ? `Mixed serving • Table ${(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}`
                         : `You're sitting at Table ${(selectedTable || tableNumber || "A1").replace(/^Table\s*/i, "")}, right?`}
                     </p>
                   </div>
@@ -1364,7 +1356,7 @@ export default function CartOrdersSheet() {
               </div>
 
               {/* Selected Table Card */}
-              {orderServingMode !== "TAKEAWAY" && (
+              {autoServingType !== "TAKEAWAY" && (
                 <div className="my-3 p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200/90 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1472,8 +1464,10 @@ export default function CartOrdersSheet() {
                   ) : (
                     <>
                       <span>
-                        {orderServingMode === "TAKEAWAY"
+                        {autoServingType === "TAKEAWAY"
                           ? `Yes, Confirm Take Away Order • ₹${grandTotal}`
+                          : autoServingType === "MIXED"
+                          ? `Yes, Place Mixed Order • ₹${grandTotal}`
                           : `Yes, Place Order • ₹${grandTotal}`}
                       </span>
                       <ArrowRight size={16} />

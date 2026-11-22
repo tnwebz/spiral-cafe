@@ -55,31 +55,72 @@ function computeClientFifo(
   closing: number | null | undefined,
   baseCost?: number | null
 ) {
-  // 1. Determine Opening Unit Cost (initial cost)
-  const openBatch = item.available_batches?.find((b) => b.batch_type === "OPENING");
-  const openingUnitCost =
-    openBatch?.unit_cost ??
-    (item.opening_qty > 0 && item.opening_stock_value != null && item.opening_stock_value > 0
-      ? Number((item.opening_stock_value / item.opening_qty).toFixed(2))
-      : (item.unit_cost ?? baseCost ?? null));
+  // 1. Separate opening / carried-forward batches from today's new purchase batches
+  const todayPurchIds = new Set((item.purchase_entries || []).map((p) => p.id));
+  const openingBatches = (item.available_batches || []).filter(
+    (b) => b.batch_type === "OPENING" || !b.purchase_id || !todayPurchIds.has(b.purchase_id)
+  );
 
+  const totalOpenBatchQty = openingBatches.reduce(
+    (acc, b) => acc + (b.remaining_qty ?? b.original_qty ?? 0),
+    0
+  );
+  const totalOpenBatchVal = openingBatches.reduce(
+    (acc, b) =>
+      acc + (b.remaining_value ?? ((b.remaining_qty ?? b.original_qty ?? 0) * b.unit_cost)),
+    0
+  );
+
+  const batchOpeningCost =
+    totalOpenBatchQty > 0 ? Number((totalOpenBatchVal / totalOpenBatchQty).toFixed(2)) : null;
+
+  const valueOpeningCost =
+    item.opening_qty > 0 && item.opening_stock_value != null && item.opening_stock_value > 0
+      ? Number((item.opening_stock_value / item.opening_qty).toFixed(2))
+      : null;
+
+  // Opening unit cost priority:
+  // 1) Actual carried-forward / opening batches from previous day closing (FIFO truth)
+  // 2) Stored opening stock value / opening qty
+  // 3) Stored item.unit_cost
+  // 4) Fallback to Master Catalog baseline price only if no prior cost/batch exists
+  const openingUnitCost =
+    batchOpeningCost ??
+    valueOpeningCost ??
+    item.unit_cost ??
+    (baseCost != null && baseCost > 0 ? baseCost : null);
+
+  // 2. Build Batches for FIFO calculation
   const batches: StockBatch[] = [];
-  if (opening > 0 && openingUnitCost !== null) {
-    batches.push({
-      id: `batch_open_${item.id}`,
-      ingredient_id: item.ingredient_id,
-      batch_type: "OPENING",
-      date: item.created_at?.slice(0, 10) || "2026-01-01",
-      created_at: "0000-00-00T00:00:00.000Z",
-      original_qty: opening,
-      remaining_qty: opening,
-      unit: item.unit,
-      unit_cost: openingUnitCost,
-      remaining_value: Number((opening * openingUnitCost).toFixed(2)),
-    });
+  if (opening > 0) {
+    if (openingBatches.length > 0 && Math.abs(totalOpenBatchQty - opening) < 0.001) {
+      // Opening quantity matches carried-forward batches: preserve exact batch tiers & prices!
+      for (const ob of openingBatches) {
+        batches.push({
+          ...ob,
+          remaining_qty: ob.remaining_qty ?? ob.original_qty,
+          remaining_value: Number(
+            ((ob.remaining_qty ?? ob.original_qty) * ob.unit_cost).toFixed(2)
+          ),
+        });
+      }
+    } else if (openingUnitCost !== null) {
+      batches.push({
+        id: `batch_open_${item.id}`,
+        ingredient_id: item.ingredient_id,
+        batch_type: "OPENING",
+        date: item.created_at?.slice(0, 10) || "2026-01-01",
+        created_at: "0000-00-00T00:00:00.000Z",
+        original_qty: opening,
+        remaining_qty: opening,
+        unit: item.unit,
+        unit_cost: openingUnitCost,
+        remaining_value: Number((opening * openingUnitCost).toFixed(2)),
+      });
+    }
   }
 
-  // 2. Determine Purchase Batches
+  // 3. Determine Purchase Batches
   if (item.purchase_entries && item.purchase_entries.length > 0) {
     const sorted = [...item.purchase_entries].sort((a, b) =>
       (a.created_at || a.date).localeCompare(b.created_at || b.date)
@@ -536,10 +577,18 @@ export default function AdminInventoryPage() {
     }
   };
 
-  const openPurchaseHistory = async (target: { ingredient_id?: string; id?: string; ingredient_name?: string; name?: string; unit?: string }) => {
+  const openPurchaseHistory = async (target: { ingredient_id?: string; id?: string; ingredient_name?: string; name?: string; unit?: string; unit_cost?: number; cost_per_unit?: number }) => {
     const ingId = target.ingredient_id || target.id;
-    const ingName = target.ingredient_name || target.name || "Ingredient";
-    setSelectedItemForHistory({ ingredient_id: ingId, ingredient_name: ingName, unit: target.unit || "" });
+    const ingDef = ingredients.find((i) => i.id === ingId);
+    const ingName = target.ingredient_name || target.name || ingDef?.name || "Ingredient";
+    const baseCost = ingDef?.cost_per_unit ?? target.cost_per_unit ?? target.unit_cost;
+    setSelectedItemForHistory({
+      ingredient_id: ingId,
+      ingredient_name: ingName,
+      unit: target.unit || ingDef?.unit || "",
+      cost_per_unit: baseCost,
+      unit_cost: baseCost,
+    });
     setShowPurchaseHistoryModal(true);
     setLoadingPurchases(true);
     try {
@@ -566,7 +615,7 @@ export default function AdminInventoryPage() {
   };
 
   const handleDeletePurchase = async (purchaseId: string) => {
-    if (!confirm("Are you sure you want to delete this purchase entry? This will recompute weighted average costs.")) return;
+    if (!confirm("Are you sure you want to delete this purchase entry? This will recompute FIFO batch valuations.")) return;
     try {
       const res = await fetch(`/api/admin/inventory/purchases?id=${purchaseId}`, {
         method: "DELETE",
@@ -576,10 +625,37 @@ export default function AdminInventoryPage() {
 
       setIngredientPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
       fetchDayData(selectedDate);
-      setSaveSuccessMessage("Purchase entry deleted and costs recomputed.");
+      setSaveSuccessMessage("Purchase entry deleted and FIFO valuations recomputed.");
       setTimeout(() => setSaveSuccessMessage(null), 3000);
     } catch (err: any) {
       alert(err.message || "Failed to delete purchase");
+    }
+  };
+
+  const handleClearPurchases = async (ingredientId?: string) => {
+    if (
+      !confirm(
+        ingredientId
+          ? "Are you sure you want to clear all purchase history for this ingredient? This will reset the stock cost to the Master Catalog baseline price."
+          : "Are you sure you want to clear all purchase history records across all ingredients?"
+      )
+    )
+      return;
+    try {
+      const url = ingredientId
+        ? `/api/admin/inventory/purchases?ingredientId=${ingredientId}`
+        : `/api/admin/inventory/purchases?clearAll=true`;
+      const res = await fetch(url, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to clear purchase history");
+
+      setIngredientPurchases([]);
+      fetchDayData(selectedDate);
+      fetchIngredientsMaster();
+      setSaveSuccessMessage("Purchase history cleared. Stock cost reset to Master Catalog baseline price.");
+      setTimeout(() => setSaveSuccessMessage(null), 3500);
+    } catch (err: any) {
+      alert(err.message || "Failed to clear purchases");
     }
   };
 
@@ -1303,7 +1379,7 @@ export default function AdminInventoryPage() {
                                   )}
                                   {clientFifo.openingUnitCost !== null && opening > 0 && (
                                     <div className="text-[10px] text-zinc-500 font-mono mt-0.5 font-medium">
-                                      (₹{clientFifo.openingUnitCost}/pc)
+                                      (₹{clientFifo.openingUnitCost}/{item.unit === "pcs" ? "pc" : item.unit || "pc"})
                                     </div>
                                   )}
                                 </td>
@@ -2049,22 +2125,36 @@ export default function AdminInventoryPage() {
 
               <div className="p-3 my-3 bg-[#FAF9F5] rounded-xl border border-zinc-200/80 flex items-center justify-between text-xs">
                 <div>
-                  <span className="text-zinc-400 block text-[10px] uppercase font-bold">Current Avg Cost</span>
+                  <span className="text-zinc-400 block text-[10px] uppercase font-bold">Master Catalog Base Price</span>
                   <span className="text-sm font-black font-mono text-[#2C1710]">
-                    {selectedItemForHistory.unit_cost ? `₹${selectedItemForHistory.unit_cost.toFixed(2)}/${selectedItemForHistory.unit}` : "Not Set"}
+                    {selectedItemForHistory.cost_per_unit || selectedItemForHistory.unit_cost
+                      ? `₹${Number(selectedItemForHistory.cost_per_unit || selectedItemForHistory.unit_cost).toFixed(2)}/${selectedItemForHistory.unit}`
+                      : "Not Set"}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPurchaseHistoryModal(false);
-                    openAddPurchaseModal(selectedItemForHistory);
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Plus size={13} />
-                  <span>+ Add Purchase</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {ingredientPurchases.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleClearPurchases(selectedItemForHistory.ingredient_id)}
+                      className="px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 text-xs font-bold transition cursor-pointer"
+                      title="Clear all past purchase records for this ingredient"
+                    >
+                      Clear History
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPurchaseHistoryModal(false);
+                      openAddPurchaseModal(selectedItemForHistory);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-[#CA340A] text-white text-xs font-bold hover:bg-[#b02d08] transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Plus size={13} />
+                    <span>+ Add Purchase</span>
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto">

@@ -4,6 +4,7 @@ import {
   getInventoryPurchases,
   recordInventoryPurchase,
   deleteInventoryPurchase,
+  clearAllPurchasesAndPriceHistory,
   getKolkataDateString,
 } from "@/lib/inventory";
 
@@ -105,10 +106,21 @@ export async function DELETE(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
+    const ingredientId = url.searchParams.get("ingredientId");
+    const clearAll = url.searchParams.get("clearAll");
+
+    if (clearAll === "true" || ingredientId) {
+      const res = await clearAllPurchasesAndPriceHistory(ingredientId || undefined);
+      return NextResponse.json({
+        success: true,
+        message: res.message,
+        count: res.count,
+      });
+    }
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: "Purchase id is required" },
+        { success: false, error: "Purchase id or ingredientId is required" },
         { status: 400 }
       );
     }

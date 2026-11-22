@@ -73,7 +73,7 @@ export class KotReceiptEngine {
         item.name.toLowerCase().includes("(parcel)") ||
         (item.notes || "").toLowerCase().includes("parcel") ||
         data.tableNumber === "TAKEAWAY" ||
-        data.isTakeaway;
+        (!isMixedOrder && Boolean(data.isTakeaway));
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
         .replace(/\s*\(parcel\)/gi, "")
@@ -185,7 +185,7 @@ export class KotReceiptEngine {
     commands += `${divider}\n`;
 
     // Items with (Dine In) / (Parcel)
-    const isTakeaway = data.tableNumber === "TAKEAWAY" || data.isTakeaway;
+    const isTakeaway = data.tableNumber === "TAKEAWAY" || (!isMixedOrder && Boolean(data.isTakeaway));
     data.items.forEach((item) => {
       const isItemParcel =
         item.name.toLowerCase().includes("(parcel)") ||
@@ -324,7 +324,7 @@ export function buildKotData(
     items: itemsToPrint.map((it) => {
       let itemName = it.name;
       const isItemParcel = itemName.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel");
-      if ((isTakeaway || isItemParcel) && !itemName.toLowerCase().includes("(parcel)")) {
+      if ((!isMixed && isTakeaway && !itemName.toLowerCase().includes("(parcel)")) || (isItemParcel && !itemName.toLowerCase().includes("(parcel)"))) {
         itemName = `${itemName} - (parcel)`;
       }
       return {
