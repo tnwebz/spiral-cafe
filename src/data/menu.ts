@@ -23,611 +23,1072 @@ export interface MenuCategory {
 
 export const bestSellingItems: MenuItem[] = [
   {
-    id: "bs-1",
-    name: "Oklahoma Chicken Smash",
-    price: 240,
-    originalPrice: 320,
-    rating: 4.9,
-    reviewsCount: 480,
-    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=800&auto=format&fit=crop",
-    badges: ["non-veg", "bestseller", "chef-choice"],
-    description: "Smashed chicken patty seared with sweet wafer-thin caramelized onions, double American cheddar & secret house relish on buttered brioche.",
+    "id": "bg-1",
+    "name": "Thic Smash",
+    "price": 265,
+    "originalPrice": 340,
+    "rating": 4.9,
+    "reviewsCount": 490,
+    "image": "",
+    "badges": [
+      "non-veg",
+      "chef-choice"
+    ],
+    "description": "Double smash patty seared with wafer-thin onions, melted cheddar & secret house relish."
   },
   {
-    id: "bs-2",
-    name: "Garlic Parmesan Wings",
-    price: 260,
-    originalPrice: 340,
-    rating: 4.9,
-    reviewsCount: 520,
-    image: "https://images.unsplash.com/photo-1527477396000-e27163b481c2?q=80&w=800&auto=format&fit=crop",
-    badges: ["non-veg", "bestseller"],
-    description: "Crispy fried whole wings tossed in molten roasted garlic herb butter and crowned with freshly grated aged parmesan.",
+    "id": "wd-1",
+    "name": "Fried Wings",
+    "price": 195,
+    "originalPrice": 250,
+    "rating": 4.8,
+    "reviewsCount": 310,
+    "image": "",
+    "badges": [
+      "non-veg",
+      "bestseller"
+    ],
+    "description": "Crispy double-fried golden chicken wings seasoned with fine herbs and sea salt."
   },
   {
-    id: "bs-3",
-    name: "Drippy Cheese Fries",
-    price: 170,
-    originalPrice: 230,
-    rating: 4.9,
-    reviewsCount: 410,
-    image: "https://images.unsplash.com/photo-1585109649139-366815a0d713?q=80&w=800&auto=format&fit=crop",
-    badges: ["veg", "bestseller"],
-    description: "Golden crispy skin-on fries smothered in an avalanche of warm molten cheddar cheese sauce and seasoned paprika dust.",
+    "id": "sq-3",
+    "name": "Cheesy Fries",
+    "price": 185,
+    "originalPrice": 240,
+    "rating": 4.9,
+    "reviewsCount": 410,
+    "image": "",
+    "badges": [
+      "veg",
+      "bestseller"
+    ],
+    "description": "Crisp fries smothered in molten cheddar cheese fondue."
   },
   {
-    id: "bs-4",
-    name: "French Onion Melt",
-    price: 210,
-    originalPrice: 280,
-    rating: 4.8,
-    reviewsCount: 390,
-    image: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?q=80&w=800&auto=format&fit=crop",
-    badges: ["veg", "bestseller", "chef-choice"],
-    description: "Slow-caramelized sweet shallots simmered in thyme broth, layered between thick sourdough with bubbling melted gruyere & swiss cheese.",
+    "id": "sd-1",
+    "name": "French Onion Melt",
+    "price": 245,
+    "originalPrice": 310,
+    "rating": 4.9,
+    "reviewsCount": 390,
+    "image": "",
+    "badges": [
+      "veg",
+      "chef-choice"
+    ],
+    "description": "Sweet slow-cooked caramelized onions, melted mozzarella & gruyere on garlic-buttered sourdough."
   },
   {
-    id: "bs-5",
-    name: "Biscoff Shake",
-    price: 199,
-    originalPrice: 260,
-    rating: 4.9,
-    reviewsCount: 450,
-    image: "https://images.unsplash.com/photo-1572490122747-3968b75cc699?q=80&w=800&auto=format&fit=crop",
-    badges: ["veg", "bestseller", "chef-choice"],
-    description: "Creamy vanilla gelato whipped with authentic Lotus Biscoff biscuit spread, crunchy cookie crumble & velvety whipped crown.",
+    "id": "sh-2",
+    "name": "Biscoff Shake",
+    "price": 205,
+    "originalPrice": 260,
+    "rating": 4.9,
+    "reviewsCount": 510,
+    "image": "",
+    "badges": [
+      "veg",
+      "chef-choice"
+    ],
+    "description": "Lotus Biscoff cookie butter shake crowned with crunchy caramelized biscuit crumble."
   },
   {
-    id: "bs-6",
-    name: "Alfredo Chicken",
-    price: 280,
-    originalPrice: 360,
-    rating: 4.8,
-    reviewsCount: 370,
-    image: "https://images.unsplash.com/photo-1621996316565-e31514c9f056?q=80&w=800&auto=format&fit=crop",
-    badges: ["non-veg", "bestseller"],
-    description: "Al dente penne bathed in rich garlic parmesan cream sauce, tossed with tender herb-seared chicken breast slices.",
-  },
+    "id": "pa-2",
+    "name": "Creamy Alfredo (Non-Veg)",
+    "price": 265,
+    "originalPrice": 340,
+    "rating": 4.9,
+    "reviewsCount": 460,
+    "image": "",
+    "badges": [
+      "non-veg",
+      "bestseller"
+    ],
+    "description": "Rich garlic parmesan alfredo with tender grilled chicken slices and cracked black pepper."
+  }
 ];
 
 export const menuData: MenuCategory[] = [
   {
-    id: "side-quest",
-    name: "Side Quest",
-    icon: "fries",
-    heroImage: "https://images.unsplash.com/photo-1576107232684-1279f3908594?q=80&w=1200&auto=format&fit=crop",
-    description: "Golden crispy hand-cut fries & heavily loaded indulgence bowls",
-    items: [
+    "id": "side-quest",
+    "name": "Side Quest",
+    "icon": "🍟",
+    "heroImage": "https://images.unsplash.com/photo-1576107232684-1279f3908594?q=80&w=800",
+    "description": "Crispy, loaded and seasoned sides designed to elevate your feast.",
+    "items": [
       {
-        id: "sq-1",
-        name: "OG Fries",
-        price: 110,
-        originalPrice: 150,
-        rating: 4.6,
-        reviewsCount: 240,
-        image: "https://images.unsplash.com/photo-1576107232684-1279f3908594?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg"],
-        description: "Classic golden cut potato fries, double-fried for maximum crispiness and lightly dusted with sea salt. Served with house aioli.",
+        "id": "sq-1",
+        "name": "OG Fries",
+        "price": 145,
+        "originalPrice": 190,
+        "rating": 4.8,
+        "reviewsCount": 320,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Classic golden skin-on fries tossed in fine sea salt."
       },
       {
-        id: "sq-2",
-        name: "Peri Heat Fries",
-        price: 130,
-        originalPrice: 170,
-        rating: 4.8,
-        reviewsCount: 360,
-        image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "spicy", "bestseller"],
-        description: "Piping hot crispy fries tossed vigorously in fiery African bird's eye peri-peri spice dust and zesty lemon twist.",
+        "id": "sq-2",
+        "name": "Peri Heat Fries",
+        "price": 155,
+        "originalPrice": 200,
+        "rating": 4.8,
+        "reviewsCount": 290,
+        "image": "",
+        "badges": [
+          "veg",
+          "spicy"
+        ],
+        "description": "Golden fries dusted with our signature fiery African peri-peri spice blend."
       },
       {
-        id: "sq-3",
-        name: "Drippy Cheese Fries",
-        price: 170,
-        originalPrice: 230,
-        rating: 4.9,
-        reviewsCount: 410,
-        image: "https://images.unsplash.com/photo-1585109649139-366815a0d713?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Crispy fries drenched in a cascade of warm molten cheddar lava, mozzarella shred, and roasted chili seasoning.",
+        "id": "sq-3",
+        "name": "Cheesy Fries",
+        "price": 185,
+        "originalPrice": 240,
+        "rating": 4.9,
+        "reviewsCount": 410,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Crisp fries smothered in molten cheddar cheese fondue."
       },
       {
-        id: "sq-4",
-        name: "Loaded AF",
-        price: 210,
-        originalPrice: 280,
-        rating: 4.9,
-        reviewsCount: 490,
-        image: "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "chef-choice", "bestseller"],
-        description: "Heavily loaded crispy fries topped with pulled smoky chicken, triple cheese fondue, pickled jalapeños, crispy onions & signature secret sauce.",
+        "id": "sq-4",
+        "name": "Chick Loaded Fries",
+        "price": 285,
+        "originalPrice": 360,
+        "rating": 4.9,
+        "reviewsCount": 380,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Fries piled high with crispy seasoned chicken bites, smoky mayo & melted cheese."
       },
-    ],
+      {
+        "id": "sq-5",
+        "name": "Korean Loaded Fries",
+        "price": 295,
+        "originalPrice": 380,
+        "rating": 4.9,
+        "reviewsCount": 270,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "spicy"
+        ],
+        "description": "Fries topped with sweet-spicy Korean chicken, gochujang drizzle and sesame seeds."
+      },
+      {
+        "id": "sq-6",
+        "name": "Animal Fries",
+        "price": 295,
+        "originalPrice": 380,
+        "rating": 4.8,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Secret style loaded fries with grilled onions, chopped chicken patty, melted cheese & house sauce."
+      }
+    ]
   },
   {
-    id: "the-wing-dept",
-    name: "The Wing Dept",
-    icon: "chicken",
-    heroImage: "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?q=80&w=1200&auto=format&fit=crop",
-    description: "Crispy hand-breaded chicken wings glazed & tossed in bold signature flavors",
-    items: [
+    "id": "share-club",
+    "name": "Share Club",
+    "icon": "🍗",
+    "heroImage": "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?q=80&w=800",
+    "description": "Bigger portions meant for the table to share and fight over.",
+    "items": [
       {
-        id: "wd-1",
-        name: "Garlic Parmesan Wings",
-        price: 260,
-        originalPrice: 340,
-        rating: 4.9,
-        reviewsCount: 520,
-        image: "https://images.unsplash.com/photo-1527477396000-e27163b481c2?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller"],
-        description: "Crispy golden fried wings tossed in roasted garlic compound butter, topped with freshly grated 18-month aged parmesan and Italian parsley.",
+        "id": "sc-1",
+        "name": "Mexican Nachos",
+        "price": 155,
+        "originalPrice": 200,
+        "rating": 4.7,
+        "reviewsCount": 240,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Crispy stone-ground tortilla chips topped with fresh pico de gallo, salsa and cheese."
       },
       {
-        id: "wd-2",
-        name: "Hot Honey Glaze",
-        price: 250,
-        originalPrice: 330,
-        rating: 4.8,
-        reviewsCount: 380,
-        image: "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "chef-choice"],
-        description: "Juicy jumbo wings coated in house-infused habanero hot honey glaze, delivering the ultimate sweet heat sticky crunch.",
+        "id": "sc-2",
+        "name": "Mexican Nachos Chicken",
+        "price": 205,
+        "originalPrice": 260,
+        "rating": 4.9,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Loaded tortilla chips with Mexican spiced pulled chicken, jalapenos and double cheese drizzle."
       },
       {
-        id: "wd-3",
-        name: "Nashville Red Dust",
-        price: 250,
-        originalPrice: 330,
-        rating: 4.8,
-        reviewsCount: 340,
-        image: "https://images.unsplash.com/photo-1608039829572-78524f79c4c7?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "spicy"],
-        description: "Southern style ultra-crispy wings dunked in seasoned chili oil and heavy-dusted with fiery Nashville cayenne spice blend.",
+        "id": "sc-3",
+        "name": "Mushroom Popcorn",
+        "price": 165,
+        "originalPrice": 210,
+        "rating": 4.7,
+        "reviewsCount": 180,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Bite-sized button mushrooms coated in seasoned crunch batter and fried golden."
       },
-    ],
+      {
+        "id": "sc-4",
+        "name": "Corn Ribs",
+        "price": 145,
+        "originalPrice": 190,
+        "rating": 4.8,
+        "reviewsCount": 260,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Spiced chargrilled sweet corn ribs brushed with cilantro lime butter and paprika."
+      },
+      {
+        "id": "sc-5",
+        "name": "Chicken Popcorn",
+        "price": 175,
+        "originalPrice": 230,
+        "rating": 4.9,
+        "reviewsCount": 450,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Tender chicken poppers tossed in garlic herb dusting served with chipotle dip."
+      }
+    ]
   },
   {
-    id: "share-club",
-    name: "Share Club",
-    icon: "cheese",
-    heroImage: "https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?q=80&w=1200&auto=format&fit=crop",
-    description: "Crowd-favorite shareables, loaded nachos, and crunchy bites for your crew",
-    items: [
+    "id": "burgers",
+    "name": "Burgers",
+    "icon": "🍔",
+    "heroImage": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=800",
+    "description": "Smashed patties, molten cheeses and loaded brioche buns.",
+    "items": [
       {
-        id: "sc-1",
-        name: "Mexican Melt Nachos",
-        price: 220,
-        originalPrice: 290,
-        rating: 4.8,
-        reviewsCount: 420,
-        image: "https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Stoneground crispy corn tortilla chips piled high with melted cheddar, fresh pico de gallo, pickled jalapeños, sour cream & tangy salsa dip.",
+        "id": "bg-1",
+        "name": "Thic Smash",
+        "price": 265,
+        "originalPrice": 340,
+        "rating": 4.9,
+        "reviewsCount": 490,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "chef-choice"
+        ],
+        "description": "Double smash patty seared with wafer-thin onions, melted cheddar & secret house relish."
       },
       {
-        id: "sc-2",
-        name: "Popcorn Chicken",
-        price: 210,
-        originalPrice: 280,
-        rating: 4.8,
-        reviewsCount: 360,
-        image: "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller"],
-        description: "Bite-sized tender boneless chicken morsels marinated in buttermilk, fried to extreme golden crunch and served with garlic mayo.",
+        "id": "bg-2",
+        "name": "Hotshot Chicken",
+        "price": 285,
+        "originalPrice": 360,
+        "rating": 4.8,
+        "reviewsCount": 380,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "spicy"
+        ],
+        "description": "Fiery crispy chicken breast drenched in ghost pepper glaze with coleslaw."
       },
       {
-        id: "sc-3",
-        name: "Corn Ripperz",
-        price: 180,
-        originalPrice: 240,
-        rating: 4.7,
-        reviewsCount: 290,
-        image: "https://images.unsplash.com/photo-1551754655-cd27e38d2076?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "new"],
-        description: "Charred crispy sweet corn ribs dusted in smoked paprika, cotija cheese crumbles, spicy lime butter, and cilantro.",
+        "id": "bg-3",
+        "name": "Cheese Crash",
+        "price": 295,
+        "originalPrice": 380,
+        "rating": 4.9,
+        "reviewsCount": 520,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Double patties overflowing with a waterfall of molten cheddar fondue & crispy onion rings."
       },
-    ],
+      {
+        "id": "bg-4",
+        "name": "Herbivore's Hero",
+        "price": 245,
+        "originalPrice": 310,
+        "rating": 4.8,
+        "reviewsCount": 290,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Crispy vegetable patty with smoked gouda, pickled cucumbers and garlic aioli."
+      },
+      {
+        "id": "bg-5",
+        "name": "The Golden Crunch",
+        "price": 275,
+        "originalPrice": 350,
+        "rating": 4.8,
+        "reviewsCount": 330,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Extra-crispy chicken fillet with lettuce, honey mustard and dill pickles on buttered brioche."
+      },
+      {
+        "id": "bg-6",
+        "name": "Madam Korean",
+        "price": 295,
+        "originalPrice": 380,
+        "rating": 4.9,
+        "reviewsCount": 290,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "spicy"
+        ],
+        "description": "Crispy fried chicken glazed in spicy-sweet Korean Yangnyeom sauce with sesame slaw."
+      },
+      {
+        "id": "bg-7",
+        "name": "The Big Veg Crunch",
+        "price": 225,
+        "originalPrice": 290,
+        "rating": 4.7,
+        "reviewsCount": 210,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Thick spiced potato-peas crunch patty with mint mayo and crisp iceberg lettuce."
+      },
+      {
+        "id": "bg-8",
+        "name": "Crispy Paneer AH?",
+        "price": 225,
+        "originalPrice": 290,
+        "rating": 4.8,
+        "reviewsCount": 270,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Crispy panko-crusted cottage cheese steak with creamy chipotle sauce and pickled onions."
+      }
+    ]
   },
   {
-    id: "burgers",
-    name: "Burgers",
-    icon: "burger",
-    heroImage: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=1200&auto=format&fit=crop",
-    description: "Juicy smashed patties, molten artisan cheeses & toasted butter brioche",
-    items: [
+    "id": "sandos",
+    "name": "Sandos",
+    "icon": "🥪",
+    "heroImage": "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?q=80&w=800",
+    "description": "Thick gourmet toasted sandwiches packed edge-to-edge with fillings.",
+    "items": [
       {
-        id: "bg-1",
-        name: "Oklahoma Chicken Smash",
-        price: 240,
-        originalPrice: 320,
-        rating: 4.9,
-        reviewsCount: 480,
-        image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller", "chef-choice"],
-        description: "Smashed chicken patty seared directly with sweet paper-thin onions, melted American cheddar, dill pickles & house burger sauce on toasted brioche.",
+        "id": "sd-1",
+        "name": "French Onion Melt",
+        "price": 245,
+        "originalPrice": 310,
+        "rating": 4.9,
+        "reviewsCount": 390,
+        "image": "",
+        "badges": [
+          "veg",
+          "chef-choice"
+        ],
+        "description": "Sweet slow-cooked caramelized onions, melted mozzarella & gruyere on garlic-buttered sourdough."
       },
       {
-        id: "bg-2",
-        name: "Mushroom Smash",
-        price: 250,
-        originalPrice: 330,
-        rating: 4.8,
-        reviewsCount: 390,
-        image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller"],
-        description: "Seared smash patty blanketed with garlic butter sautéed wild cremini mushrooms, melted swiss cheese, and caramelized shallot aioli.",
+        "id": "sd-2",
+        "name": "Magic Mushroom Crisp",
+        "price": 245,
+        "originalPrice": 310,
+        "rating": 4.8,
+        "reviewsCount": 260,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Pan-roasted button & shiitake mushrooms with melted provolone and truffle aioli."
       },
       {
-        id: "bg-3",
-        name: "Hotshot Chicken",
-        price: 230,
-        originalPrice: 310,
-        rating: 4.8,
-        reviewsCount: 430,
-        image: "https://images.unsplash.com/photo-1615297928064-24977384d0da?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "spicy"],
-        description: "Thick crispy fried chicken breast fillet dunked in fiery spicy glaze, crisp house slaw, jalapeños, and sriracha chili drizzle.",
+        "id": "sd-3",
+        "name": "Southside Chick",
+        "price": 285,
+        "originalPrice": 360,
+        "rating": 4.8,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Tender pulled chicken with hickory barbecue drizzle and house slaw."
       },
       {
-        id: "bg-4",
-        name: "Cheese Crash",
-        price: 260,
-        originalPrice: 350,
-        rating: 4.9,
-        reviewsCount: 510,
-        image: "https://images.unsplash.com/photo-1550547660-d9450f859349?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller", "new"],
-        description: "Double smashed patties overflowing with an insane waterfall of molten cheddar fondue, crispy onion rings & smoked bacon relish.",
+        "id": "sd-4",
+        "name": "Sweet Heat Chaos",
+        "price": 355,
+        "originalPrice": 440,
+        "rating": 4.9,
+        "reviewsCount": 340,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "spicy"
+        ],
+        "description": "Double-fried crispy chicken tossed in hot honey chili glaze with habanero jack cheese."
       },
       {
-        id: "bg-5",
-        name: "The Herbivore’s Hero",
-        price: 210,
-        originalPrice: 280,
-        rating: 4.7,
-        reviewsCount: 320,
-        image: "https://images.unsplash.com/photo-1520072959219-c595dc870360?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "chef-choice"],
-        description: "Handcrafted crispy spiced edamame & herb patty, smashed avocado, smoked gouda, pickled red onions, and heirloom tomato on potato bun.",
+        "id": "sd-5",
+        "name": "Hotter Than Me?",
+        "price": 295,
+        "originalPrice": 380,
+        "rating": 4.8,
+        "reviewsCount": 280,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "spicy"
+        ],
+        "description": "Nashville-spiced shredded chicken with fiery Carolina reaper dust and pickled jalapenos."
       },
-    ],
+      {
+        "id": "sd-6",
+        "name": "OG Crispy Chicken",
+        "price": 275,
+        "originalPrice": 350,
+        "rating": 4.9,
+        "reviewsCount": 420,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Buttermilk marinated fried chicken breast with garlic herb mayo and dill pickles."
+      },
+      {
+        "id": "sd-7",
+        "name": "Sweet Heat Paneer",
+        "price": 235,
+        "originalPrice": 300,
+        "rating": 4.8,
+        "reviewsCount": 240,
+        "image": "",
+        "badges": [
+          "veg",
+          "spicy"
+        ],
+        "description": "Griddled cottage cheese cubes tossed in sweet chili relish with melted mozzarella."
+      },
+      {
+        "id": "sd-8",
+        "name": "Double Smash Sando",
+        "price": 305,
+        "originalPrice": 390,
+        "rating": 4.9,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "chef-choice"
+        ],
+        "description": "Two seared smash patties sandwiched between butter-toasted thick brioche slices."
+      },
+      {
+        "id": "sd-9",
+        "name": "Original Crispy Chicken",
+        "price": 275,
+        "originalPrice": 350,
+        "rating": 4.8,
+        "reviewsCount": 220,
+        "image": "",
+        "badges": [
+          "non-veg"
+        ],
+        "description": "Traditional Southern style crispy chicken sando with tangy house tartar."
+      }
+    ]
   },
   {
-    id: "sandos",
-    name: "Sandos",
-    icon: "sandwich",
-    heroImage: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?q=80&w=1200&auto=format&fit=crop",
-    description: "Layered Japanese style toasted sandwich creations & gourmet artisan paninis",
-    items: [
+    "id": "the-wing-dept",
+    "name": "Wing Dept.",
+    "icon": "🍗",
+    "heroImage": "https://images.unsplash.com/photo-1527477396000-e27163b481c2?q=80&w=800",
+    "description": "Crispy chicken wings tossed in our signature house marinades.",
+    "items": [
       {
-        id: "sd-1",
-        name: "French Onion Melt",
-        price: 210,
-        originalPrice: 280,
-        rating: 4.8,
-        reviewsCount: 390,
-        image: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller", "chef-choice"],
-        description: "Slow-simmered rich caramelized onions, bubbling melted gruyere & mozzarella cheese toasted to crispy perfection on rustic sourdough.",
+        "id": "wd-1",
+        "name": "Fried Wings",
+        "price": 195,
+        "originalPrice": 250,
+        "rating": 4.8,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Crispy double-fried golden chicken wings seasoned with fine herbs and sea salt."
       },
       {
-        id: "sd-2",
-        name: "Mushroom & Mayhem",
-        price: 220,
-        originalPrice: 290,
-        rating: 4.7,
-        reviewsCount: 310,
-        image: "https://images.unsplash.com/photo-1509722747041-616f39b57569?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg"],
-        description: "Pan-roasted wild portobello mushrooms, garlic truffle aioli, baby spinach, and molten fontina cheese on crusty Italian loaf.",
+        "id": "wd-2",
+        "name": "Nashville Red Dust",
+        "price": 225,
+        "originalPrice": 290,
+        "rating": 4.9,
+        "reviewsCount": 420,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "spicy"
+        ],
+        "description": "Crispy wings coated in hot cayenne Nashville red dust butter."
       },
       {
-        id: "sd-3",
-        name: "Southside Chick",
-        price: 230,
-        originalPrice: 310,
-        rating: 4.9,
-        reviewsCount: 460,
-        image: "https://images.unsplash.com/photo-1567234669003-dce7a7a88821?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller"],
-        description: "Southern buttermilk fried chicken breast, house pimento cheese spread, dill pickles, and crisp honey-mustard coleslaw on toasted shokupan.",
-      },
-      {
-        id: "sd-4",
-        name: "Egg & Melt",
-        price: 180,
-        originalPrice: 240,
-        rating: 4.8,
-        reviewsCount: 340,
-        image: "https://images.unsplash.com/photo-1525351484163-7529414344d8?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "chef-choice"],
-        description: "Velvety soft-scrambled pasture eggs, chives, Japanese Kewpie mayo, melted sharp cheddar between thick butter-toasted milk bread.",
-      },
-      {
-        id: "sd-5",
-        name: "Sweet Heat Chaos",
-        price: 240,
-        originalPrice: 320,
-        rating: 4.8,
-        reviewsCount: 380,
-        image: "https://images.unsplash.com/photo-1553909489-cd47e0907980?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "spicy"],
-        description: "Crispy fried chicken katsu glazed in hot honey chili sauce, whipped jalapeño cream cheese, and pickled red cabbage crunch.",
-      },
-      {
-        id: "sd-6",
-        name: "Hot Spicy Crunch",
-        price: 240,
-        originalPrice: 320,
-        rating: 4.7,
-        reviewsCount: 320,
-        image: "https://images.unsplash.com/photo-1539252554453-80ab65ce3586?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "spicy"],
-        description: "Extra spicy crumbed chicken breast, ghost pepper aioli, melted pepper jack, pickled peppers, and shredded iceberg crunch.",
-      },
-      {
-        id: "sd-7",
-        name: "OG Crunchy Sando",
-        price: 220,
-        originalPrice: 290,
-        rating: 4.8,
-        reviewsCount: 410,
-        image: "https://images.unsplash.com/photo-1619860860774-1e2e17343432?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller"],
-        description: "The classic triple-layered crunchy chicken sando with crisp lettuce, heirloom tomato, smoked cheddar slice & house secret pink sauce.",
-      },
-    ],
+        "id": "wd-3",
+        "name": "Korean Wings",
+        "price": 235,
+        "originalPrice": 300,
+        "rating": 4.9,
+        "reviewsCount": 360,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "chef-choice"
+        ],
+        "description": "Wings glazed in sweet sticky Gochujang glaze topped with toasted sesame."
+      }
+    ]
   },
   {
-    id: "pasta",
-    name: "Pasta",
-    icon: "pasta",
-    heroImage: "https://images.unsplash.com/photo-1621996316565-e31514c9f056?q=80&w=1200&auto=format&fit=crop",
-    description: "Silky alfredo creams, vibrant pestos & slow-cooked coastal sauces",
-    items: [
+    "id": "pasta",
+    "name": "Pasta",
+    "icon": "🍝",
+    "heroImage": "https://images.unsplash.com/photo-1621996346565-e3d5d6281292?q=80&w=800",
+    "description": "Artisanal pasta tossed in rich velvety sauces prepared fresh.",
+    "items": [
       {
-        id: "pa-1",
-        name: "Alfredo Veg",
-        price: 240,
-        originalPrice: 320,
-        rating: 4.7,
-        reviewsCount: 310,
-        image: "https://images.unsplash.com/photo-1645112411341-6c4fd023714a?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg"],
-        description: "Tender penne pasta tossed in rich parmesan butter cream, sautéed broccoli florets, button mushrooms, and cracked black pepper.",
+        "id": "pa-1",
+        "name": "Creamy Alfredo (Veg)",
+        "price": 225,
+        "originalPrice": 290,
+        "rating": 4.9,
+        "reviewsCount": 420,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Silky fettuccine tossed in rich garlic parmesan cream sauce with sauteed mushrooms."
       },
       {
-        id: "pa-2",
-        name: "Alfredo Chicken",
-        price: 280,
-        originalPrice: 360,
-        rating: 4.9,
-        reviewsCount: 460,
-        image: "https://images.unsplash.com/photo-1621996316565-e31514c9f056?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller"],
-        description: "Al dente penne coated in velvety garlic parmesan cream sauce, loaded with tender grilled herb chicken strips and fresh parsley.",
+        "id": "pa-2",
+        "name": "Creamy Alfredo (Non-Veg)",
+        "price": 265,
+        "originalPrice": 340,
+        "rating": 4.9,
+        "reviewsCount": 460,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Rich garlic parmesan alfredo with tender grilled chicken slices and cracked black pepper."
       },
       {
-        id: "pa-3",
-        name: "Coastal Pasta",
-        price: 299,
-        originalPrice: 390,
-        rating: 4.8,
-        reviewsCount: 330,
-        image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "chef-choice", "spicy"],
-        description: "Spaghetti tossed in a vibrant coastal roasted tomato butter sauce infused with garlic, red chili flakes, seafood/chicken aromatics & sweet basil.",
+        "id": "pa-3",
+        "name": "Green Pesto (Veg)",
+        "price": 225,
+        "originalPrice": 290,
+        "rating": 4.8,
+        "reviewsCount": 290,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Penne coated in vibrant freshly pounded basil pine nut pesto and parmesan."
       },
       {
-        id: "pa-4",
-        name: "Pesto Chicken",
-        price: 290,
-        originalPrice: 380,
-        rating: 4.8,
-        reviewsCount: 390,
-        image: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?q=80&w=800&auto=format&fit=crop",
-        badges: ["non-veg", "bestseller"],
-        description: "Penne coated in freshly pounded Genoa basil & toasted walnut pesto, tender pan-seared chicken breast, cherry tomatoes & parmesan shavings.",
+        "id": "pa-4",
+        "name": "Green Pesto (Non-Veg)",
+        "price": 265,
+        "originalPrice": 340,
+        "rating": 4.8,
+        "reviewsCount": 320,
+        "image": "",
+        "badges": [
+          "non-veg"
+        ],
+        "description": "Basil pesto penne topped with herb-seared chicken breast and toasted walnut bits."
       },
       {
-        id: "pa-5",
-        name: "Pesto Veg",
-        price: 250,
-        originalPrice: 330,
-        rating: 4.7,
-        reviewsCount: 270,
-        image: "https://images.unsplash.com/photo-1597692493666-bfbfcb136eb5?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg"],
-        description: "Traditional Italian fragrant basil pesto pasta with sundried tomatoes, roasted pine nuts, tender zucchini coins, and mini bocconcini mozzarella.",
+        "id": "pa-5",
+        "name": "Alfredo Wedz Arabitta (Veg)",
+        "price": 245,
+        "originalPrice": 310,
+        "rating": 4.8,
+        "reviewsCount": 260,
+        "image": "",
+        "badges": [
+          "veg",
+          "spicy"
+        ],
+        "description": "Spicy pink sauce marrying creamy alfredo with tangy chili arrabbiata and veggies."
       },
-    ],
+      {
+        "id": "pa-6",
+        "name": "Alfredo Wedz Arabitta (Non-Veg)",
+        "price": 265,
+        "originalPrice": 340,
+        "rating": 4.9,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "spicy"
+        ],
+        "description": "Spicy pink sauce pasta loaded with spiced shredded chicken and Italian herbs."
+      },
+      {
+        "id": "pa-7",
+        "name": "Creamy Prawn Spaghetti",
+        "price": 295,
+        "originalPrice": 380,
+        "rating": 4.9,
+        "reviewsCount": 280,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "chef-choice"
+        ],
+        "description": "Delicate spaghetti tossed with sauteed sea prawns in garlic white butter cream."
+      },
+      {
+        "id": "pa-8",
+        "name": "Mac & Cheese (Veg)",
+        "price": 285,
+        "originalPrice": 360,
+        "rating": 4.8,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Elbow macaroni baked in three-cheese fondue with a golden crumb crust."
+      },
+      {
+        "id": "pa-9",
+        "name": "Mac & Cheese (Non-Veg)",
+        "price": 295,
+        "originalPrice": 380,
+        "rating": 4.9,
+        "reviewsCount": 340,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Creamy baked mac and cheese folded with grilled chicken pieces."
+      },
+      {
+        "id": "pa-10",
+        "name": "Coastal Pasta",
+        "price": 325,
+        "originalPrice": 410,
+        "rating": 4.9,
+        "reviewsCount": 390,
+        "image": "",
+        "badges": [
+          "non-veg",
+          "chef-choice"
+        ],
+        "description": "Chef special fusion pasta infused with coastal roasted spices, coconut cream and seafood."
+      }
+    ]
   },
   {
-    id: "milk-coffee",
-    name: "Milk Coffee",
-    icon: "coffee",
-    heroImage: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=1200&auto=format&fit=crop",
-    description: "Specialty cold espresso lattes crafted with gourmet natural syrups",
-    items: [
+    "id": "hot-coffee",
+    "name": "Hot Coffee",
+    "icon": "☕",
+    "heroImage": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=800",
+    "description": "Handcrafted espresso and freshly brewed hot artisanal coffees.",
+    "items": [
       {
-        id: "mc-1",
-        name: "Vanilla Iced Latte",
-        price: 160,
-        originalPrice: 220,
-        rating: 4.8,
-        reviewsCount: 340,
-        image: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Double shot of single-origin Arabica espresso poured over Madagascar vanilla bean infused cold milk and ice cubes.",
+        "id": "hc-1",
+        "name": "Filter Coffee",
+        "price": 30,
+        "originalPrice": 40,
+        "rating": 4.9,
+        "reviewsCount": 580,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Traditional South Indian chicory blend decoction frothed with rich hot milk."
       },
       {
-        id: "mc-2",
-        name: "Caramel Iced Latte",
-        price: 170,
-        originalPrice: 230,
-        rating: 4.9,
-        reviewsCount: 420,
-        image: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Decadent buttery salted caramel swirl coated along the glass, layered with bold espresso and chilled full cream milk.",
+        "id": "hc-2",
+        "name": "Americano",
+        "price": 65,
+        "originalPrice": 85,
+        "rating": 4.7,
+        "reviewsCount": 220,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Double shot of rich espresso diluted with hot filtered water."
       },
       {
-        id: "mc-3",
-        name: "Hazelnut Iced Latte",
-        price: 170,
-        originalPrice: 230,
-        rating: 4.8,
-        reviewsCount: 310,
-        image: "https://images.unsplash.com/photo-1534778101976-62847782c213?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "chef-choice"],
-        description: "Slow-roasted hazelnut syrup combined with rich dark espresso and velvety textured cold milk.",
+        "id": "hc-3",
+        "name": "Latte",
+        "price": 125,
+        "originalPrice": 160,
+        "rating": 4.8,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Velvety steamed whole milk poured gently over a single shot of fresh espresso."
       },
-    ],
+      {
+        "id": "hc-4",
+        "name": "Mocha",
+        "price": 149,
+        "originalPrice": 190,
+        "rating": 4.9,
+        "reviewsCount": 280,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Espresso combined with artisanal dark cocoa and silky steamed milk."
+      }
+    ]
   },
   {
-    id: "non-milk-coffee",
-    name: "Non Milk Coffee",
-    icon: "cold-brew",
-    heroImage: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=1200&auto=format&fit=crop",
-    description: "Clean, aromatic dark brews, sparkling citrus espressos & smoky notes",
-    items: [
+    "id": "iced-coffee",
+    "name": "Iced Coffee",
+    "icon": "🧊☕",
+    "heroImage": "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?q=80&w=800",
+    "description": "Chilled espresso brewed over ice for a crisp refreshing kick.",
+    "items": [
       {
-        id: "nmc-1",
-        name: "Americano",
-        price: 130,
-        originalPrice: 170,
-        rating: 4.7,
-        reviewsCount: 260,
-        image: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg"],
-        description: "Bold double shot of rich espresso topped with chilled mountain spring water over crystal ice for a clean aromatic profile.",
+        "id": "ic-1",
+        "name": "Iced Latte",
+        "price": 165,
+        "originalPrice": 210,
+        "rating": 4.8,
+        "reviewsCount": 340,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Chilled espresso poured over cold whole milk and ice blocks."
       },
       {
-        id: "nmc-2",
-        name: "Orange Sunset",
-        price: 180,
-        originalPrice: 240,
-        rating: 4.9,
-        reviewsCount: 380,
-        image: "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller", "chef-choice"],
-        description: "Freshly squeezed sweet Valencia orange juice crowned with a floating dark layer of specialty espresso over clear ice. A stunning sunset in a glass.",
+        "id": "ic-2",
+        "name": "Iced Americano",
+        "price": 80,
+        "originalPrice": 100,
+        "rating": 4.7,
+        "reviewsCount": 190,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Double shot espresso over cold sparkling iced water."
       },
       {
-        id: "nmc-3",
-        name: "Fudge Cigarette",
-        price: 190,
-        originalPrice: 250,
-        rating: 4.8,
-        reviewsCount: 290,
-        image: "https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "new"],
-        description: "Smoky dark cold brew infused with bittersweet dark chocolate fudge notes and finished with a charred cinnamon bark scent.",
+        "id": "ic-3",
+        "name": "Iced Mocha",
+        "price": 165,
+        "originalPrice": 210,
+        "rating": 4.8,
+        "reviewsCount": 270,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Rich chocolate ganache, double espresso, cold milk and ice."
       },
-    ],
+      {
+        "id": "ic-4",
+        "name": "Spanish Iced Latte",
+        "price": 170,
+        "originalPrice": 220,
+        "rating": 4.9,
+        "reviewsCount": 420,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Sweetened condensed milk balanced with bold espresso and cold milk over ice."
+      }
+    ]
   },
   {
-    id: "coolers",
-    name: "Coolers",
-    icon: "cooler",
-    heroImage: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=1200&auto=format&fit=crop",
-    description: "Sparkling fruit quenchers, crushed berries & vibrant citrus coolers",
-    items: [
+    "id": "coolers",
+    "name": "Coolers",
+    "icon": "🍹",
+    "heroImage": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=800",
+    "description": "Sparkling botanical fruit refreshers served over crushed ice.",
+    "items": [
       {
-        id: "co-1",
-        name: "Mango Passion",
-        price: 160,
-        originalPrice: 210,
-        rating: 4.8,
-        reviewsCount: 350,
-        image: "https://images.unsplash.com/photo-1536935338788-846bb9981813?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Alphonso mango nectar blended with exotic tart passionfruit reduction, topped with bubbly sparkling soda and mint.",
+        "id": "co-1",
+        "name": "Mango Passion",
+        "price": 155,
+        "originalPrice": 200,
+        "rating": 4.8,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Tropical Alphonso mango pulp muddled with tangy passionfruit and fizz."
       },
       {
-        id: "co-2",
-        name: "Merryberry Cooler",
-        price: 170,
-        originalPrice: 220,
-        rating: 4.9,
-        reviewsCount: 390,
-        image: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "chef-choice"],
-        description: "Wild blueberries, raspberries, and tart cranberry puree muddled with lime juice, sparkling water, and crushed crystal ice.",
+        "id": "co-2",
+        "name": "Mixberry Cooler",
+        "price": 155,
+        "originalPrice": 200,
+        "rating": 4.9,
+        "reviewsCount": 390,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Medley of crushed blackberries, raspberries, and blueberries with mint syrup."
       },
       {
-        id: "co-3",
-        name: "Strawberry Lemonade",
-        price: 150,
-        originalPrice: 200,
-        rating: 4.8,
-        reviewsCount: 310,
-        image: "https://images.unsplash.com/photo-1621263764928-df1444c5e859?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Fresh macerated ripe strawberries shaken with hand-squeezed tart lemon juice and chilled soda on the rocks.",
+        "id": "co-3",
+        "name": "Strawberry Lemonade",
+        "price": 145,
+        "originalPrice": 185,
+        "rating": 4.8,
+        "reviewsCount": 260,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Freshly squeezed lemon juice, sweet strawberry compote and sparkling soda."
       },
-    ],
+      {
+        "id": "co-4",
+        "name": "Fizzy Peach",
+        "price": 110,
+        "originalPrice": 140,
+        "rating": 4.7,
+        "reviewsCount": 180,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Juicy white peach syrup stirred with sparkling soda and ice."
+      },
+      {
+        "id": "co-5",
+        "name": "Fizzy Lemon",
+        "price": 110,
+        "originalPrice": 140,
+        "rating": 4.7,
+        "reviewsCount": 160,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Classic salted sweet lemon cooler with sparkling mineral water."
+      },
+      {
+        "id": "co-6",
+        "name": "Strawberry Peach",
+        "price": 145,
+        "originalPrice": 185,
+        "rating": 4.8,
+        "reviewsCount": 210,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Dual-layer fruit refresher of ripe strawberries and fragrant peaches."
+      },
+      {
+        "id": "co-7",
+        "name": "Blue Ocean",
+        "price": 135,
+        "originalPrice": 175,
+        "rating": 4.8,
+        "reviewsCount": 290,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Electric blue curacao syrup, lemon essence and effervescent soda."
+      }
+    ]
   },
   {
-    id: "iced-tea",
-    name: "Iced Tea",
-    icon: "tea",
-    heroImage: "https://images.unsplash.com/photo-1499638673689-79a0b5115d87?q=80&w=1200&auto=format&fit=crop",
-    description: "Slow-steeped artisan Ceylon teas infused with natural fruit nectars",
-    items: [
+    "id": "shakes",
+    "name": "Shakes",
+    "icon": "🥤",
+    "heroImage": "https://images.unsplash.com/photo-1572490122747-3968b75cc699?q=80&w=800",
+    "description": "Thick ice cream shakes spun fresh to order.",
+    "items": [
       {
-        id: "it-1",
-        name: "Peach Iced Tea",
-        price: 140,
-        originalPrice: 190,
-        rating: 4.8,
-        reviewsCount: 370,
-        image: "https://images.unsplash.com/photo-1499638673689-79a0b5115d87?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Slow-brewed aromatic black tea infused with sweet peach puree, lemon juice, and bruised garden mint leaves.",
+        "id": "sh-1",
+        "name": "Milo Shake",
+        "price": 195,
+        "originalPrice": 250,
+        "rating": 4.9,
+        "reviewsCount": 480,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Malty chocolate Milo blended thick with vanilla bean gelato and malt dust."
       },
       {
-        id: "it-2",
-        name: "Lemon Iced Tea",
-        price: 130,
-        originalPrice: 180,
-        rating: 4.7,
-        reviewsCount: 290,
-        image: "https://images.unsplash.com/photo-1556679343-c7306c1976bc?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg"],
-        description: "Classic crisp iced tea brewed from premium tea leaves, sweetened with raw cane sugar and spiked with fresh Meyer lemon juice.",
+        "id": "sh-2",
+        "name": "Biscoff Shake",
+        "price": 205,
+        "originalPrice": 260,
+        "rating": 4.9,
+        "reviewsCount": 510,
+        "image": "",
+        "badges": [
+          "veg",
+          "chef-choice"
+        ],
+        "description": "Lotus Biscoff cookie butter shake crowned with crunchy caramelized biscuit crumble."
       },
-    ],
+      {
+        "id": "sh-3",
+        "name": "Peanut Butter Shake",
+        "price": 195,
+        "originalPrice": 250,
+        "rating": 4.8,
+        "reviewsCount": 290,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Creamy roasted peanut butter blended with dairy milk and honey."
+      }
+    ]
   },
   {
-    id: "shakes",
-    name: "Shakes",
-    icon: "shake",
-    heroImage: "https://images.unsplash.com/photo-1572490122747-3968b75cc699?q=80&w=1200&auto=format&fit=crop",
-    description: "Decadent thick gelato shakes crowned with whipped cream & crunch toppings",
-    items: [
+    "id": "speciality",
+    "name": "Speciality",
+    "icon": "✨",
+    "heroImage": "https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=800",
+    "description": "Unique signature dessert drinks and confectionery specials.",
+    "items": [
       {
-        id: "sh-1",
-        name: "Milo Shake",
-        price: 180,
-        originalPrice: 240,
-        rating: 4.8,
-        reviewsCount: 420,
-        image: "https://images.unsplash.com/photo-1579954115545-a95591f28bfc?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller"],
-        description: "Thick malted chocolate Milo shake blended with vanilla ice cream, dusted with crunchy raw Milo powder and chocolate chips.",
+        "id": "sp-1",
+        "name": "Mont Blanc",
+        "price": 180,
+        "originalPrice": 230,
+        "rating": 4.9,
+        "reviewsCount": 240,
+        "image": "",
+        "badges": [
+          "veg",
+          "chef-choice"
+        ],
+        "description": "Iced dark roast crowned with a mountain of velvety sweet cream foam."
       },
       {
-        id: "sh-2",
-        name: "Biscoff Shake",
-        price: 199,
-        originalPrice: 260,
-        rating: 4.9,
-        reviewsCount: 480,
-        image: "https://images.unsplash.com/photo-1572490122747-3968b75cc699?q=80&w=800&auto=format&fit=crop",
-        badges: ["veg", "bestseller", "chef-choice"],
-        description: "Rich vanilla bean gelato blended with Belgian Lotus Biscoff spread, caramel swirl, and crunchy spiced speculoos biscuits.",
+        "id": "sp-2",
+        "name": "Blue Cloud",
+        "price": 175,
+        "originalPrice": 225,
+        "rating": 4.8,
+        "reviewsCount": 190,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Dreamy blue butterfly pea botanical infusion layered over silky coconut cream."
       },
-    ],
+      {
+        "id": "sp-3",
+        "name": "Fridge Cigar",
+        "price": 165,
+        "originalPrice": 210,
+        "rating": 4.8,
+        "reviewsCount": 310,
+        "image": "",
+        "badges": [
+          "veg",
+          "bestseller"
+        ],
+        "description": "Crisp wafer roll filled with rich dark chocolate fudge ganache."
+      }
+    ]
   },
+  {
+    "id": "baristazz-special",
+    "name": "Baristazz Special",
+    "icon": "🍸",
+    "heroImage": "https://images.unsplash.com/photo-1551024709-8f23befc6f87?q=80&w=800",
+    "description": "Artisanal barista concoctions pushing flavor boundaries.",
+    "items": [
+      {
+        "id": "bs-1",
+        "name": "Soft Cisz Mango",
+        "price": 179,
+        "originalPrice": 230,
+        "rating": 4.9,
+        "reviewsCount": 220,
+        "image": "",
+        "badges": [
+          "veg",
+          "chef-choice"
+        ],
+        "description": "Spiced mango puree shaken with elderflower tonic and crushed ice."
+      },
+      {
+        "id": "bs-2",
+        "name": "Cool Tonic",
+        "price": 149,
+        "originalPrice": 190,
+        "rating": 4.8,
+        "reviewsCount": 180,
+        "image": "",
+        "badges": [
+          "veg"
+        ],
+        "description": "Crisp botanical tonic water stirred with fresh cucumber ribbons and lime peel."
+      }
+    ]
+  }
 ];
