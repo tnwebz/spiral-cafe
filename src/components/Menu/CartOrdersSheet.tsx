@@ -558,10 +558,12 @@ export default function CartOrdersSheet() {
                     <span>Item Subtotal</span>
                     <span className="font-bold text-[#4A2117]">₹{subtotal}</span>
                   </div>
-                  <div className="flex justify-between text-[#8C5E51]">
-                    <span>Taxes (GST {taxPercentage}%)</span>
-                    <span className="font-bold text-[#4A2117]">₹{tax}</span>
-                  </div>
+                  {tax > 0 && (
+                    <div className="flex justify-between text-[#8C5E51]">
+                      <span>Taxes (GST {taxPercentage}%)</span>
+                      <span className="font-bold text-[#4A2117]">₹{tax}</span>
+                    </div>
+                  )}
                   {packagingFee > 0 && (
                     <div className="flex justify-between text-[#8C5E51]">
                       <span>Packaging Fee</span>
@@ -1427,10 +1429,12 @@ export default function CartOrdersSheet() {
                   <span>Item Subtotal</span>
                   <span className="font-bold text-[#4A2117]">₹{subtotal}</span>
                 </div>
-                <div className="flex justify-between text-[#8C5E51]">
-                  <span>GST ({taxPercentage}%)</span>
-                  <span className="font-bold text-[#4A2117]">₹{tax}</span>
-                </div>
+                {tax > 0 && (
+                  <div className="flex justify-between text-[#8C5E51]">
+                    <span>GST ({taxPercentage}%)</span>
+                    <span className="font-bold text-[#4A2117]">₹{tax}</span>
+                  </div>
+                )}
                 {packagingFee > 0 && (
                   <div className="flex justify-between text-[#8C5E51]">
                     <span>Packaging Fee</span>

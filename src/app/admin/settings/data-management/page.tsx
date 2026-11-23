@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
+import AnalyticsPinGate from "@/components/Admin/AnalyticsPinGate";
 import {
   ArrowLeft,
   Database,
@@ -58,6 +59,20 @@ export default function DataManagementPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [overview, setOverview] = useState<StorageOverview | null>(null);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
+
+  // Security Lock Protection (1234)
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("spiral_settings_unlocked");
+      if (saved === "true") {
+        setIsUnlocked(true);
+      }
+    } catch {}
+    setCheckingUnlock(false);
+  }, []);
 
   // Tab 2: Export State
   const [startDate, setStartDate] = useState(() => {
@@ -461,6 +476,30 @@ export default function DataManagementPage() {
       );
     });
   }, [viewerPayload, viewerSearch]);
+
+  if (checkingUnlock) {
+    return (
+      <AdminLayout>
+        <div className="min-h-[50vh] flex items-center justify-center">
+          <div className="w-7 h-7 border-2 border-[#CA340A] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isUnlocked) {
+    return (
+      <AdminLayout>
+        <AnalyticsPinGate
+          storageKey="spiral_settings_unlocked"
+          backHref="/admin/settings"
+          title="Data Management Protected"
+          subtitle="Enter the 4-digit security PIN (1234) to view and manage database records and archives."
+          onUnlock={() => setIsUnlocked(true)}
+        />
+      </AdminLayout>
+    );
+  }
 
   if (loading && !overview) {
     return (

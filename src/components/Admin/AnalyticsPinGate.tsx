@@ -8,6 +8,8 @@ interface AnalyticsPinGateProps {
   onUnlock: () => void;
   title?: string;
   subtitle?: string;
+  storageKey?: string;
+  backHref?: string;
 }
 
 const REQUIRED_PIN = "1234";
@@ -16,6 +18,8 @@ export default function AnalyticsPinGate({
   onUnlock,
   title = "Sales & Analytics Protected",
   subtitle = "Enter the 4-digit security PIN to view sales metrics and revenue reports.",
+  storageKey = "spiral_analytics_unlocked",
+  backHref = "/admin",
 }: AnalyticsPinGateProps) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -37,7 +41,7 @@ export default function AnalyticsPinGate({
     setTimeout(() => {
       if (candidatePin === REQUIRED_PIN) {
         try {
-          sessionStorage.setItem("spiral_analytics_unlocked", "true");
+          sessionStorage.setItem(storageKey, "true");
         } catch {}
         onUnlock();
       } else {
@@ -79,7 +83,7 @@ export default function AnalyticsPinGate({
         {/* Back Link */}
         <div className="flex justify-start mb-4">
           <Link
-            href="/admin"
+            href={backHref}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 transition-colors py-1 px-2.5 rounded-lg hover:bg-zinc-100"
           >
             <ArrowLeft size={14} />
