@@ -91,7 +91,7 @@ export default function PrintDesignShowcase() {
     out += `${div}\nITEM                         QTY\n${div}\n`;
     currentItems.forEach((it) => {
       const tag = it.isParcel || isAllTakeaway ? "(Parcel)" : "(Dine In)";
-      const fullName = `${it.name} ${tag}`;
+      const fullName = `${it.name} - ${tag}`;
       const qtyStr = String(it.quantity);
       const pad = Math.max(1, W - fullName.length - qtyStr.length);
       out += `${fullName}${" ".repeat(pad)}${qtyStr}\n`;
@@ -118,7 +118,7 @@ export default function PrintDesignShowcase() {
     out += `ITEM                         QTY\n${div}\n`;
     currentItems.forEach((it) => {
       const tag = it.isParcel || isAllTakeaway ? "(Parcel)" : "(Dine In)";
-      const fullName = `${it.name} ${tag}`;
+      const fullName = `${it.name} - ${tag}`;
       const qtyStr = String(it.quantity);
       const pad = Math.max(1, W - fullName.length - qtyStr.length);
       out += `${fullName}${" ".repeat(pad)}${qtyStr}\n`;
@@ -452,7 +452,7 @@ export default function PrintDesignShowcase() {
                         className="flex justify-between items-baseline text-xs"
                       >
                         <span className="font-black text-black leading-snug pr-2">
-                          {item.name} {tag}
+                          {item.name} - {tag}
                         </span>
                         <span className="font-black text-black text-sm shrink-0">
                           {item.quantity}
@@ -587,7 +587,7 @@ export default function PrintDesignShowcase() {
                         className="flex justify-between items-baseline text-xs"
                       >
                         <span className="font-black text-black leading-snug pr-2">
-                          {item.name} {tag}
+                          {item.name} - {tag}
                         </span>
                         <span className="font-black text-black text-sm shrink-0">
                           {item.quantity}

@@ -35,6 +35,47 @@ export class KotReceiptEngine {
     return `${left}${" ".repeat(spaceCount)}${right}`;
   }
 
+  private static wrapText(text: string, maxWidth: number): string[] {
+    const words = text.trim().split(/\s+/);
+    const lines: string[] = [];
+    let currentLine = "";
+
+    for (const word of words) {
+      if (!currentLine) {
+        if (word.length <= maxWidth) {
+          currentLine = word;
+        } else {
+          let rem = word;
+          while (rem.length > maxWidth) {
+            lines.push(rem.substring(0, maxWidth));
+            rem = rem.substring(maxWidth);
+          }
+          currentLine = rem;
+        }
+      } else {
+        if ((currentLine + " " + word).length <= maxWidth) {
+          currentLine += " " + word;
+        } else {
+          lines.push(currentLine);
+          if (word.length <= maxWidth) {
+            currentLine = word;
+          } else {
+            let rem = word;
+            while (rem.length > maxWidth) {
+              lines.push(rem.substring(0, maxWidth));
+              rem = rem.substring(maxWidth);
+            }
+            currentLine = rem;
+          }
+        }
+      }
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    return lines.length > 0 ? lines : [text.substring(0, maxWidth)];
+  }
+
   static formatPlainSlip(data: KotData): string {
     const width = 32;
     const divider = "-".repeat(width);
@@ -76,13 +117,22 @@ export class KotReceiptEngine {
         (!isMixedOrder && Boolean(data.isTakeaway));
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
+        .replace(/\s*-\s*\(dine in\)/gi, "")
         .replace(/\s*\(parcel\)/gi, "")
         .replace(/\s*\(dine in\)/gi, "")
+        .replace(/\s*\[parcel\]/gi, "")
+        .replace(/\s*\[dine in\]/gi, "")
         .trim();
       const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
-      const fullName = `${cleanName} ${tag}`;
-
-      lines.push(this.formatLine(fullName.substring(0, 26), String(item.quantity), width));
+      const fullName = `${cleanName} - ${tag}`;
+      const qtyStr = String(item.quantity);
+      const maxFirstLine = width - qtyStr.length - 1;
+      const wrapped = this.wrapText(fullName, maxFirstLine);
+      const firstLine = wrapped[0] || fullName.substring(0, maxFirstLine);
+      lines.push(this.formatLine(firstLine, qtyStr, width));
+      for (let i = 1; i < wrapped.length; i++) {
+        lines.push(wrapped[i]);
+      }
 
       // Print legitimate kitchen customization notes, but skip redundant dine-in/parcel tags
       if (item.notes) {
@@ -198,23 +248,24 @@ export class KotReceiptEngine {
         isTakeaway;
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
+        .replace(/\s*-\s*\(dine in\)/gi, "")
         .replace(/\s*\(parcel\)/gi, "")
         .replace(/\s*\(dine in\)/gi, "")
+        .replace(/\s*\[parcel\]/gi, "")
+        .replace(/\s*\[dine in\]/gi, "")
         .trim();
       const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
-      const fullName = `${cleanName} ${tag}`;
+      const fullName = `${cleanName} - ${tag}`;
 
       commands += `${GS}!\x00`;  // Normal size (1x width, 1x height)
       commands += `${ESC}E\x01`; // Bold ON
       const qtyStr = String(item.quantity);
       const maxFirstLine = width - qtyStr.length - 1;
-      if (fullName.length <= maxFirstLine) {
-        commands += `${this.formatLine(fullName, qtyStr, width)}\n`;
-      } else {
-        const firstLine = fullName.substring(0, maxFirstLine);
-        const rem = fullName.substring(maxFirstLine).trim();
-        commands += `${this.formatLine(firstLine, qtyStr, width)}\n`;
-        commands += `${rem}\n`;
+      const wrapped = this.wrapText(fullName, maxFirstLine);
+      const firstLine = wrapped[0] || fullName.substring(0, maxFirstLine);
+      commands += `${this.formatLine(firstLine, qtyStr, width)}\n`;
+      for (let i = 1; i < wrapped.length; i++) {
+        commands += `${wrapped[i]}\n`;
       }
       commands += `${ESC}E\x00`; // Bold OFF
 
