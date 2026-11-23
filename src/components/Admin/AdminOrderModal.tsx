@@ -71,8 +71,20 @@ export default function AdminOrderModal({
 
   // Cart: Map of key `${item.id}__${isParcel ? 'parcel' : 'dinein'}` -> CartEntry
   const [cart, setCart] = useState<Map<string, CartEntry>>(new Map());
+  const [taxRate, setTaxRate] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "SUCCESS" | "ERROR" | "WARNING"; message: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.config && typeof d.config.taxPercentage === "number") {
+          setTaxRate(d.config.taxPercentage);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Load Menu items
   useEffect(() => {
@@ -269,7 +281,7 @@ export default function AdminOrderModal({
   }));
   const totalItemsCount = cartEntriesList.reduce((sum, c) => sum + c.quantity, 0);
   const subtotal = cartEntriesList.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
-  const tax = Math.round(subtotal * 0.05); // 5% GST
+  const tax = Math.round((subtotal * taxRate) / 100);
   const grandTotal = subtotal + tax;
 
   const hasAnyParcel = cartEntriesList.some((c) => c.isParcel) || isSeparateTakeaway;

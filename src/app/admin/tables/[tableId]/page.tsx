@@ -1661,10 +1661,12 @@ export default function TableDetailPage() {
                     </span>
                     <span className="font-bold text-zinc-800">₹{displayAcceptedSubtotal}</span>
                   </div>
-                  <div className="flex justify-between text-zinc-600">
-                    <span>GST Tax (5%)</span>
-                    <span className="font-bold text-zinc-800">₹{displayAcceptedTax}</span>
-                  </div>
+                  {displayAcceptedTax > 0 && (
+                    <div className="flex justify-between text-zinc-600">
+                      <span>GST Tax</span>
+                      <span className="font-bold text-zinc-800">₹{displayAcceptedTax}</span>
+                    </div>
+                  )}
                   {displayAcceptedPackaging > 0 && (
                     <div className="flex justify-between text-zinc-600">
                       <span>Packaging</span>

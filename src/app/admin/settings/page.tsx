@@ -97,9 +97,15 @@ export default function AdminSettingsPage() {
             cafeAddress: config.cafeAddress,
             cafePhone: config.cafePhone,
             gstNumber: config.gstNumber,
-            taxPercentage: parseFloat(config.taxPercentage) || 5,
-            packagingFee: parseFloat(config.packagingFee) || 0,
-            serviceCharge: parseFloat(config.serviceCharge) || 0,
+            taxPercentage: isNaN(parseFloat(config.taxPercentage))
+              ? 0
+              : Math.max(0, parseFloat(config.taxPercentage)),
+            packagingFee: isNaN(parseFloat(config.packagingFee))
+              ? 0
+              : Math.max(0, parseFloat(config.packagingFee)),
+            serviceCharge: isNaN(parseFloat(config.serviceCharge))
+              ? 0
+              : Math.max(0, parseFloat(config.serviceCharge)),
             kitchenPin: config.kitchenPin,
             cashierPin: config.cashierPin,
             adminPin: config.adminPin,
@@ -279,7 +285,7 @@ export default function AdminSettingsPage() {
                   type="number"
                   step="0.5"
                   min="0"
-                  value={config.taxPercentage}
+                  value={config.taxPercentage ?? ""}
                   onChange={(e) =>
                     setConfig({ ...config, taxPercentage: e.target.value })
                   }
@@ -295,7 +301,7 @@ export default function AdminSettingsPage() {
                   type="number"
                   step="1"
                   min="0"
-                  value={config.packagingFee}
+                  value={config.packagingFee ?? ""}
                   onChange={(e) =>
                     setConfig({ ...config, packagingFee: e.target.value })
                   }
@@ -311,7 +317,7 @@ export default function AdminSettingsPage() {
                   type="number"
                   step="1"
                   min="0"
-                  value={config.serviceCharge}
+                  value={config.serviceCharge ?? ""}
                   onChange={(e) =>
                     setConfig({ ...config, serviceCharge: e.target.value })
                   }

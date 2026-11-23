@@ -1182,13 +1182,15 @@ export async function updateOrderItemQuantityOrDelete(params: {
       );
     } catch {}
   } else {
+    const config = await getConfig();
     const newSubtotal = remaining.reduce((acc: number, it: any) => acc + Number(it.line_total || 0), 0);
     const isPrivate =
       current.orderType === "PRIVATE" ||
       current.tableNumber === "COUNTER" ||
       current.tableNumber === "GIVE ON COUNTER" ||
       (current.notes || "").includes("[ORDER_TYPE:PRIVATE]");
-    const newTax = isPrivate ? 0 : Math.round(newSubtotal * 0.05);
+    const taxRate = typeof config.taxPercentage === "number" ? config.taxPercentage : 0;
+    const newTax = isPrivate ? 0 : Math.round((newSubtotal * taxRate) / 100);
     const newGrandTotal = newSubtotal + newTax + (current.packagingFee || 0) + (current.serviceCharge || 0);
 
     await supabaseAdmin
@@ -1273,13 +1275,15 @@ export async function addOrderItemToOrder(params: {
     .eq("order_id", current.id);
 
   const allItems = allItemsData || [];
+  const config = await getConfig();
   const newSubtotal = allItems.reduce((acc: number, it: any) => acc + Number(it.line_total || 0), 0);
   const isPrivate =
     current.orderType === "PRIVATE" ||
     current.tableNumber === "COUNTER" ||
     current.tableNumber === "GIVE ON COUNTER" ||
     (current.notes || "").includes("[ORDER_TYPE:PRIVATE]");
-  const newTax = isPrivate ? 0 : Math.round(newSubtotal * 0.05);
+  const taxRate = typeof config.taxPercentage === "number" ? config.taxPercentage : 0;
+  const newTax = isPrivate ? 0 : Math.round((newSubtotal * taxRate) / 100);
   const newGrandTotal = newSubtotal + newTax + (current.packagingFee || 0) + (current.serviceCharge || 0);
 
   // If order was CANCELLED earlier, bring it back to PENDING since items are present
