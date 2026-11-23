@@ -127,8 +127,13 @@ export class KotReceiptEngine {
     // 1. Initialize printer
     commands += `${ESC}@`;
 
-    // 2. Set character code page to standard PC437
+    // 2. Set character code page to standard PC437, Font A (12x24), Normal 1x1 size, and default line spacing
     commands += `${ESC}t\x00`;
+    commands += `${ESC}M\x00`; // Standard Font A
+    commands += `${GS}!\x00`;  // Normal size (1x width, 1x height)
+    commands += `${ESC}2`;     // Default line spacing
+    commands += `${ESC}E\x00`; // Bold OFF
+    commands += `${GS}B\x00`;  // Reverse OFF
 
     const hasParcelItem = data.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
     const hasDineInItem = data.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
@@ -199,8 +204,18 @@ export class KotReceiptEngine {
       const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
       const fullName = `${cleanName} ${tag}`;
 
+      commands += `${GS}!\x00`;  // Normal size (1x width, 1x height)
       commands += `${ESC}E\x01`; // Bold ON
-      commands += `${this.formatLine(fullName.substring(0, 26), String(item.quantity), width)}\n`;
+      const qtyStr = String(item.quantity);
+      const maxFirstLine = width - qtyStr.length - 1;
+      if (fullName.length <= maxFirstLine) {
+        commands += `${this.formatLine(fullName, qtyStr, width)}\n`;
+      } else {
+        const firstLine = fullName.substring(0, maxFirstLine);
+        const rem = fullName.substring(maxFirstLine).trim();
+        commands += `${this.formatLine(firstLine, qtyStr, width)}\n`;
+        commands += `${rem}\n`;
+      }
       commands += `${ESC}E\x00`; // Bold OFF
 
       if (item.notes) {
