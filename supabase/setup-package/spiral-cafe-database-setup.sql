@@ -1,42 +1,20 @@
 -- ==============================================================================
--- SPIRAL CAFE — COMPLETE PORTABLE SUPABASE DATABASE SETUP & RESTORATION SCRIPT
--- Application: Spiral Cafe Point of Sale & Customer QR Ordering System
--- Platform: Supabase PostgreSQL 15+ / Cloudflare Workers / Next.js 16
--- Generation Date: 2026-11-12
---
--- INSTRUCTIONS FOR NEW SUPABASE PROJECT:
--- 1. Open the Supabase Dashboard for the restaurant owner's project.
--- 2. Navigate to SQL Editor -> New Query.
--- 3. Paste the entire contents of this file and click "Run".
--- 4. Verify all tables and 41 menu items are created successfully.
---
--- GUARANTEES:
--- - Idempotent: Can be run multiple times safely.
--- - Clean Start: All customer data, previous orders, and sensitive PINs are omitted.
--- - Zero Image Asset Leaks: Image columns are preserved without external URLs.
--- - Floor Tables: All 15 restaurant tables initialize in AVAILABLE state.
+-- SPIRAL CAFE POS — CONSOLIDATED MASTER SUPABASE DATABASE SETUP SCRIPT
+-- Version: 2.0 (Full FIFO Costing, QR Ordering, Table Transfers, Archives)
+-- Target Engine: PostgreSQL 15+ / Supabase
+-- Execution: Can be run all-at-once in Supabase SQL Editor on a clean project.
+-- Idempotency: Completely safe to run multiple times (IF NOT EXISTS / DO NOTHING).
 -- ==============================================================================
 
-\set ON_ERROR_STOP on
-
-
--- ------------------------------------------------------------------------------
--- SECTION: schema/tables.sql
--- ------------------------------------------------------------------------------
-
--- ==============================================================================
--- Spiral Cafe POS — Comprehensive Schema Tables DDL
--- Target: PostgreSQL 15+ / Supabase
--- Dependency Order: Strict foreign-key-safe ordering
--- ==============================================================================
-
--- 1. Enable Required Extensions
+-- 1. EXTENSIONS
 create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
 
 -- ==============================================================================
--- 2. CAFE CONFIGURATION (Singleton)
+-- 2. CORE CONFIGURATION & MENU TABLES
 -- ==============================================================================
+
+-- 2.1 Cafe Configuration Singleton
 create table if not exists public.cafe_config (
   id integer primary key default 1 check (id = 1),
   tax_percentage numeric(5,2) not null default 5.00,
@@ -55,9 +33,7 @@ create table if not exists public.cafe_config (
   updated_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 3. MENU CATALOG ITEMS
--- ==============================================================================
+-- 2.2 Menu Items Catalog
 create table if not exists public.menu_items (
   id text primary key,
   name text not null,
@@ -77,9 +53,7 @@ create table if not exists public.menu_items (
   updated_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 4. CUSTOMERS LEDGER
--- ==============================================================================
+-- 2.3 Customers Ledger
 create table if not exists public.customers (
   id text primary key,
   phone_number text unique not null,
@@ -95,9 +69,7 @@ create table if not exists public.customers (
   updated_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 5. CUSTOMER VISIT SESSIONS (Guest Session Isolation)
--- ==============================================================================
+-- 2.4 Customer Visit Sessions (QR Guest Isolation)
 create table if not exists public.customer_sessions (
   id text primary key,
   customer_id text references public.customers(id) on delete set null,
@@ -109,8 +81,10 @@ create table if not exists public.customer_sessions (
 );
 
 -- ==============================================================================
--- 6. ORDERS LEDGER
+-- 3. ORDERS & ORDER ITEMS
 -- ==============================================================================
+
+-- 3.1 Orders Ledger (Customer Dine-In, Takeaway & Private Orders)
 create table if not exists public.orders (
   id text primary key,
   order_number text unique not null,
@@ -119,11 +93,17 @@ create table if not exists public.orders (
   customer_session_id text references public.customer_sessions(id) on delete set null,
   customer_id text references public.customers(id) on delete set null,
   customer_phone text,
+  customer_name text,
+  order_type text not null default 'CUSTOMER' check (order_type in ('CUSTOMER', 'PRIVATE')),
+  private_purpose text,
+  private_note text,
   subtotal numeric(10,2) not null default 0.00,
   tax numeric(10,2) not null default 0.00,
   packaging_fee numeric(10,2) not null default 0.00,
   service_charge numeric(10,2) not null default 0.00,
+  discount numeric(10,2) not null default 0.00,
   grand_total numeric(10,2) not null default 0.00,
+  change_due numeric(10,2) not null default 0.00,
   status text not null default 'PENDING' check (status in ('PENDING', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED')),
   payment_status text not null default 'UNPAID' check (payment_status in ('UNPAID', 'PENDING_CASH', 'PAID', 'FAILED', 'REFUNDED')),
   payment_method text not null default 'UNSELECTED' check (payment_method in ('UNSELECTED', 'CASH', 'ONLINE')),
@@ -141,9 +121,7 @@ create table if not exists public.orders (
   cancelled_at timestamptz
 );
 
--- ==============================================================================
--- 7. ORDER ITEMS (Normalized Line Items)
--- ==============================================================================
+-- 3.2 Order Items Line Ledger
 create table if not exists public.order_items (
   id text primary key,
   order_id text not null references public.orders(id) on delete cascade,
@@ -152,13 +130,17 @@ create table if not exists public.order_items (
   price numeric(10,2) not null check (price >= 0),
   quantity integer not null default 1 check (quantity > 0),
   line_total numeric(10,2) not null check (line_total >= 0),
+  order_type text not null default 'DINE_IN' check (order_type in ('DINE_IN', 'TAKEAWAY')),
+  round integer not null default 1 check (round >= 1),
   image text default '',
   notes text
 );
 
 -- ==============================================================================
--- 8. RESTAURANT TABLES (Floor Management & 5-Color Status System)
+-- 4. TABLES, RESERVATIONS & TRANSFERS
 -- ==============================================================================
+
+-- 4.1 Restaurant Tables (Floor Management & 5-Color System)
 create table if not exists public.restaurant_tables (
   id text primary key,
   table_number text unique not null,
@@ -173,9 +155,7 @@ create table if not exists public.restaurant_tables (
   updated_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 9. TABLE RESERVATIONS (10-Minute Temporary Hold & Visit Mapping)
--- ==============================================================================
+-- 4.2 Table Reservations (10-Minute Hold & Customer Session Lock)
 create table if not exists public.table_reservations (
   id text primary key,
   table_number text not null,
@@ -192,9 +172,29 @@ create table if not exists public.table_reservations (
   updated_at timestamptz not null default now()
 );
 
+-- 4.3 Table Transfer Requests (Customer Request & Admin Counter Approval)
+create table if not exists public.table_transfer_requests (
+  id text primary key,
+  from_table text not null,
+  to_table text not null,
+  customer_session_id text not null,
+  customer_phone text,
+  order_count integer not null default 0,
+  current_bill numeric(10,2) not null default 0.00,
+  requested_at timestamptz not null default now(),
+  status text not null default 'PENDING' check (status in ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')),
+  decision_by text,
+  decision_at timestamptz,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- ==============================================================================
--- 10. KITCHEN ORDER TICKETS (KOT Lifecycle & Multiple Rounds)
+-- 5. KOT & HARDWARE PRINTER LOGGING
 -- ==============================================================================
+
+-- 5.1 Kitchen Order Tickets (KOT Lifecycle)
 create table if not exists public.kots (
   id text primary key,
   order_id text not null references public.orders(id) on delete cascade,
@@ -215,9 +215,7 @@ create table if not exists public.kots (
   updated_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 11. PRINT ATTEMPTS AUDIT LEDGER (Hardware Delivery History)
--- ==============================================================================
+-- 5.2 Hardware Print Attempts Ledger
 create table if not exists public.print_attempts (
   id text primary key,
   kot_id text references public.kots(id) on delete cascade,
@@ -233,14 +231,12 @@ create table if not exists public.print_attempts (
   created_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 12. PRINTER SETTINGS (Hardware Connection State)
--- ==============================================================================
+-- 5.3 Hardware Printer Settings Singleton
 create table if not exists public.printer_settings (
   id integer primary key default 1 check (id = 1),
   printer_model text not null default 'CN811-UEWB',
   interface_type text not null default 'ETHERNET' check (interface_type in ('ETHERNET', 'WIFI', 'USB', 'BLUETOOTH')),
-  ip_address text not null default '192.168.1.233',
+  ip_address text not null default '192.168.1.50',
   port integer not null default 9100,
   paper_width_mm integer not null default 80,
   qz_printer_name text not null default 'CN811-UEWB',
@@ -250,8 +246,10 @@ create table if not exists public.printer_settings (
 );
 
 -- ==============================================================================
--- 13. PAYMENTS LEDGER (Online / Gateway Verification)
+-- 6. BILLING, PAYMENTS & AUDIT TRAILS
 -- ==============================================================================
+
+-- 6.1 Online & Digital Payments Ledger
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
   order_id text not null references public.orders(id) on delete cascade,
@@ -267,9 +265,7 @@ create table if not exists public.payments (
   verified_at timestamptz
 );
 
--- ==============================================================================
--- 14. INVOICES (Immutable Billing Records)
--- ==============================================================================
+-- 6.2 Invoices (Immutable Billing Records)
 create table if not exists public.invoices (
   id text primary key,
   invoice_number text unique not null,
@@ -294,9 +290,7 @@ create table if not exists public.invoices (
   created_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 15. INVOICE ITEMS (Immutable Item Snapshots)
--- ==============================================================================
+-- 6.3 Invoice Items (Immutable Snapshots)
 create table if not exists public.invoice_items (
   id text primary key,
   invoice_id text not null references public.invoices(id) on delete cascade,
@@ -307,9 +301,7 @@ create table if not exists public.invoice_items (
   line_total numeric(10,2) not null check (line_total >= 0)
 );
 
--- ==============================================================================
--- 16. SETTLEMENTS (Daily Register Closures & Cash Audits)
--- ==============================================================================
+-- 6.4 Register Closures & Cash Settlements
 create table if not exists public.settlements (
   id text primary key,
   date text not null,
@@ -325,9 +317,7 @@ create table if not exists public.settlements (
   settled_at timestamptz not null default now()
 );
 
--- ==============================================================================
--- 17. AUDIT LOGS (Security & Operational Event Trail)
--- ==============================================================================
+-- 6.5 System & Order Audit Logs
 create table if not exists public.audit_logs (
   id text primary key,
   admin_user text not null,
@@ -340,236 +330,370 @@ create table if not exists public.audit_logs (
   timestamp timestamptz not null default now()
 );
 
--- ------------------------------------------------------------------------------
--- SECTION: schema/indexes-constraints.sql
--- ------------------------------------------------------------------------------
-
 -- ==============================================================================
--- Spiral Cafe POS — Indexes & Performance Tuning
--- Target: PostgreSQL 15+ / Supabase
+-- 7. INVENTORY MANAGEMENT & FIFO COSTING
 -- ==============================================================================
 
--- 1. Orders Indexes
-create index if not exists idx_orders_created_at on public.orders(created_at desc);
+-- 7.1 Inventory Categories (A through H)
+create table if not exists public.inventory_categories (
+  id text primary key,
+  code text not null unique,
+  name text not null,
+  display_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 7.2 Inventory Ingredients Master Catalog (69 Items with Baseline FIFO Cost)
+create table if not exists public.inventory_ingredients (
+  id text primary key,
+  item_number integer not null,
+  name text not null,
+  category_id text not null references public.inventory_categories(id) on update cascade,
+  unit text not null default 'kg',
+  cost_per_unit numeric(12,2) default null,
+  purchase_unit text,
+  package_conversion_ratio numeric default null,
+  min_stock_level numeric not null default 0,
+  display_order integer not null default 0,
+  is_active boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 7.3 Daily Inventory Registers (One register per cafe date)
+create table if not exists public.inventory_days (
+  id text primary key,
+  date date not null unique,
+  status text not null default 'DRAFT' check (status in ('DRAFT', 'COUNTING', 'READY_FOR_REVIEW', 'FINALIZED')),
+  checked_by text,
+  finalized_by text,
+  finalized_at timestamptz,
+  total_active_ingredients integer not null default 0,
+  counted_ingredients integer not null default 0,
+  total_closing_stock_value numeric(12,2) default 0.00,
+  total_used_value numeric(12,2) default 0.00,
+  total_wastage_value numeric(12,2) default 0.00,
+  total_purchase_value numeric(12,2) default 0.00,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 7.4 Daily Inventory Line Items (Register & Physical Checklist with FIFO Valuation)
+create table if not exists public.inventory_day_items (
+  id text primary key,
+  inventory_day_id text not null references public.inventory_days(id) on delete cascade,
+  ingredient_id text not null references public.inventory_ingredients(id) on update cascade,
+  ingredient_number integer not null default 0,
+  ingredient_name text not null,
+  category_id text not null,
+  category_name text not null,
+  unit text not null default 'kg',
+  opening_qty numeric not null default 0 check (opening_qty >= 0),
+  purchased_qty numeric not null default 0 check (purchased_qty >= 0),
+  wastage_qty numeric not null default 0 check (wastage_qty >= 0),
+  closing_actual_qty numeric check (closing_actual_qty is null or closing_actual_qty >= 0),
+  calculated_used_qty numeric,
+  unit_cost numeric(12,2) default null,
+  opening_stock_value numeric(12,2) default 0.00,
+  total_purchase_cost numeric(12,2) default 0.00,
+  closing_stock_value numeric(12,2) default 0.00,
+  used_cost numeric(12,2) default 0.00,
+  wastage_cost numeric(12,2) default 0.00,
+  used_breakdown text default null,
+  closing_breakdown text default null,
+  wastage_breakdown text default null,
+  latest_purchase_price numeric(12,2) default null,
+  avg_purchase_price numeric(12,2) default null,
+  purchase_entries jsonb default '[]'::jsonb,
+  available_batches jsonb default '[]'::jsonb,
+  closing_batches jsonb default '[]'::jsonb,
+  is_counted boolean not null default false,
+  counted_by text,
+  counted_at timestamptz,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 7.5 Inventory Purchases Ledger (FIFO Batches with Historical Unit Prices)
+create table if not exists public.inventory_purchases (
+  id text primary key,
+  ingredient_id text not null references public.inventory_ingredients(id) on update cascade,
+  ingredient_name text,
+  date date not null,
+  quantity numeric not null check (quantity > 0),
+  unit text not null,
+  price_per_unit numeric not null check (price_per_unit >= 0),
+  total_cost numeric not null check (total_cost >= 0),
+  supplier text,
+  recorded_by text default 'Staff',
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+-- 7.6 Individual Stock Movements (Purchases, Wastage & Manual Adjustments)
+create table if not exists public.inventory_movements (
+  id text primary key,
+  inventory_day_id text references public.inventory_days(id) on delete set null,
+  ingredient_id text not null references public.inventory_ingredients(id) on update cascade,
+  date date not null default current_date,
+  movement_type text not null check (movement_type in ('PURCHASE', 'WASTAGE', 'ADJUSTMENT')),
+  quantity numeric not null check (quantity > 0),
+  unit text not null,
+  reason text,
+  supplier text,
+  cost numeric,
+  recorded_by text not null default 'Staff',
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+-- 7.7 Inventory Audit Trail
+create table if not exists public.inventory_audit_logs (
+  id text primary key,
+  inventory_day_id text,
+  action text not null,
+  actor_name text not null,
+  actor_role text not null,
+  payload jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- ==============================================================================
+-- 8. DATA MANAGEMENT, ARCHIVING & PERMANENT ANALYTICS SUMMARIES
+-- ==============================================================================
+
+-- 8.1 Permanent Daily Analytics Summaries (Lifetime Business Metrics)
+create table if not exists public.analytics_daily_summaries (
+  date date primary key,
+  total_orders integer not null default 0 check (total_orders >= 0),
+  completed_orders integer not null default 0 check (completed_orders >= 0),
+  cancelled_orders integer not null default 0 check (cancelled_orders >= 0),
+  gross_sales numeric(12,2) not null default 0.00 check (gross_sales >= 0),
+  net_sales numeric(12,2) not null default 0.00 check (net_sales >= 0),
+  tax_collected numeric(12,2) not null default 0.00 check (tax_collected >= 0),
+  packaging_fees numeric(12,2) not null default 0.00 check (packaging_fees >= 0),
+  service_charges numeric(12,2) not null default 0.00 check (service_charges >= 0),
+  discounts numeric(12,2) not null default 0.00 check (discounts >= 0),
+  cash_sales numeric(12,2) not null default 0.00 check (cash_sales >= 0),
+  online_sales numeric(12,2) not null default 0.00 check (online_sales >= 0),
+  unpaid_sales numeric(12,2) not null default 0.00 check (unpaid_sales >= 0),
+  customer_orders_count integer not null default 0 check (customer_orders_count >= 0),
+  customer_sales numeric(12,2) not null default 0.00 check (customer_sales >= 0),
+  private_orders_count integer not null default 0 check (private_orders_count >= 0),
+  private_sales numeric(12,2) not null default 0.00 check (private_sales >= 0),
+  takeaway_orders_count integer not null default 0 check (takeaway_orders_count >= 0),
+  takeaway_sales numeric(12,2) not null default 0.00 check (takeaway_sales >= 0),
+  dine_in_orders_count integer not null default 0 check (dine_in_orders_count >= 0),
+  dine_in_sales numeric(12,2) not null default 0.00 check (dine_in_sales >= 0),
+  archived_at timestamptz not null default now(),
+  archive_reference text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 8.2 Permanent Product Sales Summaries (Lifetime Product Analytics)
+create table if not exists public.analytics_product_summaries (
+  id text primary key,
+  date date not null references public.analytics_daily_summaries(date) on delete cascade,
+  product_id text not null,
+  product_name text not null,
+  category_name text not null,
+  quantity_sold integer not null default 0 check (quantity_sold >= 0),
+  total_revenue numeric(12,2) not null default 0.00 check (total_revenue >= 0),
+  unit_price numeric(10,2) not null default 0.00 check (unit_price >= 0),
+  is_private boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- 8.3 Data Archives Registry (Verified Export & Encrypted Backup Ledger)
+create table if not exists public.data_archives_registry (
+  id text primary key,
+  archive_filename text not null,
+  start_date date not null,
+  end_date date not null,
+  eligible_orders_count integer not null default 0,
+  order_items_count integer not null default 0,
+  invoices_count integer not null default 0,
+  settlements_count integer not null default 0,
+  total_revenue numeric(12,2) not null default 0.00,
+  checksum_sha256 text not null,
+  encryption_algorithm text not null default 'AES-GCM-256',
+  export_status text not null default 'EXPORTED' check (export_status in ('EXPORTED', 'VERIFIED', 'PURGED', 'RESTORED')),
+  exported_by text not null default 'Admin',
+  exported_at timestamptz not null default now(),
+  verified_at timestamptz,
+  purged_at timestamptz,
+  manifest_preview jsonb default '{}'::jsonb,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+-- ==============================================================================
+-- 9. PERFORMANCE INDEXES
+-- ==============================================================================
+create index if not exists idx_orders_table_status on public.orders(table_number, status);
 create index if not exists idx_orders_status on public.orders(status);
 create index if not exists idx_orders_payment_status on public.orders(payment_status);
-create index if not exists idx_orders_table_number on public.orders(table_number);
-create index if not exists idx_orders_customer_id on public.orders(customer_id);
-create index if not exists idx_orders_session_id on public.orders(customer_session_id);
+create index if not exists idx_orders_created_at on public.orders(created_at);
+create index if not exists idx_orders_session on public.orders(customer_session_id);
 create index if not exists idx_orders_visit_id on public.orders(visit_id);
+create index if not exists idx_orders_order_type on public.orders(order_type);
 
--- 2. Order Items Indexes
-create index if not exists idx_order_items_order_id on public.order_items(order_id);
-create index if not exists idx_order_items_product_id on public.order_items(product_id);
+create index if not exists idx_order_items_order on public.order_items(order_id);
+create index if not exists idx_order_items_product on public.order_items(product_id);
+create index if not exists idx_order_items_order_type on public.order_items(order_type);
+create index if not exists idx_order_items_round on public.order_items(round);
 
--- 3. Customers & Sessions Indexes
-create index if not exists idx_customers_phone on public.customers(phone_number);
-create index if not exists idx_customer_sessions_token on public.customer_sessions(session_token);
-create index if not exists idx_customer_sessions_customer_id on public.customer_sessions(customer_id);
+create index if not exists idx_invoices_order on public.invoices(order_id);
+create index if not exists idx_invoices_table on public.invoices(table_number);
+create index if not exists idx_invoices_created on public.invoices(created_at);
+create index if not exists idx_invoice_items_invoice on public.invoice_items(invoice_id);
 
--- 4. Restaurant Tables & Reservations Indexes
-create index if not exists idx_restaurant_tables_status on public.restaurant_tables(status);
-create index if not exists idx_restaurant_tables_active_order on public.restaurant_tables(active_order_id);
+create index if not exists idx_settlements_date on public.settlements(date);
+create index if not exists idx_payments_order on public.payments(order_id);
+
 create index if not exists idx_table_reservations_table_status on public.table_reservations(table_number, status);
 create index if not exists idx_table_reservations_session on public.table_reservations(customer_session_id);
 create index if not exists idx_table_reservations_expires on public.table_reservations(expires_at);
-create index if not exists idx_table_reservations_visit_id on public.table_reservations(visit_id);
 
--- 5. KOTs & Print Attempts Indexes
+create index if not exists idx_table_transfers_from_to on public.table_transfer_requests(from_table, to_table);
+create index if not exists idx_table_transfers_status on public.table_transfer_requests(status);
+create index if not exists idx_table_transfers_session on public.table_transfer_requests(customer_session_id);
+
 create index if not exists idx_kots_order_id on public.kots(order_id);
 create index if not exists idx_kots_table_number on public.kots(table_number);
 create index if not exists idx_kots_status on public.kots(status);
 create index if not exists idx_print_attempts_kot_id on public.print_attempts(kot_id);
-create index if not exists idx_print_attempts_order_id on public.print_attempts(order_id);
 
--- 6. Invoices & Billing Indexes
-create index if not exists idx_invoices_order_id on public.invoices(order_id);
-create index if not exists idx_invoices_created_at on public.invoices(created_at desc);
-create index if not exists idx_invoices_secure_token on public.invoices(secure_token);
-create index if not exists idx_invoice_items_invoice_id on public.invoice_items(invoice_id);
+create index if not exists idx_inv_cats_order on public.inventory_categories(display_order);
+create unique index if not exists idx_inv_ing_cat_name on public.inventory_ingredients(category_id, lower(trim(name))) where is_active = true;
+create index if not exists idx_inv_ing_order on public.inventory_ingredients(display_order);
+create index if not exists idx_inv_ing_number on public.inventory_ingredients(item_number);
 
--- 7. Menu Items & Discovery Indexes
-create index if not exists idx_menu_items_category on public.menu_items(category_id);
-create index if not exists idx_menu_items_available on public.menu_items(available);
-create index if not exists idx_menu_items_diet_type on public.menu_items(diet_type);
+create index if not exists idx_inv_days_date on public.inventory_days(date);
+create index if not exists idx_inv_days_status on public.inventory_days(status);
+create unique index if not exists idx_inv_day_items_day_ing on public.inventory_day_items(inventory_day_id, ingredient_id);
+create index if not exists idx_inv_day_items_day_cat on public.inventory_day_items(inventory_day_id, category_id);
 
--- 8. Audit & Settlements Indexes
-create index if not exists idx_audit_logs_timestamp on public.audit_logs(timestamp desc);
-create index if not exists idx_audit_logs_entity on public.audit_logs(entity_type, entity_id);
-create index if not exists idx_settlements_date on public.settlements(date desc);
+create index if not exists idx_inv_purchases_ing_date on public.inventory_purchases(ingredient_id, date);
+create index if not exists idx_inv_purchases_date on public.inventory_purchases(date);
 
--- 9. Payments Gateway Indexes
-create index if not exists idx_payments_order_id on public.payments(order_id);
-create index if not exists idx_payments_provider_payment_id on public.payments(provider_payment_id);
-create index if not exists idx_payments_status on public.payments(status);
+create index if not exists idx_inv_movements_ing_date on public.inventory_movements(ingredient_id, date);
+create index if not exists idx_inv_movements_type on public.inventory_movements(movement_type);
+create index if not exists idx_inv_audit_day on public.inventory_audit_logs(inventory_day_id);
 
--- ------------------------------------------------------------------------------
--- SECTION: schema/functions-triggers.sql
--- ------------------------------------------------------------------------------
+create index if not exists idx_analytics_daily_date on public.analytics_daily_summaries(date);
+create index if not exists idx_analytics_prod_date on public.analytics_product_summaries(date);
+create index if not exists idx_analytics_prod_cat on public.analytics_product_summaries(category_name);
+create index if not exists idx_analytics_prod_name on public.analytics_product_summaries(product_name);
+
+create index if not exists idx_archives_registry_status on public.data_archives_registry(export_status);
+create index if not exists idx_archives_registry_dates on public.data_archives_registry(start_date, end_date);
 
 -- ==============================================================================
--- Spiral Cafe POS — Stored Functions & Automated Triggers
--- Target: PostgreSQL 15+ / Supabase
+-- 10. DATABASE FUNCTIONS & AUTOMATIC TRIGGERS
 -- ==============================================================================
 
--- 1. Automated Updated At Trigger Function
+-- 10.1 Auto-update updated_at timestamp function
 create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
+returns trigger as $$
 begin
   new.updated_at = now();
   return new;
 end;
-$$;
+$$ language plpgsql;
 
--- Apply updated_at triggers
-drop trigger if exists trg_cafe_config_updated_at on public.cafe_config;
-create trigger trg_cafe_config_updated_at
-  before update on public.cafe_config
-  for each row execute function public.set_updated_at();
+-- Apply triggers
+do $$
+begin
+  drop trigger if exists trg_cafe_config_updated_at on public.cafe_config;
+  create trigger trg_cafe_config_updated_at before update on public.cafe_config for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_menu_items_updated_at on public.menu_items;
-create trigger trg_menu_items_updated_at
-  before update on public.menu_items
-  for each row execute function public.set_updated_at();
+  drop trigger if exists trg_menu_items_updated_at on public.menu_items;
+  create trigger trg_menu_items_updated_at before update on public.menu_items for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_customers_updated_at on public.customers;
-create trigger trg_customers_updated_at
-  before update on public.customers
-  for each row execute function public.set_updated_at();
+  drop trigger if exists trg_orders_updated_at on public.orders;
+  create trigger trg_orders_updated_at before update on public.orders for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_orders_updated_at on public.orders;
-create trigger trg_orders_updated_at
-  before update on public.orders
-  for each row execute function public.set_updated_at();
+  drop trigger if exists trg_customers_updated_at on public.customers;
+  create trigger trg_customers_updated_at before update on public.customers for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_restaurant_tables_updated_at on public.restaurant_tables;
-create trigger trg_restaurant_tables_updated_at
-  before update on public.restaurant_tables
-  for each row execute function public.set_updated_at();
+  drop trigger if exists trg_restaurant_tables_updated_at on public.restaurant_tables;
+  create trigger trg_restaurant_tables_updated_at before update on public.restaurant_tables for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_table_reservations_updated_at on public.table_reservations;
-create trigger trg_table_reservations_updated_at
-  before update on public.table_reservations
-  for each row execute function public.set_updated_at();
+  drop trigger if exists trg_table_reservations_updated_at on public.table_reservations;
+  create trigger trg_table_reservations_updated_at before update on public.table_reservations for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_kots_updated_at on public.kots;
-create trigger trg_kots_updated_at
-  before update on public.kots
-  for each row execute function public.set_updated_at();
+  drop trigger if exists trg_table_transfers_updated_at on public.table_transfer_requests;
+  create trigger trg_table_transfers_updated_at before update on public.table_transfer_requests for each row execute function public.set_updated_at();
 
-drop trigger if exists trg_printer_settings_updated_at on public.printer_settings;
-create trigger trg_printer_settings_updated_at
-  before update on public.printer_settings
-  for each row execute function public.set_updated_at();
+  drop trigger if exists trg_kots_updated_at on public.kots;
+  create trigger trg_kots_updated_at before update on public.kots for each row execute function public.set_updated_at();
 
--- ==============================================================================
--- 2. ATOMIC ORDER CREATION RPC (Phase 13 / High-Concurrency Safe)
--- Inserts order header + multiple line items within a single transactional boundary
--- ==============================================================================
-create or replace function public.create_order_with_items(
-  order_payload jsonb,
-  items_payload jsonb
-)
+  drop trigger if exists trg_inventory_categories_updated_at on public.inventory_categories;
+  create trigger trg_inventory_categories_updated_at before update on public.inventory_categories for each row execute function public.set_updated_at();
+
+  drop trigger if exists trg_inventory_ingredients_updated_at on public.inventory_ingredients;
+  create trigger trg_inventory_ingredients_updated_at before update on public.inventory_ingredients for each row execute function public.set_updated_at();
+
+  drop trigger if exists trg_inventory_days_updated_at on public.inventory_days;
+  create trigger trg_inventory_days_updated_at before update on public.inventory_days for each row execute function public.set_updated_at();
+
+  drop trigger if exists trg_inventory_day_items_updated_at on public.inventory_day_items;
+  create trigger trg_inventory_day_items_updated_at before update on public.inventory_day_items for each row execute function public.set_updated_at();
+
+  drop trigger if exists trg_analytics_daily_updated_at on public.analytics_daily_summaries;
+  create trigger trg_analytics_daily_updated_at before update on public.analytics_daily_summaries for each row execute function public.set_updated_at();
+exception
+  when others then null;
+end $$;
+
+-- 10.2 Database Storage Measurement RPC Function
+create or replace function public.get_database_storage_stats()
 returns jsonb
 language plpgsql
 security definer
 as $$
 declare
-  new_order jsonb;
-  item_record jsonb;
+  v_db_size bigint;
+  v_tables jsonb;
 begin
-  -- 1. Insert order header
-  insert into public.orders (
-    id,
-    order_number,
-    table_number,
-    visit_id,
-    customer_session_id,
-    customer_id,
-    customer_phone,
-    subtotal,
-    tax,
-    packaging_fee,
-    service_charge,
-    grand_total,
-    status,
-    payment_status,
-    payment_method,
-    payment_txn_id,
-    payment_provider,
-    invoice_id,
-    invoice_number,
-    notes,
-    created_at,
-    updated_at
-  ) values (
-    (order_payload->>'id'),
-    (order_payload->>'order_number'),
-    (order_payload->>'table_number'),
-    (order_payload->>'visit_id'),
-    (order_payload->>'customer_session_id'),
-    (order_payload->>'customer_id'),
-    (order_payload->>'customer_phone'),
-    coalesce((order_payload->>'subtotal')::numeric, 0),
-    coalesce((order_payload->>'tax')::numeric, 0),
-    coalesce((order_payload->>'packaging_fee')::numeric, 0),
-    coalesce((order_payload->>'service_charge')::numeric, 0),
-    coalesce((order_payload->>'grand_total')::numeric, 0),
-    coalesce(order_payload->>'status', 'PENDING'),
-    coalesce(order_payload->>'payment_status', 'UNPAID'),
-    coalesce(order_payload->>'payment_method', 'UNSELECTED'),
-    (order_payload->>'payment_txn_id'),
-    (order_payload->>'payment_provider'),
-    (order_payload->>'invoice_id'),
-    (order_payload->>'invoice_number'),
-    coalesce((order_payload->>'notes'), ''),
-    coalesce((order_payload->>'created_at')::timestamptz, now()),
-    coalesce((order_payload->>'updated_at')::timestamptz, now())
+  select pg_database_size(current_database()) into v_db_size;
+
+  select jsonb_agg(
+    jsonb_build_object(
+      'table_name', t.table_name,
+      'total_bytes', pg_total_relation_size('"' || t.table_schema || '"."' || t.table_name || '"'),
+      'table_bytes', pg_relation_size('"' || t.table_schema || '"."' || t.table_name || '"'),
+      'index_bytes', pg_indexes_size('"' || t.table_schema || '"."' || t.table_name || '"'),
+      'estimated_rows', coalesce(s.n_live_tup, 0)
+    ) order by pg_total_relation_size('"' || t.table_schema || '"."' || t.table_name || '"') desc
   )
-  returning to_jsonb(public.orders.*) into new_order;
+  into v_tables
+  from information_schema.tables t
+  left join pg_stat_user_tables s on s.schemaname = t.table_schema and s.relname = t.table_name
+  where t.table_schema = 'public' and t.table_type = 'BASE TABLE';
 
-  -- 2. Insert order items
-  for item_record in select * from jsonb_array_elements(items_payload)
-  loop
-    insert into public.order_items (
-      id,
-      order_id,
-      product_id,
-      name,
-      price,
-      quantity,
-      line_total,
-      image,
-      notes
-    ) values (
-      (item_record->>'id'),
-      (order_payload->>'id'),
-      (item_record->>'product_id'),
-      (item_record->>'name'),
-      coalesce((item_record->>'price')::numeric, 0),
-      coalesce((item_record->>'quantity')::integer, 1),
-      coalesce((item_record->>'line_total')::numeric, 0),
-      coalesce(item_record->>'image', ''),
-      (item_record->>'notes')
-    );
-  end loop;
-
-  return new_order;
+  return jsonb_build_object(
+    'database_size_bytes', v_db_size,
+    'measured_at', now(),
+    'tables', coalesce(v_tables, '[]'::jsonb)
+  );
 end;
 $$;
 
--- ------------------------------------------------------------------------------
--- SECTION: schema/security-rls.sql
--- ------------------------------------------------------------------------------
+grant execute on function public.get_database_storage_stats() to service_role;
+grant execute on function public.get_database_storage_stats() to anon;
+grant execute on function public.get_database_storage_stats() to authenticated;
 
 -- ==============================================================================
--- Spiral Cafe POS — Row Level Security (RLS) & Access Policies
--- Target: PostgreSQL 15+ / Supabase
+-- 11. ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================================================
-
--- 1. Enable RLS on all public tables
 alter table public.cafe_config enable row level security;
 alter table public.menu_items enable row level security;
 alter table public.customers enable row level security;
@@ -578,6 +702,7 @@ alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 alter table public.restaurant_tables enable row level security;
 alter table public.table_reservations enable row level security;
+alter table public.table_transfer_requests enable row level security;
 alter table public.kots enable row level security;
 alter table public.print_attempts enable row level security;
 alter table public.printer_settings enable row level security;
@@ -586,357 +711,143 @@ alter table public.invoices enable row level security;
 alter table public.invoice_items enable row level security;
 alter table public.settlements enable row level security;
 alter table public.audit_logs enable row level security;
+alter table public.inventory_categories enable row level security;
+alter table public.inventory_ingredients enable row level security;
+alter table public.inventory_days enable row level security;
+alter table public.inventory_day_items enable row level security;
+alter table public.inventory_purchases enable row level security;
+alter table public.inventory_movements enable row level security;
+alter table public.inventory_audit_logs enable row level security;
+alter table public.analytics_daily_summaries enable row level security;
+alter table public.analytics_product_summaries enable row level security;
+alter table public.data_archives_registry enable row level security;
 
--- ==============================================================================
--- 2. PUBLIC ANONYMOUS READ POLICIES (Client QR Ordering)
--- ==============================================================================
-
--- Public Read Menu Items
-drop policy if exists "Allow public read menu_items" on public.menu_items;
-create policy "Allow public read menu_items"
-  on public.menu_items for select
-  using (true);
-
--- Public Read Cafe Configuration
-drop policy if exists "Allow public read cafe_config" on public.cafe_config;
-create policy "Allow public read cafe_config"
-  on public.cafe_config for select
-  using (true);
-
--- Public Read Restaurant Tables (For floor table status & capacity in customer modal)
-drop policy if exists "Allow public read restaurant_tables" on public.restaurant_tables;
-create policy "Allow public read restaurant_tables"
-  on public.restaurant_tables for select
-  using (true);
-
--- Public Read Invoices (Protected strictly by secure_token)
-drop policy if exists "Allow public read invoice by token" on public.invoices;
-create policy "Allow public read invoice by token"
-  on public.invoices for select
-  using (secure_token is not null);
-
--- Public Guest Table Reservations (Allows customers to temporarily hold a floor table)
-drop policy if exists "Allow public reservations access" on public.table_reservations;
-create policy "Allow public reservations access"
-  on public.table_reservations for all
-  using (true)
-  with check (true);
-
--- ==============================================================================
--- 3. TRUSTED BACKEND SERVICE ROLE POLICIES (Supabase Service Key)
--- ==============================================================================
-
-drop policy if exists "Allow service_role on cafe_config" on public.cafe_config;
-create policy "Allow service_role on cafe_config" on public.cafe_config for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on menu_items" on public.menu_items;
-create policy "Allow service_role on menu_items" on public.menu_items for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on customers" on public.customers;
-create policy "Allow service_role on customers" on public.customers for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on customer_sessions" on public.customer_sessions;
-create policy "Allow service_role on customer_sessions" on public.customer_sessions for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on orders" on public.orders;
-create policy "Allow service_role on orders" on public.orders for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on order_items" on public.order_items;
-create policy "Allow service_role on order_items" on public.order_items for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on restaurant_tables" on public.restaurant_tables;
-create policy "Allow service_role on restaurant_tables" on public.restaurant_tables for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on kots" on public.kots;
-create policy "Allow service_role on kots" on public.kots for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on print_attempts" on public.print_attempts;
-create policy "Allow service_role on print_attempts" on public.print_attempts for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on printer_settings" on public.printer_settings;
-create policy "Allow service_role on printer_settings" on public.printer_settings for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on payments" on public.payments;
-create policy "Allow service_role on payments" on public.payments for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on invoices" on public.invoices;
-create policy "Allow service_role on invoices" on public.invoices for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on invoice_items" on public.invoice_items;
-create policy "Allow service_role on invoice_items" on public.invoice_items for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on settlements" on public.settlements;
-create policy "Allow service_role on settlements" on public.settlements for all using (true) with check (true);
-
-drop policy if exists "Allow service_role on audit_logs" on public.audit_logs;
-create policy "Allow service_role on audit_logs" on public.audit_logs for all using (true) with check (true);
-
--- ------------------------------------------------------------------------------
--- SECTION: schema/realtime.sql
--- ------------------------------------------------------------------------------
-
--- ==============================================================================
--- Spiral Cafe POS — Realtime Replication Publication
--- Target: PostgreSQL 15+ / Supabase
--- Enables live webhooks/WebSocket streams for Kitchen KDS, Waiter tablets & POS
--- ==============================================================================
-
+-- Permissive service role and application policies
 do $$
 begin
-  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    -- Orders & Items (Live Kitchen & POS status changes)
-    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'orders') then
-      alter publication supabase_realtime add table public.orders;
-    end if;
+  -- cafe_config
+  drop policy if exists "Enable all for cafe_config" on public.cafe_config;
+  create policy "Enable all for cafe_config" on public.cafe_config for all using (true) with check (true);
 
-    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'order_items') then
-      alter publication supabase_realtime add table public.order_items;
-    end if;
+  -- menu_items
+  drop policy if exists "Enable all for menu_items" on public.menu_items;
+  create policy "Enable all for menu_items" on public.menu_items for all using (true) with check (true);
 
-    -- Dynamic Menu Items (Live 86-ing / item availability toggle)
-    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'menu_items') then
-      alter publication supabase_realtime add table public.menu_items;
-    end if;
+  -- customers
+  drop policy if exists "Enable all for customers" on public.customers;
+  create policy "Enable all for customers" on public.customers for all using (true) with check (true);
 
-    -- Floor Tables Grid & 5-Color State Indicators
-    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'restaurant_tables') then
-      alter publication supabase_realtime add table public.restaurant_tables;
-    end if;
+  -- customer_sessions
+  drop policy if exists "Enable all for customer_sessions" on public.customer_sessions;
+  create policy "Enable all for customer_sessions" on public.customer_sessions for all using (true) with check (true);
 
-    -- Live KOT Rounds & Printer Delivery Statuses
-    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'kots') then
-      alter publication supabase_realtime add table public.kots;
-    end if;
+  -- orders
+  drop policy if exists "Enable all for orders" on public.orders;
+  create policy "Enable all for orders" on public.orders for all using (true) with check (true);
 
-    -- Temporary 10-Minute Table Locks
-    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'table_reservations') then
-      alter publication supabase_realtime add table public.table_reservations;
-    end if;
-  end if;
+  -- order_items
+  drop policy if exists "Enable all for order_items" on public.order_items;
+  create policy "Enable all for order_items" on public.order_items for all using (true) with check (true);
+
+  -- restaurant_tables
+  drop policy if exists "Enable all for restaurant_tables" on public.restaurant_tables;
+  create policy "Enable all for restaurant_tables" on public.restaurant_tables for all using (true) with check (true);
+
+  -- table_reservations
+  drop policy if exists "Enable all for table_reservations" on public.table_reservations;
+  create policy "Enable all for table_reservations" on public.table_reservations for all using (true) with check (true);
+
+  -- table_transfer_requests
+  drop policy if exists "Enable all for table_transfer_requests" on public.table_transfer_requests;
+  create policy "Enable all for table_transfer_requests" on public.table_transfer_requests for all using (true) with check (true);
+
+  -- kots
+  drop policy if exists "Enable all for kots" on public.kots;
+  create policy "Enable all for kots" on public.kots for all using (true) with check (true);
+
+  -- print_attempts
+  drop policy if exists "Enable all for print_attempts" on public.print_attempts;
+  create policy "Enable all for print_attempts" on public.print_attempts for all using (true) with check (true);
+
+  -- printer_settings
+  drop policy if exists "Enable all for printer_settings" on public.printer_settings;
+  create policy "Enable all for printer_settings" on public.printer_settings for all using (true) with check (true);
+
+  -- payments
+  drop policy if exists "Enable all for payments" on public.payments;
+  create policy "Enable all for payments" on public.payments for all using (true) with check (true);
+
+  -- invoices
+  drop policy if exists "Enable all for invoices" on public.invoices;
+  create policy "Enable all for invoices" on public.invoices for all using (true) with check (true);
+
+  -- invoice_items
+  drop policy if exists "Enable all for invoice_items" on public.invoice_items;
+  create policy "Enable all for invoice_items" on public.invoice_items for all using (true) with check (true);
+
+  -- settlements
+  drop policy if exists "Enable all for settlements" on public.settlements;
+  create policy "Enable all for settlements" on public.settlements for all using (true) with check (true);
+
+  -- audit_logs
+  drop policy if exists "Enable all for audit_logs" on public.audit_logs;
+  create policy "Enable all for audit_logs" on public.audit_logs for all using (true) with check (true);
+
+  -- inventory_categories
+  drop policy if exists "Enable all for inventory_categories" on public.inventory_categories;
+  create policy "Enable all for inventory_categories" on public.inventory_categories for all using (true) with check (true);
+
+  -- inventory_ingredients
+  drop policy if exists "Enable all for inventory_ingredients" on public.inventory_ingredients;
+  create policy "Enable all for inventory_ingredients" on public.inventory_ingredients for all using (true) with check (true);
+
+  -- inventory_days
+  drop policy if exists "Enable all for inventory_days" on public.inventory_days;
+  create policy "Enable all for inventory_days" on public.inventory_days for all using (true) with check (true);
+
+  -- inventory_day_items
+  drop policy if exists "Enable all for inventory_day_items" on public.inventory_day_items;
+  create policy "Enable all for inventory_day_items" on public.inventory_day_items for all using (true) with check (true);
+
+  -- inventory_purchases
+  drop policy if exists "Enable all for inventory_purchases" on public.inventory_purchases;
+  create policy "Enable all for inventory_purchases" on public.inventory_purchases for all using (true) with check (true);
+
+  -- inventory_movements
+  drop policy if exists "Enable all for inventory_movements" on public.inventory_movements;
+  create policy "Enable all for inventory_movements" on public.inventory_movements for all using (true) with check (true);
+
+  -- inventory_audit_logs
+  drop policy if exists "Enable all for inventory_audit_logs" on public.inventory_audit_logs;
+  create policy "Enable all for inventory_audit_logs" on public.inventory_audit_logs for all using (true) with check (true);
+
+  -- analytics_daily_summaries
+  drop policy if exists "Enable all for analytics_daily_summaries" on public.analytics_daily_summaries;
+  create policy "Enable all for analytics_daily_summaries" on public.analytics_daily_summaries for all using (true) with check (true);
+
+  -- analytics_product_summaries
+  drop policy if exists "Enable all for analytics_product_summaries" on public.analytics_product_summaries;
+  create policy "Enable all for analytics_product_summaries" on public.analytics_product_summaries for all using (true) with check (true);
+
+  -- data_archives_registry
+  drop policy if exists "Enable all for data_archives_registry" on public.data_archives_registry;
+  create policy "Enable all for data_archives_registry" on public.data_archives_registry for all using (true) with check (true);
 exception
-  when others then null; -- Graceful degradation in restricted sub-environments
+  when others then null;
 end $$;
 
--- ------------------------------------------------------------------------------
--- SECTION: seeds/restaurant-config.sql
--- ------------------------------------------------------------------------------
-
 -- ==============================================================================
--- Spiral Cafe POS — Baseline Restaurant Configuration Seed Data
--- Target: PostgreSQL 15+ / Supabase
--- Idempotent: ON CONFLICT DO UPDATE
--- Privacy Guardrail: All floor tables initialize in an AVAILABLE state with zero active orders.
--- ==============================================================================
-
--- 1. CAFE BUSINESS CONFIGURATION (Singleton)
-insert into public.cafe_config (
-  id,
-  tax_percentage,
-  packaging_fee,
-  service_charge,
-  kitchen_pin,
-  cashier_pin,
-  admin_pin,
-  admin_username,
-  admin_password_hash,
-  cafe_name,
-  cafe_address,
-  cafe_phone,
-  gst_number,
-  currency_symbol,
-  updated_at
-) values (
-  1,
-  5.00,
-  0.00,
-  0.00,
-  '1234',
-  '5678',
-  '1234',
-  'admin',
-  'd77367e72006c9701e437b51abd23fe5ad9baad13c1df094d24a450ececc14d4',
-  'Spiral Cafe',
-  'Opposite Government Hospital, CSI Mahimai Illam, Alagesan Nagar, Chengalpattu, Tamil Nadu 603001',
-  '+91 98765 43210',
-  '33AAAAA0000A1Z5',
-  '₹',
-  now()
-)
-on conflict (id) do update set
-  tax_percentage = excluded.tax_percentage,
-  packaging_fee = excluded.packaging_fee,
-  service_charge = excluded.service_charge,
-  cafe_name = excluded.cafe_name,
-  cafe_address = excluded.cafe_address,
-  cafe_phone = excluded.cafe_phone,
-  gst_number = excluded.gst_number,
-  currency_symbol = excluded.currency_symbol,
-  updated_at = now();
-
--- 2. RESTAURANT FLOOR TABLES (Initialized cleanly in AVAILABLE state)
-insert into public.restaurant_tables (id, table_number, capacity, section, status, active_order_id, notes, created_at, updated_at)
-values
-  ('A1', 'A1', 4, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('A2', 'A2', 4, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('B1', 'B1', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('B2', 'B2', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('B3', 'B3', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('B4', 'B4', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('B5', 'B5', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('B6', 'B6', 2, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('C1', 'C1', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('C2', 'C2', 4, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('C3', 'C3', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('F1', 'F1', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('F2', 'F2', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('F3', 'F3', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now()),
-  ('F4', 'F4', 3, 'Dine-In', 'AVAILABLE', null, null, now(), now())
-on conflict (table_number) do update set
-  capacity = excluded.capacity,
-  section = excluded.section,
-  status = 'AVAILABLE',
-  active_order_id = null,
-  updated_at = now();
-
--- 3. KITCHEN PRINTER HARDWARE SETTINGS (Singleton)
-insert into public.printer_settings (
-  id,
-  printer_model,
-  interface_type,
-  ip_address,
-  port,
-  paper_width_mm,
-  qz_printer_name,
-  terminal_name,
-  auto_cut,
-  updated_at
-) values (
-  1,
-  'CN811-UEWB',
-  'ETHERNET',
-  '192.168.1.233',
-  9100,
-  80,
-  'CN811-UEWB',
-  'Billing 1',
-  true,
-  now()
-)
-on conflict (id) do update set
-  printer_model = excluded.printer_model,
-  interface_type = excluded.interface_type,
-  ip_address = excluded.ip_address,
-  port = excluded.port,
-  paper_width_mm = excluded.paper_width_mm,
-  qz_printer_name = excluded.qz_printer_name,
-  terminal_name = excluded.terminal_name,
-  auto_cut = excluded.auto_cut,
-  updated_at = now();
-
--- ------------------------------------------------------------------------------
--- SECTION: seeds/menu-catalog.sql
--- ------------------------------------------------------------------------------
-
--- ==============================================================================
--- Spiral Cafe Menu Catalog Seed Data
--- Total Items: 41
--- Idempotent: ON CONFLICT (id) DO UPDATE
--- Privacy/Asset Guardrail: No external image URLs or Supabase Storage links are copied.
--- ==============================================================================
-
-insert into public.menu_items (
-  id,
-  name,
-  description,
-  price,
-  original_price,
-  category_id,
-  category_name,
-  diet_type,
-  badge,
-  rating,
-  reviews_count,
-  image,
-  cloudinary_public_id,
-  available,
-  created_at,
-  updated_at
-) values
-  ('bg-4', 'Cheese Crash', 'Double smashed patties overflowing with an insane waterfall of molten cheddar fondue, crispy onion rings & smoked bacon relish.', 260, 350, 'burgers', 'Burgers', 'non-veg', 'bestseller', 4.9, 510, '', NULL, true, now(), now()),
-  ('bg-3', 'Hotshot Chicken', 'Thick crispy fried chicken breast fillet dunked in fiery spicy glaze, crisp house slaw, jalapeños, and sriracha chili drizzle.', 230, 310, 'burgers', 'Burgers', 'non-veg', 'spicy', 4.8, 430, '', NULL, true, now(), now()),
-  ('bg-2', 'Mushroom Smash', 'Seared smash patty blanketed with garlic butter sautéed wild cremini mushrooms, melted swiss cheese, and caramelized shallot aioli.', 250, 330, 'burgers', 'Burgers', 'non-veg', 'bestseller', 4.8, 390, '', NULL, true, now(), now()),
-  ('bg-1', 'Oklahoma Chicken Smash', 'Smashed chicken patty seared directly with sweet paper-thin onions, melted American cheddar, dill pickles & house burger sauce on toasted brioche.', 240, 320, 'burgers', 'Burgers', 'non-veg', 'bestseller', 4.9, 480, '', NULL, true, now(), now()),
-  ('bg-5', 'The Herbivore’s Hero', 'Handcrafted crispy spiced edamame & herb patty, smashed avocado, smoked gouda, pickled red onions, and heirloom tomato on potato bun.', 210, 280, 'burgers', 'Burgers', 'veg', 'chef-choice', 4.7, 320, '', NULL, true, now(), now()),
-  ('co-1', 'Mango Passion', 'Alphonso mango nectar blended with exotic tart passionfruit reduction, topped with bubbly sparkling soda and mint.', 160, 210, 'coolers', 'Coolers', 'veg', 'bestseller', 4.8, 350, '', NULL, true, now(), now()),
-  ('co-2', 'Merryberry Cooler', 'Wild blueberries, raspberries, and tart cranberry puree muddled with lime juice, sparkling water, and crushed crystal ice.', 170, 220, 'coolers', 'Coolers', 'veg', 'chef-choice', 4.9, 390, '', NULL, true, now(), now()),
-  ('co-3', 'Strawberry Lemonade', 'Fresh macerated ripe strawberries shaken with hand-squeezed tart lemon juice and chilled soda on the rocks.', 150, 200, 'coolers', 'Coolers', 'veg', 'bestseller', 4.8, 310, '', NULL, true, now(), now()),
-  ('it-2', 'Lemon Iced Tea', 'Classic crisp iced tea brewed from premium tea leaves, sweetened with raw cane sugar and spiked with fresh Meyer lemon juice.', 130, 180, 'iced-tea', 'Iced Tea', 'veg', 'none', 4.7, 290, '', NULL, true, now(), now()),
-  ('it-1', 'Peach Iced Tea', 'Slow-brewed aromatic black tea infused with sweet peach puree, lemon juice, and bruised garden mint leaves.', 140, 190, 'iced-tea', 'Iced Tea', 'veg', 'bestseller', 4.8, 370, '', NULL, true, now(), now()),
-  ('mc-2', 'Caramel Iced Latte', 'Decadent buttery salted caramel swirl coated along the glass, layered with bold espresso and chilled full cream milk.', 170, 230, 'milk-coffee', 'Milk Coffee', 'veg', 'bestseller', 4.9, 420, '', NULL, true, now(), now()),
-  ('mc-3', 'Hazelnut Iced Latte', 'Slow-roasted hazelnut syrup combined with rich dark espresso and velvety textured cold milk.', 170, 230, 'milk-coffee', 'Milk Coffee', 'veg', 'chef-choice', 4.8, 310, '', NULL, true, now(), now()),
-  ('mc-1', 'Vanilla Iced Latte', 'Double shot of single-origin Arabica espresso poured over Madagascar vanilla bean infused cold milk and ice cubes.', 160, 220, 'milk-coffee', 'Milk Coffee', 'veg', 'bestseller', 4.8, 340, '', NULL, true, now(), now()),
-  ('nmc-1', 'Americano', 'Bold double shot of rich espresso topped with chilled mountain spring water over crystal ice for a clean aromatic profile.', 130, 170, 'non-milk-coffee', 'Non Milk Coffee', 'veg', 'none', 4.7, 260, '', NULL, true, now(), now()),
-  ('nmc-3', 'Fudge Cigarette', 'Smoky dark cold brew infused with bittersweet dark chocolate fudge notes and finished with a charred cinnamon bark scent.', 190, 250, 'non-milk-coffee', 'Non Milk Coffee', 'veg', 'new', 4.8, 290, '', NULL, true, now(), now()),
-  ('nmc-2', 'Orange Sunset', 'Freshly squeezed sweet Valencia orange juice crowned with a floating dark layer of specialty espresso over clear ice. A stunning sunset in a glass.', 180, 240, 'non-milk-coffee', 'Non Milk Coffee', 'veg', 'bestseller', 4.9, 380, '', NULL, true, now(), now()),
-  ('pa-2', 'Alfredo Chicken', 'Al dente penne coated in velvety garlic parmesan cream sauce, loaded with tender grilled herb chicken strips and fresh parsley.', 280, 360, 'pasta', 'Pasta', 'non-veg', 'bestseller', 4.9, 460, '', NULL, true, now(), now()),
-  ('pa-1', 'Alfredo Veg', 'Tender penne pasta tossed in rich parmesan butter cream, sautéed broccoli florets, button mushrooms, and cracked black pepper.', 240, 320, 'pasta', 'Pasta', 'veg', 'none', 4.7, 310, '', NULL, true, now(), now()),
-  ('pa-3', 'Coastal Pasta', 'Spaghetti tossed in a vibrant coastal roasted tomato butter sauce infused with garlic, red chili flakes, seafood/chicken aromatics & sweet basil.', 299, 390, 'pasta', 'Pasta', 'non-veg', 'chef-choice', 4.8, 330, '', NULL, true, now(), now()),
-  ('pa-4', 'Pesto Chicken', 'Penne coated in freshly pounded Genoa basil & toasted walnut pesto, tender pan-seared chicken breast, cherry tomatoes & parmesan shavings.', 290, 380, 'pasta', 'Pasta', 'non-veg', 'bestseller', 4.8, 390, '', NULL, true, now(), now()),
-  ('pa-5', 'Pesto Veg', 'Traditional Italian fragrant basil pesto pasta with sundried tomatoes, roasted pine nuts, tender zucchini coins, and mini bocconcini mozzarella.', 250, 330, 'pasta', 'Pasta', 'veg', 'none', 4.7, 270, '', NULL, true, now(), now()),
-  ('sd-4', 'Egg & Melt', 'Velvety soft-scrambled pasture eggs, chives, Japanese Kewpie mayo, melted sharp cheddar between thick butter-toasted milk bread.', 180, 240, 'sandos', 'Sandos', 'veg', 'chef-choice', 4.8, 340, '', NULL, true, now(), now()),
-  ('sd-1', 'French Onion Melt', 'Slow-simmered rich caramelized onions, bubbling melted gruyere & mozzarella cheese toasted to crispy perfection on rustic sourdough.', 210, 280, 'sandos', 'Sandos', 'veg', 'bestseller', 4.8, 390, '', NULL, true, now(), now()),
-  ('sd-6', 'Hot Spicy Crunch', 'Extra spicy crumbed chicken breast, ghost pepper aioli, melted pepper jack, pickled peppers, and shredded iceberg crunch.', 240, 320, 'sandos', 'Sandos', 'non-veg', 'spicy', 4.7, 320, '', NULL, true, now(), now()),
-  ('sd-2', 'Mushroom & Mayhem', 'Pan-roasted wild portobello mushrooms, garlic truffle aioli, baby spinach, and molten fontina cheese on crusty Italian loaf.', 220, 290, 'sandos', 'Sandos', 'veg', 'none', 4.7, 310, '', NULL, true, now(), now()),
-  ('sd-7', 'OG Crunchy Sando', 'The classic triple-layered crunchy chicken sando with crisp lettuce, heirloom tomato, smoked cheddar slice & house secret pink sauce.', 220, 290, 'sandos', 'Sandos', 'non-veg', 'bestseller', 4.8, 410, '', NULL, true, now(), now()),
-  ('sd-3', 'Southside Chick', 'Southern buttermilk fried chicken breast, house pimento cheese spread, dill pickles, and crisp honey-mustard coleslaw on toasted shokupan.', 230, 310, 'sandos', 'Sandos', 'non-veg', 'bestseller', 4.9, 460, '', NULL, true, now(), now()),
-  ('sd-5', 'Sweet Heat Chaos', 'Crispy fried chicken katsu glazed in hot honey chili sauce, whipped jalapeño cream cheese, and pickled red cabbage crunch.', 240, 320, 'sandos', 'Sandos', 'non-veg', 'spicy', 4.8, 380, '', NULL, true, now(), now()),
-  ('sh-2', 'Biscoff Shake', 'Rich vanilla bean gelato blended with Belgian Lotus Biscoff spread, caramel swirl, and crunchy spiced speculoos biscuits.', 199, 260, 'shakes', 'Shakes', 'veg', 'bestseller', 4.9, 480, '', NULL, true, now(), now()),
-  ('sh-1', 'Milo Shake', 'Thick malted chocolate Milo shake blended with vanilla ice cream, dusted with crunchy raw Milo powder and chocolate chips.', 180, 240, 'shakes', 'Shakes', 'veg', 'bestseller', 4.8, 420, '', NULL, true, now(), now()),
-  ('sc-3', 'Corn Ripperz', 'Charred crispy sweet corn ribs dusted in smoked paprika, cotija cheese crumbles, spicy lime butter, and cilantro.', 180, 240, 'share-club', 'Share Club', 'veg', 'new', 4.7, 290, '', NULL, true, now(), now()),
-  ('sc-1', 'Mexican Melt Nachos', 'Stoneground crispy corn tortilla chips piled high with melted cheddar, fresh pico de gallo, pickled jalapeños, sour cream & tangy salsa dip.', 220, 290, 'share-club', 'Share Club', 'veg', 'bestseller', 4.8, 420, '', NULL, true, now(), now()),
-  ('sc-2', 'Popcorn Chicken', 'Bite-sized tender boneless chicken morsels marinated in buttermilk, fried to extreme golden crunch and served with garlic mayo.', 210, 280, 'share-club', 'Share Club', 'non-veg', 'bestseller', 4.8, 360, '', NULL, true, now(), now()),
-  ('sq-3', 'Drippy Cheese Fries', 'Crispy fries drenched in a cascade of warm molten cheddar lava, mozzarella shred, and roasted chili seasoning.', 170, 230, 'side-quest', 'Side Quest', 'veg', 'bestseller', 4.9, 410, '', NULL, true, now(), now()),
-  ('sq-4', 'Loaded AF', 'Heavily loaded crispy fries topped with pulled smoky chicken, triple cheese fondue, pickled jalapeños, crispy onions & signature secret sauce.', 210, 280, 'side-quest', 'Side Quest', 'non-veg', 'bestseller', 4.9, 490, '', NULL, true, now(), now()),
-  ('sq-1', 'OG Fries', 'Classic golden cut potato fries, double-fried for maximum crispiness and lightly dusted with sea salt. Served with house aioli.', 110, 150, 'side-quest', 'Side Quest', 'veg', 'none', 4.6, 240, '', NULL, true, now(), now()),
-  ('sq-2', 'Peri Heat Fries', 'Piping hot crispy fries tossed vigorously in fiery African bird''s eye peri-peri spice dust and zesty lemon twist.', 130, 170, 'side-quest', 'Side Quest', 'veg', 'bestseller', 4.8, 360, '', NULL, true, now(), now()),
-  ('item_1790448560821_wmbp', 'Truffle Parmesan Fries', 'Crispy skin-on fries tossed with black truffle oil and 24-month aged parmesan.', 280, NULL, 'side-quest', 'side-quest', 'veg', 'new', 4.8, 100, '', NULL, false, now(), now()),
-  ('wd-1', 'Garlic Parmesan Wings', 'Crispy golden fried wings tossed in roasted garlic compound butter, topped with freshly grated 18-month aged parmesan and Italian parsley.', 260, 340, 'the-wing-dept', 'The Wing Dept', 'non-veg', 'bestseller', 4.9, 520, '', NULL, true, now(), now()),
-  ('wd-2', 'Hot Honey Glaze', 'Juicy jumbo wings coated in house-infused habanero hot honey glaze, delivering the ultimate sweet heat sticky crunch.', 250, 330, 'the-wing-dept', 'The Wing Dept', 'non-veg', 'chef-choice', 4.8, 380, '', NULL, true, now(), now()),
-  ('wd-3', 'Nashville Red Dust', 'Southern style ultra-crispy wings dunked in seasoned chili oil and heavy-dusted with fiery Nashville cayenne spice blend.', 250, 330, 'the-wing-dept', 'The Wing Dept', 'non-veg', 'spicy', 4.8, 340, '', NULL, true, now(), now())
-on conflict (id) do update set
-  name = excluded.name,
-  description = excluded.description,
-  price = excluded.price,
-  original_price = excluded.original_price,
-  category_id = excluded.category_id,
-  category_name = excluded.category_name,
-  diet_type = excluded.diet_type,
-  badge = excluded.badge,
-  rating = excluded.rating,
-  reviews_count = excluded.reviews_count,
-  available = excluded.available,
-  updated_at = now();
-
--- ==============================================================================
--- VERIFICATION & HEALTH CHECK QUERY
+-- 12. SUPABASE REALTIME REPLICATION PUBLICATION
 -- ==============================================================================
 do $$
-declare
-  v_tables integer;
-  v_menu integer;
-  v_config integer;
-  v_floor integer;
 begin
-  select count(*) into v_tables from information_schema.tables where table_schema = 'public';
-  select count(*) into v_menu from public.menu_items;
-  select count(*) into v_config from public.cafe_config;
-  select count(*) into v_floor from public.restaurant_tables;
-
-  raise notice '================================================================';
-  raise notice '  SPIRAL CAFE DATABASE SETUP COMPLETED SUCCESSFULLY!             ';
-  raise notice '  Public Tables Created       : %', v_tables;
-  raise notice '  Menu Catalog Items Seeded   : % (Expected: 41)', v_menu;
-  raise notice '  Cafe Config Initialized     : % (Expected: 1)', v_config;
-  raise notice '  Floor Tables Ready          : % (Expected: 15)', v_floor;
-  raise notice '================================================================';
+  alter publication supabase_realtime add table public.orders;
+  alter publication supabase_realtime add table public.order_items;
+  alter publication supabase_realtime add table public.restaurant_tables;
+  alter publication supabase_realtime add table public.table_reservations;
+  alter publication supabase_realtime add table public.table_transfer_requests;
+  alter publication supabase_realtime add table public.kots;
+  alter publication supabase_realtime add table public.print_attempts;
+exception
+  when others then null;
 end $$;

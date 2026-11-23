@@ -7,7 +7,7 @@ function getSupabaseCredentials() {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     (typeof import.meta !== "undefined" && (import.meta as any).env?.NEXT_PUBLIC_SUPABASE_URL) ||
-    "https://funsnqahpzsucbtxbvpo.supabase.co";
+    "https://bksrcekfswexsikspods.supabase.co";
 
   const supabaseAnonKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||

@@ -13,8 +13,8 @@
 
   "vars": {
     "NEXT_PUBLIC_RAZORPAY_KEY_ID": "rzp_test_TglDyNQunmzfuz",
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_ojyo-L4vtQdb_tw4jD1TeQ_g8k5Uxp4",
-    "NEXT_PUBLIC_SUPABASE_URL": "https://funsnqahpzsucbtxbvpo.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_hWGU19Ht5WY_i9oMBlMYeQ_x0lbzFa1",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://bksrcekfswexsikspods.supabase.co",
     "PAYMENT_PROVIDER": "razorpay",
     "RAZORPAY_KEY_ID": "rzp_test_TglDyNQunmzfuz",
     "SMS_PROVIDER": "mock",

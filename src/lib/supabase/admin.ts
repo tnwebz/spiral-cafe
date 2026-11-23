@@ -8,7 +8,7 @@ function getAdminCredentials() {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
-    "https://funsnqahpzsucbtxbvpo.supabase.co";
+    "https://bksrcekfswexsikspods.supabase.co";
 
   // Check privileged server-side service keys ONLY:
   // Never fall back to publishable/anon keys which are subject to RLS and lack admin rights.
