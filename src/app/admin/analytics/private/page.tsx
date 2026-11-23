@@ -33,6 +33,7 @@ import {
 import SalesAreaChart from "@/components/Admin/Analytics/SalesAreaChart";
 import EarningsDonutChart from "@/components/Admin/Analytics/EarningsDonutChart";
 import PaymentBarChart from "@/components/Admin/Analytics/PaymentBarChart";
+import AnalyticsPinGate from "@/components/Admin/AnalyticsPinGate";
 
 type PeriodFilter = "today" | "yesterday" | "week" | "30days" | "year" | "custom";
 type ChartType = "spline" | "bar";
@@ -81,6 +82,19 @@ export default function PrivateSalesAnalyticsPage() {
   const [reprintingId, setReprintingId] = useState<string | null>(null);
   const [reprintFeedback, setReprintFeedback] = useState<string | null>(null);
 
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("spiral_analytics_unlocked");
+      if (saved === "true") {
+        setIsUnlocked(true);
+      }
+    } catch {}
+    setCheckingUnlock(false);
+  }, []);
+
   // Inventory Table & Trending Metric state
   const [showInventoryTable, setShowInventoryTable] = useState<boolean>(false);
   const [trendingMetric, setTrendingMetric] = useState<"quantity" | "revenue">("quantity");
@@ -119,8 +133,10 @@ export default function PrivateSalesAnalyticsPage() {
   }, [period, customDate, purposeFilter]);
 
   useEffect(() => {
-    fetchPrivateAnalytics();
-  }, [fetchPrivateAnalytics]);
+    if (isUnlocked) {
+      fetchPrivateAnalytics();
+    }
+  }, [fetchPrivateAnalytics, isUnlocked]);
 
   // Currency Formatter
   const formatRupee = (num: number) => {
@@ -229,6 +245,28 @@ export default function PrivateSalesAnalyticsPage() {
     }
   };
 
+  if (checkingUnlock) {
+    return (
+      <AdminLayout>
+        <div className="min-h-[50vh] flex items-center justify-center">
+          <div className="w-7 h-7 border-2 border-[#CA340A] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isUnlocked) {
+    return (
+      <AdminLayout>
+        <AnalyticsPinGate
+          onUnlock={() => setIsUnlocked(true)}
+          title="Private Analytics Protected"
+          subtitle="Enter the 4-digit security PIN to access internal private orders and staff sales."
+        />
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-6 max-w-7xl mx-auto pb-24">
@@ -274,6 +312,21 @@ export default function PrivateSalesAnalyticsPage() {
               <span>Spiral Cafe</span>
               <ChevronDown size={14} className="text-zinc-500" />
             </div>
+
+            {/* Lock Page Button */}
+            <button
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem("spiral_analytics_unlocked");
+                } catch {}
+                setIsUnlocked(false);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-black/10 text-xs font-semibold text-zinc-700 hover:text-red-700 hover:border-red-200 transition-colors shadow-2xs cursor-pointer"
+              title="Lock Analytics"
+            >
+              <Lock size={13} className="text-[#CA340A]" />
+              <span className="hidden sm:inline">Lock</span>
+            </button>
 
             <div className="w-8 h-8 rounded-full bg-[#3B1220] text-white flex items-center justify-center font-bold text-xs shadow-2xs">
               M

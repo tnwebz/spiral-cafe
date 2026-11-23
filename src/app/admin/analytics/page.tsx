@@ -29,6 +29,7 @@ import {
 import SalesAreaChart from "@/components/Admin/Analytics/SalesAreaChart";
 import EarningsDonutChart from "@/components/Admin/Analytics/EarningsDonutChart";
 import PaymentBarChart from "@/components/Admin/Analytics/PaymentBarChart";
+import AnalyticsPinGate from "@/components/Admin/AnalyticsPinGate";
 
 type PeriodFilter = "today" | "yesterday" | "week" | "30days" | "year" | "custom";
 type ViewMode = "sales" | "payments";
@@ -105,6 +106,18 @@ export default function SalesAndAnalyticsPage() {
   const [productSearch, setProductSearch] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [productSortBy, setProductSortBy] = useState<"revenue" | "quantity">("revenue");
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("spiral_analytics_unlocked");
+      if (saved === "true") {
+        setIsUnlocked(true);
+      }
+    } catch {}
+    setCheckingUnlock(false);
+  }, []);
 
   // Dynamic time greeting: Good morning / Good afternoon / Good evening
   const greeting = useMemo(() => {
@@ -135,8 +148,10 @@ export default function SalesAndAnalyticsPage() {
   }, [period, customDate]);
 
   useEffect(() => {
-    fetchAnalyticsData();
-  }, [fetchAnalyticsData]);
+    if (isUnlocked) {
+      fetchAnalyticsData();
+    }
+  }, [fetchAnalyticsData, isUnlocked]);
 
   // Authentic live timeline from database (real-time orders)
   const activeTimeline: TimelinePoint[] = useMemo(() => {
@@ -268,6 +283,24 @@ export default function SalesAndAnalyticsPage() {
     return filtered;
   }, [data?.productSoldHistory, data?.trendingItems, productSearch, selectedCategory, productSortBy]);
 
+  if (checkingUnlock) {
+    return (
+      <AdminLayout>
+        <div className="min-h-[50vh] flex items-center justify-center">
+          <div className="w-7 h-7 border-2 border-[#CA340A] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!isUnlocked) {
+    return (
+      <AdminLayout>
+        <AnalyticsPinGate onUnlock={() => setIsUnlocked(true)} />
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout>
       <div className="text-[#2C1710] space-y-4">
@@ -289,7 +322,7 @@ export default function SalesAndAnalyticsPage() {
             </h1>
           </div>
 
-          {/* Right Header Controls (Store Pill, All Filter, Bell, Avatar, Refresh) */}
+          {/* Right Header Controls (Store Pill, All Filter, Bell, Avatar, Refresh, Lock) */}
           <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
             {/* Store Selector Pill */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-black/10 shadow-2xs text-xs font-semibold text-zinc-800">
@@ -302,6 +335,21 @@ export default function SalesAndAnalyticsPage() {
               <span>All</span>
               <ChevronDown size={14} className="text-zinc-500" />
             </div>
+
+            {/* Lock Page Button */}
+            <button
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem("spiral_analytics_unlocked");
+                } catch {}
+                setIsUnlocked(false);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-black/10 text-xs font-semibold text-zinc-700 hover:text-red-700 hover:border-red-200 transition-colors shadow-2xs cursor-pointer"
+              title="Lock Sales & Analytics"
+            >
+              <Lock size={13} className="text-[#CA340A]" />
+              <span className="hidden sm:inline">Lock</span>
+            </button>
 
             {/* Notification Bell */}
             <button
