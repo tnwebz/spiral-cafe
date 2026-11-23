@@ -47,21 +47,17 @@ export class ThermalReceiptFormatter {
 
   static generatePlaintextReceipt(data: ReceiptData): string {
     const divider = "-".repeat(this.LINE_WIDTH);
-    const doubleDivider = "=".repeat(this.LINE_WIDTH);
-
-    const isEstimate = data.paymentStatus !== "PAID" || !data.invoiceNumber || data.invoiceNumber.startsWith("EST");
-    const topLabel = isEstimate ? "Estimate" : "Invoice";
-    const cafeName = "Spiral Cafe";
-    const topSp = Math.max(1, this.LINE_WIDTH - topLabel.length - cafeName.length);
 
     const cleanTable = (data.tableNumber || "A1").toUpperCase();
-    const tableDateLine = `TABLE: ${cleanTable}  |  DATE: ${data.date}`;
-    const tableDatePad = Math.max(0, Math.floor((this.LINE_WIDTH - tableDateLine.length) / 2));
+    const tablePart = `TABLE: ${cleanTable}`;
+    const datePart = `DATE: ${data.date}`;
+    const topSp = Math.max(1, this.LINE_WIDTH - tablePart.length - datePart.length);
+    const tableDateLine = `${tablePart}${" ".repeat(topSp)}${datePart}`;
 
     const lines: string[] = [
-      `${topLabel}${" ".repeat(topSp)}${cafeName}`,
+      this.centerText("Spiral Cafe"),
       divider,
-      `${" ".repeat(tableDatePad)}${tableDateLine}`,
+      tableDateLine,
       divider,
       "Item         Qty  Pr.(Rs) Amt(Rs)",
       divider,
@@ -78,23 +74,25 @@ export class ThermalReceiptFormatter {
 
       const qtyStr = String(item.quantity).padStart(3, " ");
       const prStr = item.unitPrice.toFixed(2).padStart(7, " ");
-      const amtStr = item.lineTotal.toFixed(2).padStart(8, " ");
+      const amtStr = item.lineTotal.toFixed(2).padStart(7, " ");
       const rightCol = `${qtyStr} ${prStr} ${amtStr}`;
 
-      const fullName = `${cleanName} ${tag}`;
-      if (fullName.length <= 13) {
-        lines.push(`${fullName.padEnd(13, " ")} ${rightCol}`);
-      } else {
-        lines.push(`${fullName.substring(0, 13)} ${rightCol}`);
-        lines.push(fullName.substring(13));
+      const namePart = cleanName.length > 12 ? cleanName.substring(0, 12) : cleanName.padEnd(12, " ");
+      lines.push(`${namePart} ${rightCol}`);
+      if (cleanName.length > 12) {
+        lines.push(cleanName.substring(12));
       }
+      lines.push(`  ${tag}`);
     });
 
     lines.push(divider);
 
     const totalQty = data.items.reduce((s, it) => s + it.quantity, 0);
+    const totalItems = data.items.length;
+    const totItemsStr = `Total Items: ${totalItems}`;
     const totQtyStr = `Total Qty: ${totalQty}`;
-    lines.push(totQtyStr);
+    const qtySpaces = Math.max(1, this.LINE_WIDTH - totItemsStr.length - totQtyStr.length);
+    lines.push(`${totItemsStr}${" ".repeat(qtySpaces)}${totQtyStr}`);
 
     const subVal = data.subtotal.toFixed(2);
     const subSp = Math.max(1, this.LINE_WIDTH - "Total Summary".length - subVal.length);
@@ -112,14 +110,9 @@ export class ThermalReceiptFormatter {
       lines.push(`Packaging Fee${" ".repeat(packSp)}${packVal}`);
     }
 
-    lines.push(doubleDivider);
-
-    const gVal = `Rs ${data.grandTotal.toFixed(2)}`;
-    const gSp = Math.max(1, this.LINE_WIDTH - "GRAND TOTAL".length - gVal.length);
-    lines.push(`GRAND TOTAL${" ".repeat(gSp)}${gVal}`);
-
-    lines.push(`Payment Mode: ${(data.paymentMethod || "CASH").toUpperCase()}`);
-    lines.push("- ".repeat(16));
+    lines.push(divider);
+    lines.push(`GRAND TOTAL: Rs ${data.grandTotal.toFixed(2)}`);
+    lines.push(divider);
 
     lines.push(this.centerText("Thanks visit again!!!"));
 
