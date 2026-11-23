@@ -3,7 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-const BUCKET_NAME = "spiral-cafe";
+const BUCKET_NAME =
+  process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
+  process.env.SUPABASE_STORAGE_BUCKET ||
+  "product-images";
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",

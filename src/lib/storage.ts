@@ -1,6 +1,6 @@
 /**
  * Native Supabase Storage Engine for Spiral Cafe.
- * Bucket: "spiral-cafe"
+ * Bucket: "product-images"
  * Features:
  * - Automatic client-side image resizing and compression targeting 250KB - 300KB
  * - Real-time upload percentage tracking

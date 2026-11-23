@@ -15,6 +15,7 @@
     "ADMIN_SESSION_SECRET": "spiral_admin_jwt_secret_cafe_2026_production",
     "NEXT_PUBLIC_RAZORPAY_KEY_ID": "rzp_test_TglDyNQunmzfuz",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_hWGU19Ht5WY_i9oMBlMYeQ_x0lbzFa1",
+    "NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET": "product-images",
     "NEXT_PUBLIC_SUPABASE_URL": "https://bksrcekfswexsikspods.supabase.co",
     "PAYMENT_PROVIDER": "razorpay",
     "RAZORPAY_KEY_ID": "rzp_test_TglDyNQunmzfuz",
