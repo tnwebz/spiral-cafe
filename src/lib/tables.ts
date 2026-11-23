@@ -230,44 +230,7 @@ function writeLocalReservations(reservations: TableReservation[]) {
 export async function getActiveReservations(): Promise<TableReservation[]> {
   const now = new Date();
 
-  // 1. Primary: Use customer_sessions in Supabase (reliable distributed storage across all serverless containers)
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("customer_sessions" as any)
-      .select("*")
-      .ilike("id", "res_%")
-      .gt("last_active_at", now.toISOString());
-
-    if (!error && Array.isArray(data)) {
-      const activeFromDb: TableReservation[] = data.map((r: any) => ({
-        id: r.id,
-        tableNumber: normalizeTableLabel(r.table_number),
-        customerSessionId: r.session_token || "",
-        customerPhone: r.customer_phone || undefined,
-        reservedAt: r.started_at || new Date().toISOString(),
-        expiresAt: r.last_active_at || new Date().toISOString(),
-        status: "ACTIVE" as const,
-      }));
-
-      // Cache to local memory & file
-      writeLocalReservations(activeFromDb);
-
-      // Async cleanup expired reservation records from customer_sessions
-      Promise.resolve(
-        supabaseAdmin
-          .from("customer_sessions" as any)
-          .delete()
-          .ilike("id", "res_%")
-          .lte("last_active_at", now.toISOString())
-      ).catch(() => {});
-
-      return activeFromDb;
-    }
-  } catch (err) {
-    console.warn("customer_sessions reservation query warning:", err);
-  }
-
-  // 2. Secondary: Try table_reservations table if present
+  // 1. Primary: Use table_reservations in Supabase (authoritative source with status tracking)
   try {
     const { data, error } = await supabaseAdmin
       .from("table_reservations" as any)
@@ -292,7 +255,36 @@ export async function getActiveReservations(): Promise<TableReservation[]> {
       writeLocalReservations(activeFromDb);
       return activeFromDb;
     }
-  } catch {}
+  } catch (err) {
+    console.warn("table_reservations query warning:", err);
+  }
+
+  // 2. Secondary fallback: check customer_sessions only if table_reservations is inaccessible
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("customer_sessions" as any)
+      .select("*")
+      .ilike("id", "res_%")
+      .gt("last_active_at", now.toISOString());
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const activeFromDb: TableReservation[] = data.map((r: any) => ({
+        id: r.id,
+        tableNumber: normalizeTableLabel(r.table_number),
+        customerSessionId: r.session_token || "",
+        customerPhone: r.customer_phone || undefined,
+        reservedAt: r.started_at || new Date().toISOString(),
+        expiresAt: r.last_active_at || new Date().toISOString(),
+        status: "ACTIVE" as const,
+      }));
+
+      // Cache to local memory & file
+      writeLocalReservations(activeFromDb);
+      return activeFromDb;
+    }
+  } catch (err) {
+    console.warn("customer_sessions reservation query warning:", err);
+  }
 
   // 3. Fallback to local file with expiration filter
   const local = readLocalReservations();
@@ -612,7 +604,7 @@ export async function reserveTable(params: {
   }
 
   try {
-    await supabaseAdmin.from("table_reservations" as any).insert({
+    await supabaseAdmin.from("table_reservations" as any).upsert({
       id: reservation.id,
       table_number: norm,
       customer_session_id: params.customerSessionId,
@@ -620,8 +612,11 @@ export async function reserveTable(params: {
       reserved_at: reservation.reservedAt,
       expires_at: reservation.expiresAt,
       status: "ACTIVE",
+      updated_at: now.toISOString(),
     });
-  } catch {}
+  } catch (err) {
+    console.warn("table_reservations upsert warning:", err);
+  }
 
   const currentLocal = readLocalReservations().filter(
     (r) => r.customerSessionId !== params.customerSessionId && r.tableNumber !== norm
@@ -1518,7 +1513,7 @@ export async function releaseTableReservation(
     await supabaseAdmin
       .from("customer_sessions" as any)
       .delete()
-      .eq("id", `res_${norm.toUpperCase()}`);
+      .or(`id.eq.res_${norm.toUpperCase()},table_number.eq.${norm.toUpperCase()}`);
   } catch (err) {
     console.warn("releaseTableReservation customer_sessions warning:", err);
   }
@@ -1531,9 +1526,10 @@ export async function releaseTableReservation(
         notes: `Released by ${adminUser} at ${now}`,
         updated_at: now,
       })
-      .eq("table_number", norm)
-      .eq("status", "ACTIVE");
-  } catch {}
+      .eq("table_number", norm);
+  } catch (err) {
+    console.warn("releaseTableReservation table_reservations warning:", err);
+  }
 
   // Also cancel any unconfirmed pending orders for this released table
   try {
@@ -1564,16 +1560,7 @@ export async function releaseTableReservation(
       .or("notes.ilike.%[ORDER_TYPE:PRIVATE]%,order_number.ilike.PRV-%");
   } catch {}
 
-  const local = readLocalReservations().map((r) => {
-    if (r.tableNumber === norm && r.status === "ACTIVE") {
-      return {
-        ...r,
-        status: "RELEASED" as const,
-        notes: `Released by ${adminUser} at ${now}`,
-      };
-    }
-    return r;
-  });
+  const local = readLocalReservations().filter((r) => r.tableNumber !== norm);
   writeLocalReservations(local);
 }
 

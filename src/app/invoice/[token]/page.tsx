@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { Invoice } from "@/lib/db";
 import {
   Receipt,
@@ -15,12 +16,9 @@ import {
   MapPin,
 } from "lucide-react";
 
-export default function CustomerInvoicePage({
-  params,
-}: {
-  params: Promise<{ token: string }>;
-}) {
-  const { token } = use(params);
+export default function CustomerInvoicePage() {
+  const rawParams = useParams();
+  const token = typeof rawParams?.token === "string" ? rawParams.token : Array.isArray(rawParams?.token) ? rawParams.token[0] : "";
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [cafe, setCafe] = useState<any>(null);
@@ -28,7 +26,9 @@ export default function CustomerInvoicePage({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`/api/invoices/by-token/${token}`)
+    if (!token) return;
+    setLoading(true);
+    fetch(`/api/invoices/by-token/${encodeURIComponent(token)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {

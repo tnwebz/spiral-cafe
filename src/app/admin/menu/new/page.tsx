@@ -19,15 +19,17 @@ import {
 
 export const CATEGORY_OPTIONS = [
   { id: "side-quest", name: "Side Quest" },
-  { id: "the-wing-dept", name: "The Wing Dept" },
+  { id: "the-wing-dept", name: "Wing Dept." },
   { id: "share-club", name: "Share Club" },
   { id: "burgers", name: "Burgers" },
   { id: "sandos", name: "Sandos" },
   { id: "pasta", name: "Pasta" },
-  { id: "milk-coffee", name: "Milk Coffee" },
-  { id: "non-milk-coffee", name: "Non Milk Coffee" },
+  { id: "hot-coffee", name: "Hot Coffee" },
+  { id: "iced-coffee", name: "Iced Coffee" },
   { id: "coolers", name: "Coolers" },
-  { id: "iced-tea", name: "Iced Tea" },
+  { id: "shakes", name: "Shakes" },
+  { id: "speciality", name: "Speciality" },
+  { id: "baristazz-special", name: "Baristazz Special" },
 ];
 
 export default function AddMenuItemPage() {

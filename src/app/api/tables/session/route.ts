@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActiveOrderForTable, normalizeTableNumber } from "@/lib/db";
-import { getActiveReservations, getActiveCustomerVisit, reserveTable } from "@/lib/tables";
+import { getActiveReservations, getActiveCustomerVisit } from "@/lib/tables";
 
 export async function GET(req: NextRequest) {
   try {
@@ -100,43 +100,6 @@ export async function GET(req: NextRequest) {
         currentActiveTable: activeCustomerVisit?.tableNumber || null,
         currentActiveVisit: activeCustomerVisit || null,
       });
-    }
-
-    // If table is free/available and customer is visiting a floor table (not takeaway), auto-reserve for this customer!
-    const effectiveSession = sessionId || visitorId || "";
-    if (cleanTable !== "TAKEAWAY" && effectiveSession && !hasConflictVisit) {
-      try {
-        const newRes = await reserveTable({
-          tableNumber: cleanTable,
-          customerSessionId: effectiveSession,
-          customerPhone: phone || undefined,
-        });
-
-        const remainingSeconds = Math.max(
-          0,
-          Math.floor((new Date(newRes.expiresAt).getTime() - Date.now()) / 1000)
-        );
-
-        return NextResponse.json({
-          success: true,
-          tableNumber: cleanTable,
-          status: "RESERVED",
-          visitId: `VISIT-${cleanTable}-RES-${clientIdent.slice(-6).toUpperCase()}`,
-          isMyReservation: true,
-          isMyActiveTable: true,
-          isViewOnlyMenu: false,
-          isTableBookedByOther: false,
-          remainingSeconds,
-          expiresAt: newRes.expiresAt,
-          reservationId: newRes.id,
-          cartExpiryMinutes: 10,
-          conflictActiveVisit: false,
-          currentActiveTable: null,
-          currentActiveVisit: null,
-        });
-      } catch (err: any) {
-        console.warn("Auto-reserve notice:", err.message);
-      }
     }
 
     // Table is available / no active order & no reservation

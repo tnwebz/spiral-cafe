@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import { uploadImageToStorage } from "@/lib/storage";
@@ -18,24 +18,23 @@ import {
 
 const CATEGORY_OPTIONS = [
   { id: "side-quest", name: "Side Quest" },
-  { id: "the-wing-dept", name: "The Wing Dept" },
+  { id: "the-wing-dept", name: "Wing Dept." },
   { id: "share-club", name: "Share Club" },
   { id: "burgers", name: "Burgers" },
   { id: "sandos", name: "Sandos" },
   { id: "pasta", name: "Pasta" },
-  { id: "milk-coffee", name: "Milk Coffee" },
-  { id: "non-milk-coffee", name: "Non Milk Coffee" },
+  { id: "hot-coffee", name: "Hot Coffee" },
+  { id: "iced-coffee", name: "Iced Coffee" },
   { id: "coolers", name: "Coolers" },
-  { id: "iced-tea", name: "Iced Tea" },
+  { id: "shakes", name: "Shakes" },
+  { id: "speciality", name: "Speciality" },
+  { id: "baristazz-special", name: "Baristazz Special" },
 ];
 
-export default function EditMenuItemPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+export default function EditMenuItemPage() {
   const router = useRouter();
+  const rawParams = useParams();
+  const id = typeof rawParams?.id === "string" ? rawParams.id : Array.isArray(rawParams?.id) ? rawParams.id[0] : "";
 
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -61,14 +60,17 @@ export default function EditMenuItemPage({
   const [formError, setFormError] = useState("");
 
   useEffect(() => {
-    fetch(`/api/menu/items/${id}`)
+    if (!id) return;
+    setLoading(true);
+    setFormError("");
+    fetch(`/api/menu/items/${encodeURIComponent(id)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.item) {
           const it = data.item;
-          setName(it.name);
+          setName(it.name || "");
           setDescription(it.description || "");
-          setPrice(String(it.price));
+          setPrice(String(it.price || ""));
           setOriginalPrice(it.originalPrice ? String(it.originalPrice) : "");
           setCategoryId(it.categoryId || "side-quest");
           setDietType(it.dietType || "non-veg");
@@ -76,14 +78,17 @@ export default function EditMenuItemPage({
           setRating(String(it.rating || 4.8));
           setReviewsCount(String(it.reviewsCount || 100));
           setAvailable(it.available ?? true);
-          setImagePreview(it.image);
-          setUploadedUrl(it.image);
+          setImagePreview(it.image || null);
+          setUploadedUrl(it.image || "");
           setStoragePath(it.storagePath || it.cloudinaryPublicId || "");
         } else {
-          setFormError("Menu item not found.");
+          setFormError(data.error || "Menu item not found.");
         }
       })
-      .catch(() => setFormError("Failed to load item."))
+      .catch((err) => {
+        console.error("Fetch menu item error:", err);
+        setFormError("Failed to load menu item.");
+      })
       .finally(() => setLoading(false));
   }, [id]);
 

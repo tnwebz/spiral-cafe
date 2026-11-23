@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import CollectCashModal from "@/components/Admin/CollectCashModal";
 import ThermalReceiptModal from "@/components/Admin/ThermalReceipt";
@@ -23,12 +24,9 @@ import {
   X,
 } from "lucide-react";
 
-export default function OrderDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+export default function OrderDetailPage() {
+  const rawParams = useParams();
+  const id = typeof rawParams?.id === "string" ? rawParams.id : Array.isArray(rawParams?.id) ? rawParams.id[0] : "";
 
   const [order, setOrder] = useState<Order | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -41,8 +39,10 @@ export default function OrderDetailPage({
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const fetchOrder = async () => {
+    if (!id) return;
+    setLoading(true);
     try {
-      const res = await fetch(`/api/orders/${id}`);
+      const res = await fetch(`/api/orders/${encodeURIComponent(id)}`);
       const data = await res.json();
       if (data.success && data.order && data.order.id) {
         setOrder(data.order);
