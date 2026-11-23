@@ -45,7 +45,7 @@ export default function AdminTablesPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters & Sorting
-  const [activeTab, setActiveTab] = useState<"ALL" | "DINE-IN" | "ROOFTOP">("ALL");
+  const [activeTab, setActiveTab] = useState<"ALL">("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "AVAILABLE" | "RESERVED" | "NEW" | "YELLOW" | "GREEN">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("ASC");
@@ -273,10 +273,6 @@ export default function AdminTablesPage() {
   const filteredTables = useMemo(() => {
     return tables
       .filter((t) => {
-        // Section tab
-        if (activeTab === "DINE-IN" && t.section !== "Dine-In") return false;
-        if (activeTab === "ROOFTOP" && t.section !== "Rooftop") return false;
-
         // Status filter
         if (statusFilter === "AVAILABLE" && t.color !== "WHITE") return false;
         if (statusFilter === "RESERVED" && t.color !== "BLUE") return false;
@@ -698,39 +694,15 @@ export default function AdminTablesPage() {
           </button>
         </div>
 
-        {/* FILTER BAR & SEARCH (Replicating Image 2 Reference) */}
+        {/* FILTER BAR & SEARCH */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 bg-white/70 backdrop-blur-md p-2 sm:p-2.5 rounded-2xl border border-black/5">
-          {/* Section Tabs (ALL / DINE-IN / ROOFTOP) */}
+          {/* Section Tabs (ALL only) */}
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setActiveTab("ALL")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "ALL"
-                  ? "bg-[#3A1710] text-[#FFF9F5] shadow-xs"
-                  : "bg-white text-zinc-600 hover:bg-zinc-100"
-              }`}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-[#3A1710] text-[#FFF9F5] shadow-xs cursor-default"
             >
               ALL
-            </button>
-            <button
-              onClick={() => setActiveTab("DINE-IN")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "DINE-IN"
-                  ? "bg-[#3A1710] text-[#FFF9F5] shadow-xs"
-                  : "bg-white text-zinc-600 hover:bg-zinc-100"
-              }`}
-            >
-              DINE-IN
-            </button>
-            <button
-              onClick={() => setActiveTab("ROOFTOP")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "ROOFTOP"
-                  ? "bg-[#3A1710] text-[#FFF9F5] shadow-xs"
-                  : "bg-white text-zinc-600 hover:bg-zinc-100"
-              }`}
-            >
-              ROOFTOP
             </button>
           </div>
 
