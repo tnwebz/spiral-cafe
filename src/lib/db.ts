@@ -151,6 +151,7 @@ export function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
     row.order_type === "PRIVATE" ||
     row.table_number === "COUNTER" ||
     row.table_number === "GIVE ON COUNTER" ||
+    (row.order_number || "").startsWith("PRV-") ||
     notesStr.includes("[ORDER_TYPE:PRIVATE]");
 
   const orderType: OrderType = isPrivate ? "PRIVATE" : "CUSTOMER";
@@ -727,7 +728,7 @@ export async function getActiveOrderForTable(tableNumber: string): Promise<Order
     .select("*, order_items(*)")
     .eq("table_number", cleanTable)
     .neq("status", "CANCELLED")
-    .neq("payment_status", "PAID")
+    .neq("status", "COMPLETED")
     .or("notes.ilike.%[ORDER_TYPE:PRIVATE]%,order_number.ilike.PRV-%")
     .gte("created_at", cutoffIso)
     .order("created_at", { ascending: false })
@@ -756,12 +757,36 @@ export async function getActiveVisitOrdersForTable(tableNumber: string): Promise
   // If this is an internal private order holding the floor table
   const isPrivate =
     latestActive.orderType === "PRIVATE" ||
-    (latestActive.notes || "").includes("[ORDER_TYPE:PRIVATE]");
+    (latestActive.notes || "").includes("[ORDER_TYPE:PRIVATE]") ||
+    (latestActive.orderNumber || "").startsWith("PRV-");
 
   if (isPrivate) {
+    let allPrivateOrders = [latestActive];
+    try {
+      const activeCutoff = new Date(Date.now() - ACTIVE_DINEIN_MAX_AGE_MS).toISOString();
+      const { data: morePrivate } = await supabaseAdmin
+        .from("orders" as any)
+        .select("*, order_items(*)")
+        .eq("table_number", cleanTable)
+        .neq("status", "CANCELLED")
+        .neq("status", "COMPLETED")
+        .or("notes.ilike.%[ORDER_TYPE:PRIVATE]%,order_number.ilike.PRV-%")
+        .gte("created_at", activeCutoff)
+        .order("created_at", { ascending: false });
+
+      if (Array.isArray(morePrivate) && morePrivate.length > 0) {
+        const map = new Map<string, Order>();
+        for (const row of morePrivate) {
+          const ord = mapDbOrderToOrder(row);
+          map.set(ord.id, ord);
+        }
+        allPrivateOrders = Array.from(map.values());
+      }
+    } catch {}
+
     return {
       visitId: `INTERNAL-${cleanTable}-${latestActive.orderNumber}`,
-      orders: [latestActive],
+      orders: allPrivateOrders,
     };
   }
 
