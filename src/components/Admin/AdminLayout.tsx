@@ -23,6 +23,7 @@ import {
   LogOut,
   Menu as MenuIcon,
   X,
+  ArrowLeft,
   Radio,
   FileSpreadsheet,
   ClipboardCheck,
@@ -138,34 +139,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       data-lenis-prevent="true"
       className="min-h-screen bg-[#FFF9F5] text-[#2C1710] flex flex-col antialiased w-full relative"
     >
-      {/* MOBILE HEADER */}
-      <header className="md:hidden bg-[#3A1710] text-[#FFF9F5] px-4 py-3 flex items-center justify-between border-b border-[#CA340A]/20 sticky top-0 z-50 shadow-md">
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="p-1.5 rounded-lg bg-[#2C1710] text-[#FFF9F5] hover:bg-[#CA340A] transition-colors cursor-pointer"
-            aria-label="Open menu"
-          >
-            <MenuIcon size={20} />
-          </button>
-          <div className="relative w-8 h-8 rounded-full bg-[#FFF9F5] p-1 flex items-center justify-center">
-            <Image src="/logo.png" alt="Spiral Cafe" width={24} height={24} className="object-contain" />
-          </div>
-          <div>
-            <span className="font-heading font-extrabold text-sm tracking-tight text-[#FFF9F5]">SPIRAL CAFE</span>
-            <span className="block text-[10px] text-[#E2C7BA] font-medium">Floor Tables</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-black/20 text-[#E2C7BA]">
-            <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"}`} />
-            <span>{isConnected ? "LIVE" : "OFFLINE"}</span>
-          </div>
-        </div>
-      </header>
-
       {/* BACKDROP FOR SLIDE-OUT MENU (MOBILE & DESKTOP) */}
       {sidebarOpen && (
         <div
@@ -306,44 +279,68 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* MAIN CONTENT AREA (FULL SCREEN WIDTH) */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        {/* TOP DESKTOP BAR WITH 3-LINE TOGGLE */}
-        <header className="hidden md:flex bg-white border-b border-[#CA340A]/10 px-6 py-3 items-center justify-between sticky top-0 z-30 shadow-xs">
-          <div className="flex items-center gap-4">
-            {/* 3-LINE HAMBURGER TOGGLE BUTTON */}
+        {/* TOP UNIFIED ADMIN BAR WITH BACK BUTTON & 3-LINE MENU TOGGLE */}
+        <header className="flex bg-white border-b border-[#CA340A]/10 px-3 sm:px-6 py-2 sm:py-2.5 items-center justify-between sticky top-0 z-30 shadow-xs">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* BACK BUTTON */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  router.back();
+                } else {
+                  router.push("/admin/tables");
+                }
+              }}
+              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/20 text-[#2C1710] hover:bg-[#CA340A] hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs group shrink-0 active:scale-95"
+              title="Go Back"
+              aria-label="Back"
+            >
+              <ArrowLeft size={17} className="text-[#CA340A] group-hover:text-white group-hover:-translate-x-0.5 transition-all" />
+              <span className="font-heading font-extrabold text-xs tracking-wider uppercase">Back</span>
+            </button>
+
+            {/* 3-LINE HAMBURGER MENU TOGGLE BUTTON */}
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="p-2.5 rounded-xl bg-[#3A1710] text-[#FFF9F5] hover:bg-[#CA340A] transition-all flex items-center gap-2.5 cursor-pointer shadow-xs group"
+              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-[#2C1710] text-[#FFF9F5] hover:bg-[#CA340A] transition-all flex items-center gap-2 cursor-pointer shadow-xs group shrink-0 active:scale-95"
               title="Open Navigation Menu"
+              aria-label="Open Navigation Menu"
             >
-              <MenuIcon size={19} className="group-hover:scale-110 transition-transform" />
-              <span className="font-heading font-extrabold text-xs tracking-wider uppercase">Menu</span>
+              <MenuIcon size={18} className="group-hover:scale-110 transition-transform text-[#FFF9F5]" />
+              <span className="font-heading font-extrabold text-xs tracking-wider uppercase text-[#FFF9F5]">Menu</span>
             </button>
 
-            <div>
-              <h2 className="font-heading font-extrabold text-base text-[#2C1710] flex items-center gap-2">
-                <span>Spiral Cafe</span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-[#CA340A]">
-                  Table Floor Operations
-                </span>
-              </h2>
-              <p className="text-[11px] text-[#52525b]">
-                {new Date().toLocaleDateString("en-US", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </p>
+            <div className="flex items-center gap-2.5 truncate ml-1">
+              <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#CA340A] p-1 flex items-center justify-center text-white shrink-0 shadow-xs">
+                <Image src="/logo.png" alt="Spiral Cafe" width={20} height={20} className="object-contain" />
+              </div>
+              <div className="truncate">
+                <h2 className="font-heading font-extrabold text-xs sm:text-sm text-[#2C1710] flex items-center gap-1.5 truncate leading-tight">
+                  <span>Spiral Cafe</span>
+                  <span className="hidden md:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-[#CA340A]">
+                    Table Floor Operations
+                  </span>
+                </h2>
+                <p className="text-[10px] text-[#52525b] truncate font-medium">
+                  {new Date().toLocaleDateString("en-US", {
+                    weekday: "short",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {canInstall && !isInstalled && (
               <button
                 type="button"
                 onClick={() => installApp()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#CA340A]/30 bg-amber-50 text-[#CA340A] text-xs font-bold hover:bg-[#CA340A] hover:text-white transition-all shadow-xs cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#CA340A]/30 bg-amber-50 text-[#CA340A] text-xs font-bold hover:bg-[#CA340A] hover:text-white transition-all shadow-xs cursor-pointer"
                 title="Install Spiral Cafe POS as a standalone desktop app"
               >
                 <Download size={14} />
@@ -354,17 +351,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <Link
               href="/menu"
               target="_blank"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#2C1710] text-white text-xs font-bold hover:bg-[#3A1710] transition-all shadow-xs"
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#2C1710] text-white text-xs font-bold hover:bg-[#CA340A] transition-all shadow-xs shrink-0"
             >
               <UtensilsCrossed size={14} />
-              <span>Customer Menu</span>
+              <span className="hidden xs:inline">Customer Menu</span>
             </Link>
 
-            <div className="h-6 w-[1px] bg-zinc-200 mx-1" />
+            <div className="hidden sm:block h-6 w-[1px] bg-zinc-200 mx-0.5" />
 
-            <div className="flex items-center gap-2 text-xs font-semibold text-[#2C1710]">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-semibold text-[#2C1710] shrink-0">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Realtime Live</span>
+              <span className="hidden sm:inline">Realtime Live</span>
             </div>
           </div>
         </header>
