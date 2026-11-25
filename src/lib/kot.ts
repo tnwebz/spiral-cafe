@@ -208,8 +208,11 @@ export class KotReceiptEngine {
         .trim();
       const displayName = isItemParcel ? `${cleanName} (Parcel)` : cleanName;
 
+      commands += `${ESC}!\x00`; // Reset print mode: Font A, 1x1, un-stretched
+      commands += `${ESC}M\x00`; // Font A
       commands += `${GS}!\x00`;  // Normal size (1x width, 1x height)
       commands += `${ESC}E\x01`; // Bold ON
+      commands += `${ESC}G\x01`; // Double-strike ON (thicker bold)
       const qtyStr = String(item.quantity);
       const maxFirstLine = width - qtyStr.length - 1;
       const wrapped = this.wrapText(displayName, maxFirstLine);
@@ -218,6 +221,7 @@ export class KotReceiptEngine {
       for (let i = 1; i < wrapped.length; i++) {
         commands += `${wrapped[i]}\n`;
       }
+      commands += `${ESC}G\x00`; // Double-strike OFF
       commands += `${ESC}E\x00`; // Bold OFF
 
       if (item.notes) {
@@ -235,16 +239,26 @@ export class KotReceiptEngine {
     // 8. Divider
     commands += divider;
 
-    // 9. Total Items: X       Total Qty: Y (Bold)
+    // 9. Total Items: X       Total Qty: Y (Bold, Font A 1x1 un-stretched)
+    commands += `${ESC}!\x00`;
+    commands += `${ESC}M\x00`;
+    commands += `${GS}!\x00`;
     commands += `${ESC}E\x01`;
+    commands += `${ESC}G\x01`;
     commands += `${this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`, width)}\n`;
+    commands += `${ESC}G\x00`;
     commands += `${ESC}E\x00`;
 
     if (data.specialInstructions && data.specialInstructions.trim()) {
       const cleanInst = data.specialInstructions.trim().replace(/^"+|"+$/g, "");
       commands += divider;
+      commands += `${ESC}!\x00`;
+      commands += `${ESC}M\x00`;
+      commands += `${GS}!\x00`;
       commands += `${ESC}E\x01`;
+      commands += `${ESC}G\x01`;
       commands += `SPECIAL REQUEST:\n`;
+      commands += `${ESC}G\x00`;
       commands += `${ESC}E\x00`;
       commands += `"${cleanInst}"\n`;
     }
