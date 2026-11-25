@@ -64,7 +64,7 @@ export default function AdminOrderModal({
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loadingMenu, setLoadingMenu] = useState(true);
-  const [activeCategory, setActiveCategory] = useState<string>("ALL");
+  const [activeCategory, setActiveCategory] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
 
@@ -124,26 +124,33 @@ export default function AdminOrderModal({
     loadMenu();
   }, [isOpen]);
 
-  // Extract unique categories
+  // Extract unique categories (Without 'ALL' option)
   const categories = useMemo(() => {
     const set = new Set<string>();
     menuItems.forEach((i) => {
       if (i.categoryName) set.add(i.categoryName);
       else if (i.categoryId) set.add(i.categoryId);
     });
-    return ["ALL", ...Array.from(set)];
+    return Array.from(set);
   }, [menuItems]);
+
+  // Pre-select first category when loaded
+  useEffect(() => {
+    if (categories.length > 0 && (!activeCategory || activeCategory === "ALL" || !categories.includes(activeCategory))) {
+      setActiveCategory(categories[0]);
+    }
+  }, [categories, activeCategory]);
 
   // Filter menu items
   const filteredItems = useMemo(() => {
     return menuItems.filter((i) => {
-      if (activeCategory !== "ALL") {
-        const cat = (i.categoryName || i.categoryId || "").toLowerCase();
-        if (cat !== activeCategory.toLowerCase()) return false;
-      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return i.name.toLowerCase().includes(q);
+      }
+      if (activeCategory) {
+        const cat = (i.categoryName || i.categoryId || "").toLowerCase();
+        if (cat !== activeCategory.toLowerCase()) return false;
       }
       return true;
     });
@@ -379,146 +386,152 @@ export default function AdminOrderModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 w-screen h-screen bg-[#E9ECF0] flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in fade-in duration-150">
-      {/* ========================================================= */}
-      {/* TOP HEADER (Full-Width POS Style matching POSITEASY image) */}
-      {/* ========================================================= */}
-      <header className="h-14 bg-white border-b border-zinc-300 flex items-center justify-between shrink-0 shadow-xs z-20">
-        {/* Left: Brand / Table Info (Pinned to match left category bar width) */}
-        <div className="w-52 sm:w-60 h-full bg-[#35142A] text-white px-4 flex items-center justify-between border-r border-[#240C1C] shrink-0">
-          <div className="flex items-center gap-2.5 truncate">
-            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white shrink-0">
-              {isSeparateTakeaway ? <ShoppingBag size={17} /> : <UtensilsCrossed size={17} />}
-            </div>
-            <div className="truncate">
-              <span className="font-heading font-black text-xs tracking-wider block text-white truncate uppercase">
-                {isSeparateTakeaway ? "TAKEAWAY" : `TABLE ${defaultTableNumber}`}
-              </span>
-              <span className="text-[10px] text-[#E2C7BA] font-semibold block truncate">
-                Manual Order
-              </span>
+    <div
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 md:p-6 animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-[96vw] h-[92vh] lg:w-[75vw] lg:h-[75vh] max-w-[1450px] max-h-[850px] bg-[#FAF6F0] rounded-3xl border border-[#CA340A]/20 shadow-2xl flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in zoom-in-95 duration-150">
+        {/* ========================================================= */}
+        {/* TOP HEADER (Orange & Half-White Brand Gallery Style) */}
+        {/* ========================================================= */}
+        <header className="h-14 bg-[#FFF9F5] border-b border-[#CA340A]/15 flex items-center justify-between shrink-0 shadow-2xs z-20">
+          {/* Left: Brand / Table Info (Pinned to match left category bar width) */}
+          <div className="w-52 sm:w-60 h-full bg-[#2C1710] text-[#FFF9F5] px-4 flex items-center justify-between border-r border-[#CA340A]/20 shrink-0">
+            <div className="flex items-center gap-2.5 truncate">
+              <div className="w-8 h-8 rounded-lg bg-[#CA340A] flex items-center justify-center text-white shrink-0 shadow-xs">
+                {isSeparateTakeaway ? <ShoppingBag size={17} /> : <UtensilsCrossed size={17} />}
+              </div>
+              <div className="truncate">
+                <span className="font-heading font-black text-xs tracking-wider block text-white truncate uppercase">
+                  {isSeparateTakeaway ? "TAKEAWAY" : `TABLE ${defaultTableNumber}`}
+                </span>
+                <span className="text-[10px] text-[#E2C7BA] font-semibold block truncate">
+                  Manual Order
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Center: Search Product Bar */}
-        <div className="flex-1 max-w-2xl px-4 flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Product"
-              className="w-full pl-10 pr-4 py-2 bg-zinc-50 hover:bg-white border border-zinc-200 rounded-xl text-xs sm:text-sm font-semibold text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#35142A] focus:bg-white transition-all shadow-xs"
-              autoFocus
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-0.5 cursor-pointer"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* Quick Custom Product toggle */}
-          <button
-            type="button"
-            onClick={() => setShowCustomProductForm(!showCustomProductForm)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
-              showCustomProductForm
-                ? "bg-[#35142A] text-white shadow-xs"
-                : "bg-white hover:bg-zinc-100 text-[#35142A] border border-zinc-300"
-            }`}
-            title="Add custom off-menu product"
-          >
-            <Plus size={14} />
-            <span className="hidden sm:inline">+ Custom Item</span>
-          </button>
-        </div>
-
-        {/* Right: Close Button matching POS layout (Square box) */}
-        <div className="h-full flex items-center pr-3">
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-xl bg-[#35142A] hover:bg-[#4E1C3E] text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
-            aria-label="Close manual order"
-            title="Close Manual Order (ESC)"
-          >
-            <X size={20} />
-          </button>
-        </div>
-      </header>
-
-      {/* FEEDBACK NOTIFICATION */}
-      {feedback && (
-        <div
-          className={`px-5 py-2 text-xs font-bold flex items-center gap-2 shrink-0 ${
-            feedback.type === "SUCCESS"
-              ? "bg-emerald-50 text-emerald-800 border-b border-emerald-200"
-              : feedback.type === "WARNING"
-              ? "bg-amber-50 text-amber-900 border-b border-amber-300"
-              : "bg-red-50 text-red-800 border-b border-red-200"
-          }`}
-        >
-          {feedback.type === "SUCCESS" ? (
-            <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-          ) : (
-            <AlertTriangle
-              size={15}
-              className={feedback.type === "WARNING" ? "text-amber-600 shrink-0" : "text-red-600 shrink-0"}
-            />
-          )}
-          <span>{feedback.message}</span>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* 3-COLUMN BODY: CATEGORIES (LEFT) | PRODUCTS (MIDDLE) | CART (RIGHT) */}
-      {/* ========================================================= */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* ------------------------------------------------------- */}
-        {/* COLUMN 1: CATEGORIES SIDEBAR (Exact POS Theme) */}
-        {/* ------------------------------------------------------- */}
-        <aside className="w-52 sm:w-60 bg-[#35142A] flex flex-col h-full shrink-0 border-r border-[#240C1C] overflow-y-auto py-2 pr-1">
-          <div className="space-y-1">
-            {categories.map((cat) => {
-              const isActive = activeCategory === cat;
-              return (
+          {/* Center: Search Product Bar */}
+          <div className="flex-1 max-w-2xl px-4 flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search Product..."
+                className="w-full pl-10 pr-4 py-2 bg-white hover:bg-white border border-[#CA340A]/20 rounded-xl text-xs sm:text-sm font-semibold text-[#2C1710] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#CA340A] focus:border-[#CA340A] transition-all shadow-2xs"
+                autoFocus
+              />
+              {searchQuery && (
                 <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={`w-full text-left font-black tracking-wide text-xs uppercase transition-all flex items-center justify-between cursor-pointer ${
-                    isActive
-                      ? "bg-white text-[#35142A] py-3.5 px-4 rounded-r-2xl shadow-md font-black translate-x-1"
-                      : "text-zinc-200/90 hover:text-white hover:bg-white/10 py-3 px-4 rounded-r-xl"
-                  }`}
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-0.5 cursor-pointer"
                 >
-                  <span className="truncate">{cat}</span>
-                  {isActive && (
-                    <span className="w-2 h-2 rounded-full bg-[#CA340A] shrink-0 ml-1" />
-                  )}
+                  <X size={14} />
                 </button>
-              );
-            })}
-          </div>
-        </aside>
+              )}
+            </div>
 
-        {/* ------------------------------------------------------- */}
-        {/* COLUMN 2: PRODUCTS GRID (Middle expansive canvas) */}
-        {/* ------------------------------------------------------- */}
-        <main className="flex-1 bg-[#E9ECF0] h-full overflow-y-auto p-4 sm:p-5 flex flex-col">
+            {/* Quick Custom Product toggle */}
+            <button
+              type="button"
+              onClick={() => setShowCustomProductForm(!showCustomProductForm)}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                showCustomProductForm
+                  ? "bg-[#CA340A] text-white shadow-xs"
+                  : "bg-white hover:bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/30"
+              }`}
+              title="Add custom off-menu product"
+            >
+              <Plus size={14} />
+              <span className="hidden sm:inline">+ Custom Item</span>
+            </button>
+          </div>
+
+          {/* Right: Close Button matching POS layout (Square box) */}
+          <div className="h-full flex items-center pr-3">
+            <button
+              onClick={onClose}
+              className="w-10 h-10 rounded-xl bg-[#2C1710] hover:bg-[#CA340A] text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
+              aria-label="Close manual order"
+              title="Close Manual Order (ESC)"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </header>
+
+        {/* FEEDBACK NOTIFICATION */}
+        {feedback && (
+          <div
+            className={`px-5 py-2 text-xs font-bold flex items-center gap-2 shrink-0 ${
+              feedback.type === "SUCCESS"
+                ? "bg-emerald-50 text-emerald-800 border-b border-emerald-200"
+                : feedback.type === "WARNING"
+                ? "bg-amber-50 text-amber-900 border-b border-amber-300"
+                : "bg-red-50 text-red-800 border-b border-red-200"
+            }`}
+          >
+            {feedback.type === "SUCCESS" ? (
+              <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle
+                size={15}
+                className={feedback.type === "WARNING" ? "text-amber-600 shrink-0" : "text-red-600 shrink-0"}
+              />
+            )}
+            <span>{feedback.message}</span>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* 3-COLUMN BODY: CATEGORIES (LEFT) | PRODUCTS (MIDDLE) | CART (RIGHT) */}
+        {/* ========================================================= */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* ------------------------------------------------------- */}
+          {/* COLUMN 1: CATEGORIES SIDEBAR (Exact POS Theme) */}
+          {/* ------------------------------------------------------- */}
+          <aside className="w-52 sm:w-60 bg-[#FFF9F5] flex flex-col h-full shrink-0 border-r border-[#CA340A]/15 overflow-y-auto py-2 pr-1">
+            <div className="space-y-1">
+              {categories.map((cat) => {
+                const isActive = activeCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`w-full text-left font-black tracking-wide text-xs uppercase transition-all flex items-center justify-between cursor-pointer ${
+                      isActive
+                        ? "bg-[#CA340A] text-white py-3.5 px-4 rounded-r-2xl shadow-md shadow-[#CA340A]/20 font-black translate-x-1"
+                        : "text-[#52525b] hover:text-[#2C1710] hover:bg-[#FFF0EB] py-3 px-4 rounded-r-xl font-bold"
+                    }`}
+                  >
+                    <span className="truncate">{cat}</span>
+                    {isActive && (
+                      <span className="w-2 h-2 rounded-full bg-white shrink-0 ml-1" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          {/* ------------------------------------------------------- */}
+          {/* COLUMN 2: PRODUCTS GRID (Middle expansive canvas) */}
+          {/* ------------------------------------------------------- */}
+          <main className="flex-1 bg-[#FAF6F0] h-full overflow-y-auto p-4 sm:p-5 flex flex-col">
           {/* Custom Product Inline Creator Form (When expanded) */}
           {showCustomProductForm && (
             <form
               onSubmit={handleAddCustomToCart}
-              className="mb-4 p-4 bg-white rounded-2xl border-2 border-[#35142A]/20 shadow-md space-y-3 shrink-0 animate-in fade-in slide-in-from-top-1 duration-150"
+              className="mb-4 p-4 bg-white rounded-2xl border-2 border-[#CA340A]/20 shadow-md space-y-3 shrink-0 animate-in fade-in slide-in-from-top-1 duration-150"
             >
               <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-                <span className="text-xs font-black uppercase text-[#35142A] flex items-center gap-1.5">
+                <span className="text-xs font-black uppercase text-[#CA340A] flex items-center gap-1.5">
                   <Plus size={14} />
                   Add Custom Off-Menu Item
                 </span>
@@ -539,7 +552,7 @@ export default function AdminOrderModal({
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     placeholder="Product Name (e.g. Cold Coffee with Ice Cream)..."
-                    className="w-full px-3 py-2 bg-zinc-50 border border-zinc-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#35142A]"
+                    className="w-full px-3 py-2 bg-zinc-50 border border-zinc-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#CA340A]"
                     autoFocus
                   />
                 </div>
@@ -556,7 +569,7 @@ export default function AdminOrderModal({
                       value={customPrice}
                       onChange={(e) => setCustomPrice(e.target.value)}
                       placeholder="Price"
-                      className="w-full pl-7 pr-2 py-2 bg-zinc-50 border border-zinc-300 rounded-xl text-xs font-bold text-[#CA340A] focus:outline-none focus:ring-2 focus:ring-[#35142A]"
+                      className="w-full pl-7 pr-2 py-2 bg-zinc-50 border border-zinc-300 rounded-xl text-xs font-bold text-[#CA340A] focus:outline-none focus:ring-2 focus:ring-[#CA340A]"
                     />
                   </div>
                 </div>
@@ -568,7 +581,7 @@ export default function AdminOrderModal({
                     type="checkbox"
                     checked={customIsParcel}
                     onChange={(e) => setCustomIsParcel(e.target.checked)}
-                    className="rounded text-[#35142A] focus:ring-[#35142A] w-4 h-4"
+                    className="rounded text-[#CA340A] focus:ring-[#CA340A] w-4 h-4"
                   />
                   <span>Mark as Parcel / Takeaway</span>
                 </label>
@@ -576,7 +589,7 @@ export default function AdminOrderModal({
                 <button
                   type="submit"
                   disabled={!customName.trim() || !customPrice}
-                  className="px-5 py-2 bg-[#35142A] hover:bg-[#4E1C3E] text-white font-heading font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 bg-[#CA340A] hover:bg-[#A72B08] text-white font-heading font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Plus size={14} />
                   <span>Add to Order</span>
@@ -588,17 +601,17 @@ export default function AdminOrderModal({
           {/* Loading or Empty State */}
           {loadingMenu ? (
             <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 text-xs py-16">
-              <Loader2 size={28} className="animate-spin text-[#35142A] mb-2" />
+              <Loader2 size={28} className="animate-spin text-[#CA340A] mb-2" />
               <span>Loading menu catalog...</span>
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 text-xs py-16">
-              <UtensilsCrossed size={36} className="mb-2 opacity-50" />
+              <UtensilsCrossed size={36} className="mb-2 opacity-50 text-[#CA340A]" />
               <span className="font-semibold text-sm">No products found in category "{activeCategory}"</span>
               {searchQuery && <p className="text-xs text-zinc-500 mt-1">Try clearing your search query</p>}
             </div>
           ) : (
-            /* Products Grid (Replicating exact card design from POS image) */
+            /* Products Grid (Warm Alabaster & Orange Palette, comfortable vertical height) */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
               {filteredItems.map((dish) => {
                 const dineInQty = getDishDineInQty(dish.id);
@@ -611,17 +624,17 @@ export default function AdminOrderModal({
                   <div
                     key={dish.id}
                     onClick={() => handleAddItem(dish, false)}
-                    className={`bg-white rounded-xl p-3.5 border transition-all duration-150 flex flex-col justify-between min-h-[105px] cursor-pointer select-none group relative ${
+                    className={`bg-white rounded-2xl p-4 border transition-all duration-150 flex flex-col justify-between min-h-[132px] cursor-pointer select-none group relative ${
                       totalInCart > 0
-                        ? "border-[#35142A] shadow-md ring-2 ring-[#35142A]/20 bg-[#FDFCFD]"
-                        : "border-zinc-200/90 hover:border-[#35142A]/60 hover:shadow-sm"
+                        ? "border-[#CA340A] shadow-md ring-2 ring-[#CA340A]/20 bg-[#FFFBF7]"
+                        : "border-[#CA340A]/15 hover:border-[#CA340A] hover:shadow-md"
                     }`}
                   >
                     {/* Top: Dish Name + Diet Dot */}
                     <div>
                       <div className="flex items-start justify-between gap-1.5">
                         <h4
-                          className="font-bold text-xs sm:text-sm text-zinc-900 leading-snug line-clamp-2 group-hover:text-[#35142A] transition-colors"
+                          className="font-bold text-xs sm:text-sm text-[#2C1710] leading-snug line-clamp-2 group-hover:text-[#CA340A] transition-colors"
                           title={dish.name}
                         >
                           {dish.name}
@@ -635,16 +648,16 @@ export default function AdminOrderModal({
                       </div>
                     </div>
 
-                    {/* Bottom: Price + Quick Controls */}
-                    <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-between">
-                      <span className="font-heading font-extrabold text-sm sm:text-base text-zinc-900 tracking-tight">
+                    {/* Bottom: Price + Quick Controls (Enlarged for quick tapping) */}
+                    <div className="mt-3 pt-2.5 border-t border-zinc-100 flex items-center justify-between">
+                      <span className="font-heading font-black text-sm sm:text-base text-[#CA340A] tracking-tight">
                         ₹{dish.price}
                       </span>
 
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                         {/* If in cart, show quantity badge */}
                         {totalInCart > 0 && (
-                          <span className="px-2 py-0.5 rounded-lg bg-[#35142A] text-white text-[11px] font-black shadow-xs">
+                          <span className="px-2.5 py-1 rounded-lg bg-[#CA340A] text-white text-xs font-black shadow-xs">
                             {totalInCart}
                           </span>
                         )}
@@ -653,15 +666,15 @@ export default function AdminOrderModal({
                         <button
                           type="button"
                           onClick={() => handleAddItem(dish, true)}
-                          className={`p-1.5 rounded-lg font-bold text-[10px] flex items-center gap-0.5 transition-colors cursor-pointer ${
+                          className={`h-7 px-2.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
                             parcelQty > 0
-                              ? "bg-amber-100 text-amber-900 border border-amber-300"
-                              : "bg-zinc-100 hover:bg-amber-100 text-zinc-600 hover:text-amber-900"
+                              ? "bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40 shadow-2xs"
+                              : "bg-zinc-100 hover:bg-[#FFF0EB] text-zinc-600 hover:text-[#CA340A]"
                           }`}
                           title="Add as Takeaway Parcel"
                         >
-                          <ShoppingBag size={12} />
-                          <span className="text-[10px]">Parcel</span>
+                          <ShoppingBag size={14} />
+                          <span className="text-[11px]">Parcel</span>
                         </button>
                       </div>
                     </div>
@@ -675,13 +688,13 @@ export default function AdminOrderModal({
         {/* ------------------------------------------------------- */}
         {/* COLUMN 3: ORDER SUMMARY & BILLING DOCK (Right) */}
         {/* ------------------------------------------------------- */}
-        <aside className="w-80 lg:w-96 bg-white border-l border-zinc-300 flex flex-col h-full shrink-0 shadow-lg z-10">
+        <aside className="w-80 lg:w-96 bg-white border-l border-[#CA340A]/15 flex flex-col h-full shrink-0 shadow-lg z-10">
           {/* Cart Header */}
-          <div className="p-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between shrink-0">
+          <div className="p-4 border-b border-[#CA340A]/15 bg-[#FFF9F5] flex items-center justify-between shrink-0">
             <div>
-              <h3 className="font-heading font-extrabold text-sm text-zinc-900 uppercase tracking-wide flex items-center gap-2">
+              <h3 className="font-heading font-extrabold text-sm text-[#2C1710] uppercase tracking-wide flex items-center gap-2">
                 <span>Order Summary</span>
-                <span className="px-2 py-0.5 rounded-full bg-[#35142A] text-white text-xs font-mono font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-[#CA340A] text-white text-xs font-mono font-bold shadow-xs">
                   {totalItemsCount}
                 </span>
               </h3>
@@ -710,14 +723,14 @@ export default function AdminOrderModal({
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Guest Name (Opt)"
-                className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#35142A]"
+                className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
               />
               <input
                 type="tel"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 placeholder="Phone (Opt)"
-                className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#35142A]"
+                className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
               />
             </div>
             <input
@@ -725,7 +738,7 @@ export default function AdminOrderModal({
               value={orderNotes}
               onChange={(e) => setOrderNotes(e.target.value)}
               placeholder="Kitchen Instructions (e.g. Less spicy)..."
-              className="w-full px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#35142A]"
+              className="w-full px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#CA340A]"
             />
           </div>
 
@@ -733,7 +746,7 @@ export default function AdminOrderModal({
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {cartEntriesList.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-zinc-400 text-xs py-12">
-                <ShoppingBag size={32} className="mb-2 opacity-40 text-[#35142A]" />
+                <ShoppingBag size={32} className="mb-2 opacity-40 text-[#CA340A]" />
                 <span className="font-semibold text-zinc-600">Basket is empty</span>
                 <p className="text-[11px] text-zinc-400 mt-0.5">Click any product in the center grid to add</p>
               </div>
@@ -743,12 +756,12 @@ export default function AdminOrderModal({
                   key={key}
                   className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 transition-all ${
                     isParcel
-                      ? "bg-amber-50/60 border-amber-200"
+                      ? "bg-[#FFF9F5] border-[#CA340A]/30"
                       : "bg-zinc-50 border-zinc-200/90"
                   }`}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-zinc-900 truncate" title={item.name}>
+                    <div className="font-bold text-[#2C1710] truncate" title={item.name}>
                       {item.name}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -758,7 +771,7 @@ export default function AdminOrderModal({
                         onClick={() => handleToggleItemParcel(key)}
                         className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase transition-colors cursor-pointer ${
                           isParcel
-                            ? "bg-amber-200 text-amber-950 border border-amber-300"
+                            ? "bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40"
                             : "bg-zinc-200 text-zinc-600 hover:bg-zinc-300"
                         }`}
                       >
@@ -783,7 +796,7 @@ export default function AdminOrderModal({
                       <button
                         type="button"
                         onClick={() => handleAddItem(item, isParcel)}
-                        className="w-5 h-5 rounded bg-[#35142A] hover:bg-[#4E1C3E] text-white flex items-center justify-center cursor-pointer transition-colors"
+                        className="w-5 h-5 rounded bg-[#CA340A] hover:bg-[#A72B08] text-white flex items-center justify-center cursor-pointer transition-colors"
                       >
                         <Plus size={11} />
                       </button>
@@ -829,7 +842,7 @@ export default function AdminOrderModal({
               )}
               <div className="flex justify-between text-zinc-950 font-heading font-black text-base pt-1.5 border-t border-zinc-200">
                 <span>Grand Total</span>
-                <span className="text-[#35142A] font-mono">₹{grandTotal}</span>
+                <span className="text-[#CA340A] font-mono">₹{grandTotal}</span>
               </div>
             </div>
 
@@ -838,7 +851,7 @@ export default function AdminOrderModal({
               type="button"
               disabled={cart.size === 0 || submitting}
               onClick={handleSubmitOrder}
-              className="w-full py-3.5 px-4 bg-[#35142A] hover:bg-[#4E1C3E] text-white font-heading font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-[#35142A]/20 active:scale-98 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3.5 px-4 bg-[#CA340A] hover:bg-[#A72B08] text-white font-heading font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-[#CA340A]/20 active:scale-98 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <>
@@ -854,6 +867,7 @@ export default function AdminOrderModal({
             </button>
           </div>
         </aside>
+      </div>
       </div>
     </div>
   );
