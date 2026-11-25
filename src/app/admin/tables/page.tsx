@@ -20,6 +20,7 @@ import {
   Users,
   Clock,
   Printer,
+  Receipt,
   Sparkles,
   ChevronRight,
   AlertTriangle,
@@ -329,31 +330,50 @@ export default function AdminTablesPage() {
             {/* Kitchen Printer Connectivity Pill */}
             <button
               onClick={() => setPrinterModalOpen(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
-                printer.status === "CONNECTED"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
+                printer.connectorOnline && printer.kitchen.printerReachable
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                  : printer.status === "WARNING"
-                  ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
                   : "bg-red-50 text-red-800 border-red-200 hover:bg-red-100"
               }`}
-              title="Click to check or configure kitchen printer"
+              title="Kitchen 80mm ESC/POS TCP Printer Status"
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  printer.status === "CONNECTED"
+                  printer.connectorOnline && printer.kitchen.printerReachable
                     ? "bg-emerald-500 animate-pulse"
-                    : printer.status === "WARNING"
-                    ? "bg-amber-500"
                     : "bg-red-500"
                 }`}
               />
-              <Printer size={14} />
+              <Printer size={13} />
               <span>
-                {printer.status === "CONNECTED"
-                  ? "Printer Ready"
-                  : printer.status === "WARNING"
-                  ? "Printer Warning"
-                  : "Printer Disconnected"}
+                {printer.connectorOnline && printer.kitchen.printerReachable
+                  ? "Kitchen Ready"
+                  : "Kitchen Offline"}
+              </span>
+            </button>
+
+            {/* Counter KOT / Bill Printer Connectivity Pill */}
+            <button
+              onClick={() => setPrinterModalOpen(true)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
+                printer.connectorOnline && printer.counter.ready
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                  : "bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200"
+              }`}
+              title="Counter KOT & Bill 58mm USB Printer Status"
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  printer.connectorOnline && printer.counter.ready
+                    ? "bg-emerald-500 animate-pulse"
+                    : "bg-zinc-400"
+                }`}
+              />
+              <Receipt size={13} />
+              <span>
+                {printer.connectorOnline && printer.counter.ready
+                  ? "Counter KOT Ready"
+                  : "Counter KOT Offline"}
               </span>
             </button>
 

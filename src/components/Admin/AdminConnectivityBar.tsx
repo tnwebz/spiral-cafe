@@ -134,7 +134,7 @@ export default function AdminConnectivityBar({ syncState }: AdminConnectivityBar
             </span>
           </Link>
 
-          {/* Counter USB Printer */}
+          {/* Counter USB Printer (KOT & Bill) */}
           <Link
             href="/admin/printer"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold border transition-all hover:opacity-90 ${
@@ -144,13 +144,13 @@ export default function AdminConnectivityBar({ syncState }: AdminConnectivityBar
             }`}
             title={
               isCounterOnline
-                ? `Counter Bill Printer USB Ready (${printer.counter.printerName})`
-                : "Counter USB Bill Printer Offline or Disconnected"
+                ? `Counter KOT & Bill USB Printer Ready (${printer.counter.printerName}${printer.counter.portName ? ` on ${printer.counter.portName}` : ""})`
+                : "Counter KOT & Bill USB Printer Offline or Disconnected (Check USB & Power)"
             }
           >
             <Receipt size={13} className={isCounterOnline ? "text-emerald-600" : "text-zinc-500"} />
             <span className="text-[11px] font-bold">
-              {isCounterOnline ? "Counter 58mm USB Ready" : "Counter Bill Offline"}
+              {isCounterOnline ? "Counter KOT & Bill Ready" : "Counter KOT / Bill Offline"}
             </span>
           </Link>
         </div>
