@@ -1146,14 +1146,36 @@ export default function AdminOrdersPage() {
                           ₹{selectedOrder.subtotal || selectedOrder.grandTotal}
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500 font-medium">
-                          GST / Taxes
-                        </span>
-                        <span className="font-semibold text-zinc-900">
-                          ₹{selectedOrder.tax || 0}
-                        </span>
-                      </div>
+                      {(selectedOrder.tax || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500 font-medium">
+                            GST / Taxes
+                          </span>
+                          <span className="font-semibold text-zinc-900">
+                            ₹{selectedOrder.tax}
+                          </span>
+                        </div>
+                      )}
+                      {((selectedOrder as any).packagingFee || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500 font-medium">
+                            Packaging Fee
+                          </span>
+                          <span className="font-semibold text-zinc-900">
+                            ₹{(selectedOrder as any).packagingFee}
+                          </span>
+                        </div>
+                      )}
+                      {((selectedOrder as any).serviceCharge || 0) > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500 font-medium">
+                            Service Charge
+                          </span>
+                          <span className="font-semibold text-zinc-900">
+                            ₹{(selectedOrder as any).serviceCharge}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-heading font-extrabold text-sm text-zinc-900 pt-2 border-t border-zinc-200">
                         <span>Grand Total Paid</span>
                         <span className="text-[#CA340A]">

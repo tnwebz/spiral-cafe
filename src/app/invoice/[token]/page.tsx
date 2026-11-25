@@ -167,10 +167,12 @@ export default function CustomerInvoicePage() {
             <span>Subtotal</span>
             <span className="font-semibold text-[#2C1710]">₹{invoice.subtotal}</span>
           </div>
-          <div className="flex justify-between">
-            <span>GST / Tax</span>
-            <span className="font-semibold text-[#2C1710]">₹{invoice.tax}</span>
-          </div>
+          {invoice.tax > 0 && (
+            <div className="flex justify-between">
+              <span>GST / Tax</span>
+              <span className="font-semibold text-[#2C1710]">₹{invoice.tax}</span>
+            </div>
+          )}
           {invoice.packagingFee > 0 && (
             <div className="flex justify-between">
               <span>Packaging Charge</span>

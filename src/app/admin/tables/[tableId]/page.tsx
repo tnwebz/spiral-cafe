@@ -387,12 +387,13 @@ export default function TableDetailPage() {
           return it;
         });
         const newSubtotal = newItems.reduce((acc, it) => acc + (it.lineTotal || it.price * it.quantity), 0);
-        const newTax = Math.round(newSubtotal * 0.05);
+        const effectiveTaxRate = (ord.subtotal && ord.tax && ord.tax > 0) ? (ord.tax / ord.subtotal) : 0;
+        const newTax = Math.round(newSubtotal * effectiveTaxRate);
         const hasParcel = newItems.some(
           (it) => it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel")
         );
         const isTakeaway = ord.tableNumber === "TAKEAWAY";
-        const newPkg = (hasParcel || isTakeaway) ? (ord.packagingFee || 5) : 0;
+        const newPkg = (hasParcel || isTakeaway) ? (ord.packagingFee || 0) : 0;
         return {
           ...ord,
           items: newItems,
@@ -434,12 +435,13 @@ export default function TableDetailPage() {
         if (ord.id !== orderId) return ord;
         const newItems = ord.items.filter((it) => (item.id ? it.id !== item.id : it.name !== item.name));
         const newSubtotal = newItems.reduce((acc, it) => acc + (it.lineTotal || it.price * it.quantity), 0);
-        const newTax = Math.round(newSubtotal * 0.05);
+        const effectiveTaxRate = (ord.subtotal && ord.tax && ord.tax > 0) ? (ord.tax / ord.subtotal) : 0;
+        const newTax = Math.round(newSubtotal * effectiveTaxRate);
         const hasParcel = newItems.some(
           (it) => it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel")
         );
         const isTakeaway = ord.tableNumber === "TAKEAWAY";
-        const newPkg = (hasParcel || isTakeaway) ? (ord.packagingFee || 5) : 0;
+        const newPkg = (hasParcel || isTakeaway) ? (ord.packagingFee || 0) : 0;
         return {
           ...ord,
           items: newItems,

@@ -33,8 +33,10 @@ export default function AdminSettingsPage() {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
 
-  // Remember last non-zero tax rate when turning GST ON/OFF
+  // Remember last active tax & fee values when toggling Taxes & Extra Charges ON/OFF
   const [lastActiveTaxRate, setLastActiveTaxRate] = useState<number>(5);
+  const [lastActivePackagingFee, setLastActivePackagingFee] = useState<number>(5);
+  const [lastActiveServiceCharge, setLastActiveServiceCharge] = useState<number>(0);
 
   // Security Audit: Toggle visibility of terminal PINs
   const [showPins, setShowPins] = useState(false);
@@ -67,6 +69,17 @@ export default function AdminSettingsPage() {
           try {
             localStorage.setItem("spiral_last_tax_rate", String(rate));
           } catch {}
+        }
+        const pkg = parseFloat(cfgData.config.packagingFee);
+        if (!isNaN(pkg) && pkg > 0) {
+          setLastActivePackagingFee(pkg);
+          try {
+            localStorage.setItem("spiral_last_pkg_fee", String(pkg));
+          } catch {}
+        }
+        const srv = parseFloat(cfgData.config.serviceCharge);
+        if (!isNaN(srv) && srv > 0) {
+          setLastActiveServiceCharge(srv);
         }
       }
     } catch (e) {
@@ -117,6 +130,23 @@ export default function AdminSettingsPage() {
     setSaving(true);
     setToast(null);
 
+    const isMasterOff = !isTaxesAndFeesActive;
+    const finalTax = isMasterOff
+      ? 0
+      : isNaN(parseFloat(config.taxPercentage))
+      ? 0
+      : Math.max(0, parseFloat(config.taxPercentage));
+    const finalPackaging = isMasterOff
+      ? 0
+      : isNaN(parseFloat(config.packagingFee))
+      ? 0
+      : Math.max(0, parseFloat(config.packagingFee));
+    const finalService = isMasterOff
+      ? 0
+      : isNaN(parseFloat(config.serviceCharge))
+      ? 0
+      : Math.max(0, parseFloat(config.serviceCharge));
+
     try {
       const res = await fetch("/api/admin/settings", {
         method: "POST",
@@ -127,15 +157,9 @@ export default function AdminSettingsPage() {
             cafeAddress: config.cafeAddress,
             cafePhone: config.cafePhone,
             gstNumber: config.gstNumber,
-            taxPercentage: isNaN(parseFloat(config.taxPercentage))
-              ? 0
-              : Math.max(0, parseFloat(config.taxPercentage)),
-            packagingFee: isNaN(parseFloat(config.packagingFee))
-              ? 0
-              : Math.max(0, parseFloat(config.packagingFee)),
-            serviceCharge: isNaN(parseFloat(config.serviceCharge))
-              ? 0
-              : Math.max(0, parseFloat(config.serviceCharge)),
+            taxPercentage: finalTax,
+            packagingFee: finalPackaging,
+            serviceCharge: finalService,
             kitchenPin: config.kitchenPin,
             cashierPin: config.cashierPin,
             adminPin: config.adminPin,
@@ -158,28 +182,50 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const isGstOn = config ? parseFloat(config.taxPercentage) > 0 : false;
+  const isTaxesAndFeesActive = config
+    ? (parseFloat(config.taxPercentage || 0) > 0 ||
+       parseFloat(config.packagingFee || 0) > 0 ||
+       parseFloat(config.serviceCharge || 0) > 0)
+    : false;
 
-  const handleToggleGst = (turnOn: boolean) => {
+  const handleToggleTaxesAndFees = (turnOn: boolean) => {
     if (turnOn) {
-      let rate = lastActiveTaxRate;
-      if (!rate || rate <= 0) {
-        try {
-          const saved = localStorage.getItem("spiral_last_tax_rate");
-          if (saved && parseFloat(saved) > 0) rate = parseFloat(saved);
-        } catch {}
-      }
-      if (!rate || rate <= 0) rate = 5;
-      setConfig((prev: any) => ({ ...prev, taxPercentage: rate }));
+      let rate = lastActiveTaxRate > 0 ? lastActiveTaxRate : 5;
+      let pkg = lastActivePackagingFee > 0 ? lastActivePackagingFee : 5;
+      let srv = lastActiveServiceCharge >= 0 ? lastActiveServiceCharge : 0;
+      try {
+        const savedRate = localStorage.getItem("spiral_last_tax_rate");
+        if (savedRate && parseFloat(savedRate) > 0) rate = parseFloat(savedRate);
+        const savedPkg = localStorage.getItem("spiral_last_pkg_fee");
+        if (savedPkg && parseFloat(savedPkg) > 0) pkg = parseFloat(savedPkg);
+      } catch {}
+      setConfig((prev: any) => ({
+        ...prev,
+        taxPercentage: rate,
+        packagingFee: pkg,
+        serviceCharge: srv,
+      }));
     } else {
-      const current = parseFloat(config.taxPercentage);
-      if (!isNaN(current) && current > 0) {
-        setLastActiveTaxRate(current);
-        try {
-          localStorage.setItem("spiral_last_tax_rate", String(current));
-        } catch {}
+      const curRate = parseFloat(config.taxPercentage);
+      if (!isNaN(curRate) && curRate > 0) {
+        setLastActiveTaxRate(curRate);
+        try { localStorage.setItem("spiral_last_tax_rate", String(curRate)); } catch {}
       }
-      setConfig((prev: any) => ({ ...prev, taxPercentage: 0 }));
+      const curPkg = parseFloat(config.packagingFee);
+      if (!isNaN(curPkg) && curPkg > 0) {
+        setLastActivePackagingFee(curPkg);
+        try { localStorage.setItem("spiral_last_pkg_fee", String(curPkg)); } catch {}
+      }
+      const curSrv = parseFloat(config.serviceCharge);
+      if (!isNaN(curSrv) && curSrv > 0) {
+        setLastActiveServiceCharge(curSrv);
+      }
+      setConfig((prev: any) => ({
+        ...prev,
+        taxPercentage: 0,
+        packagingFee: 0,
+        serviceCharge: 0,
+      }));
     }
   };
 
@@ -362,7 +408,7 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          {/* Taxes & Surcharges */}
+          {/* Taxes & Surcharges (Cafe-Wide Master Toggle) */}
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-[#CA340A]/15 shadow-xs space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
               <div className="flex items-center gap-2">
@@ -372,28 +418,28 @@ export default function AdminSettingsPage() {
                 </h3>
               </div>
 
-              {/* GST Quick ON / OFF Pill Badge */}
+              {/* Master Quick ON / OFF Pill Badge */}
               <div className="flex items-center gap-2 self-start sm:self-auto">
-                <span className="text-xs font-bold text-zinc-500">GST Status:</span>
+                <span className="text-xs font-bold text-zinc-500">Status:</span>
                 <span
                   className={`text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider inline-flex items-center gap-1.5 ${
-                    isGstOn
+                    isTaxesAndFeesActive
                       ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                       : "bg-zinc-100 text-zinc-600 border border-zinc-300"
                   }`}
                 >
                   <span
-                    className={`w-2 h-2 rounded-full ${isGstOn ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"}`}
+                    className={`w-2 h-2 rounded-full ${isTaxesAndFeesActive ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"}`}
                   />
-                  <span>{isGstOn ? `ON (${config.taxPercentage}%)` : "OFF (0%)"}</span>
+                  <span>{isTaxesAndFeesActive ? "ENABLED" : "OFF (ALL REMOVED)"}</span>
                 </span>
               </div>
             </div>
 
-            {/* GST ON / OFF Dedicated Toggle Banner */}
+            {/* Master ON / OFF Dedicated Toggle Banner */}
             <div
               className={`p-4 rounded-2xl border transition-all duration-200 ${
-                isGstOn
+                isTaxesAndFeesActive
                   ? "bg-[#FFF9F5] border-[#CA340A]/20 shadow-2xs"
                   : "bg-zinc-50/80 border-zinc-200"
               }`}
@@ -401,38 +447,38 @@ export default function AdminSettingsPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <Power size={16} className={isGstOn ? "text-emerald-600" : "text-zinc-400"} />
+                    <Power size={16} className={isTaxesAndFeesActive ? "text-emerald-600" : "text-zinc-400"} />
                     <span className="font-heading font-black text-sm text-[#2C1710]">
-                      Enable Goods &amp; Services Tax (GST)
+                      Enable Taxes &amp; Extra Charges (GST, Packaging, Service Charge)
                     </span>
                   </div>
                   <p className="text-xs text-zinc-600">
-                    {isGstOn
-                      ? `GST is currently active. ${config.taxPercentage}% tax is charged on customer orders and bills.`
-                      : "GST is turned OFF. 0% tax is charged on all customer bills and thermal receipts."}
+                    {isTaxesAndFeesActive
+                      ? `Taxes and extra fees are enabled. GST (${config.taxPercentage}%), Packaging (₹${config.packagingFee || 0}), and Service (₹${config.serviceCharge || 0}) are applied where configured.`
+                      : "All taxes, packaging fees, and service charges are turned OFF. Removed completely from all bills, checkout, placed orders, invoices, and thermal receipts."}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto">
-                  <span className={`text-xs font-bold ${!isGstOn ? "text-zinc-900 font-extrabold" : "text-zinc-400"}`}>
+                  <span className={`text-xs font-bold ${!isTaxesAndFeesActive ? "text-zinc-900 font-extrabold" : "text-zinc-400"}`}>
                     OFF
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleToggleGst(!isGstOn)}
+                    onClick={() => handleToggleTaxesAndFees(!isTaxesAndFeesActive)}
                     className={`relative inline-flex h-7 w-13 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#CA340A] focus:ring-offset-2 ${
-                      isGstOn ? "bg-emerald-600" : "bg-zinc-300"
+                      isTaxesAndFeesActive ? "bg-emerald-600" : "bg-zinc-300"
                     }`}
                     role="switch"
-                    aria-checked={isGstOn}
+                    aria-checked={isTaxesAndFeesActive}
                   >
                     <span
                       className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                        isGstOn ? "translate-x-6" : "translate-x-0"
+                        isTaxesAndFeesActive ? "translate-x-6" : "translate-x-0"
                       }`}
                     />
                   </button>
-                  <span className={`text-xs font-bold ${isGstOn ? "text-emerald-700 font-extrabold" : "text-zinc-400"}`}>
+                  <span className={`text-xs font-bold ${isTaxesAndFeesActive ? "text-emerald-700 font-extrabold" : "text-zinc-400"}`}>
                     ON
                   </span>
                 </div>
@@ -440,14 +486,15 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* GST / Tax Input */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs sm:text-sm font-bold text-[#2C1710] uppercase tracking-wider">
                     GST / Tax (%)
                   </label>
-                  {!isGstOn && (
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                      0% (GST is OFF)
+                  {!isTaxesAndFeesActive && (
+                    <span className="text-[10px] font-bold text-zinc-500 bg-zinc-200/80 px-1.5 py-0.5 rounded border border-zinc-300">
+                      0% (Disabled)
                     </span>
                   )}
                 </div>
@@ -456,8 +503,8 @@ export default function AdminSettingsPage() {
                     type="number"
                     step="0.5"
                     min="0"
-                    disabled={!isGstOn}
-                    value={isGstOn ? (config.taxPercentage ?? "") : "0"}
+                    disabled={!isTaxesAndFeesActive}
+                    value={isTaxesAndFeesActive ? (config.taxPercentage ?? "") : "0"}
                     onChange={(e) => {
                       const val = e.target.value;
                       setConfig({ ...config, taxPercentage: val });
@@ -470,59 +517,132 @@ export default function AdminSettingsPage() {
                       }
                     }}
                     className={`w-full px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                      isGstOn
+                      isTaxesAndFeesActive
                         ? "bg-[#FFF9F5] border border-zinc-200 text-[#2C1710] focus:outline-none focus:border-[#CA340A]"
                         : "bg-zinc-100 border border-zinc-200 text-zinc-400 cursor-not-allowed opacity-75"
                     }`}
-                    placeholder={isGstOn ? "e.g. 5" : "0"}
+                    placeholder={isTaxesAndFeesActive ? "e.g. 5" : "0"}
                   />
-                  {!isGstOn && (
+                  {!isTaxesAndFeesActive && (
                     <button
                       type="button"
-                      onClick={() => handleToggleGst(true)}
+                      onClick={() => handleToggleTaxesAndFees(true)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#CA340A] hover:underline cursor-pointer"
                     >
-                      Turn ON
+                      Enable
                     </button>
                   )}
                 </div>
                 <p className="text-[11px] text-zinc-500 mt-1">
-                  {isGstOn
+                  {isTaxesAndFeesActive
                     ? "Enter percentage (e.g., 5 for 5% GST)."
-                    : "GST is turned OFF. Toggle ON to re-enable tax."}
+                    : "Turned OFF. 0% tax charged cafe-wide."}
                 </p>
               </div>
 
+              {/* Packaging Fee Input */}
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-[#52525b] mb-1.5 uppercase tracking-wider">
-                  Packaging Fee (₹)
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  value={config.packagingFee ?? ""}
-                  onChange={(e) =>
-                    setConfig({ ...config, packagingFee: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 bg-[#FFF9F5] border border-zinc-200 rounded-xl text-sm font-semibold text-[#52525b] focus:outline-none focus:border-[#CA340A]"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs sm:text-sm font-bold text-[#2C1710] uppercase tracking-wider">
+                    Packaging Fee (₹)
+                  </label>
+                  {!isTaxesAndFeesActive && (
+                    <span className="text-[10px] font-bold text-zinc-500 bg-zinc-200/80 px-1.5 py-0.5 rounded border border-zinc-300">
+                      ₹0 (Disabled)
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    disabled={!isTaxesAndFeesActive}
+                    value={isTaxesAndFeesActive ? (config.packagingFee ?? "") : "0"}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setConfig({ ...config, packagingFee: val });
+                      const num = parseFloat(val);
+                      if (!isNaN(num) && num > 0) {
+                        setLastActivePackagingFee(num);
+                        try {
+                          localStorage.setItem("spiral_last_pkg_fee", String(num));
+                        } catch {}
+                      }
+                    }}
+                    className={`w-full px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                      isTaxesAndFeesActive
+                        ? "bg-[#FFF9F5] border border-zinc-200 text-[#2C1710] focus:outline-none focus:border-[#CA340A]"
+                        : "bg-zinc-100 border border-zinc-200 text-zinc-400 cursor-not-allowed opacity-75"
+                    }`}
+                    placeholder={isTaxesAndFeesActive ? "e.g. 5" : "0"}
+                  />
+                  {!isTaxesAndFeesActive && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTaxesAndFees(true)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#CA340A] hover:underline cursor-pointer"
+                    >
+                      Enable
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  {isTaxesAndFeesActive
+                    ? "Flat fee applied only to takeaway/parcel orders."
+                    : "Turned OFF. ₹0 fee charged cafe-wide."}
+                </p>
               </div>
 
+              {/* Service Charge Input */}
               <div>
-                <label className="block text-xs sm:text-sm font-bold text-[#52525b] mb-1.5 uppercase tracking-wider">
-                  Service Charge (₹)
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  value={config.serviceCharge ?? ""}
-                  onChange={(e) =>
-                    setConfig({ ...config, serviceCharge: e.target.value })
-                  }
-                  className="w-full px-4 py-2.5 bg-[#FFF9F5] border border-zinc-200 rounded-xl text-sm font-semibold text-[#52525b] focus:outline-none focus:border-[#CA340A]"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs sm:text-sm font-bold text-[#2C1710] uppercase tracking-wider">
+                    Service Charge (₹)
+                  </label>
+                  {!isTaxesAndFeesActive && (
+                    <span className="text-[10px] font-bold text-zinc-500 bg-zinc-200/80 px-1.5 py-0.5 rounded border border-zinc-300">
+                      ₹0 (Disabled)
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    disabled={!isTaxesAndFeesActive}
+                    value={isTaxesAndFeesActive ? (config.serviceCharge ?? "") : "0"}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setConfig({ ...config, serviceCharge: val });
+                      const num = parseFloat(val);
+                      if (!isNaN(num) && num > 0) {
+                        setLastActiveServiceCharge(num);
+                      }
+                    }}
+                    className={`w-full px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                      isTaxesAndFeesActive
+                        ? "bg-[#FFF9F5] border border-zinc-200 text-[#2C1710] focus:outline-none focus:border-[#CA340A]"
+                        : "bg-zinc-100 border border-zinc-200 text-zinc-400 cursor-not-allowed opacity-75"
+                    }`}
+                    placeholder={isTaxesAndFeesActive ? "e.g. 0" : "0"}
+                  />
+                  {!isTaxesAndFeesActive && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTaxesAndFees(true)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#CA340A] hover:underline cursor-pointer"
+                    >
+                      Enable
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  {isTaxesAndFeesActive
+                    ? "Optional cafe service fee per table visit."
+                    : "Turned OFF. ₹0 charge cafe-wide."}
+                </p>
               </div>
             </div>
           </div>

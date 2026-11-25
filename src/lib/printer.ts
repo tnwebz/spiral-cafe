@@ -100,8 +100,8 @@ export class ThermalReceiptFormatter {
 
     if (data.tax && data.tax > 0) {
       const taxVal = data.tax.toFixed(2);
-      const taxSp = Math.max(1, this.LINE_WIDTH - "GST Tax (5%)".length - taxVal.length);
-      lines.push(`GST Tax (5%)${" ".repeat(taxSp)}${taxVal}`);
+      const taxSp = Math.max(1, this.LINE_WIDTH - "GST Tax".length - taxVal.length);
+      lines.push(`GST Tax${" ".repeat(taxSp)}${taxVal}`);
     }
 
     if (data.packagingFee && data.packagingFee > 0) {

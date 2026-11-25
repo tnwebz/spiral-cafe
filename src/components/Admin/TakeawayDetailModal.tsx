@@ -482,10 +482,18 @@ export default function TakeawayDetailModal({
               <span>Subtotal</span>
               <span className="font-bold text-zinc-800">₹{currentOrder.subtotal}</span>
             </div>
-            <div className="flex justify-between text-zinc-600">
-              <span>GST (5%)</span>
-              <span className="font-bold text-zinc-800">₹{currentOrder.tax}</span>
-            </div>
+            {(currentOrder.tax || 0) > 0 && (
+              <div className="flex justify-between text-zinc-600">
+                <span>GST Tax</span>
+                <span className="font-bold text-zinc-800">₹{currentOrder.tax}</span>
+              </div>
+            )}
+            {((currentOrder as any).packagingFee || 0) > 0 && (
+              <div className="flex justify-between text-zinc-600">
+                <span>Packaging Fee</span>
+                <span className="font-bold text-zinc-800">₹{(currentOrder as any).packagingFee}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center pt-2 border-t border-zinc-200 text-sm font-heading font-extrabold text-[#2C1710]">
               <span>Grand Total</span>
               <span className="text-[#CA340A] text-base">₹{currentOrder.grandTotal}</span>
