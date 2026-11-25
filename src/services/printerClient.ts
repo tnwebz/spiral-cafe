@@ -240,8 +240,8 @@ export class PrinterClient {
    */
   static async getDualPrinterStatus(force = false): Promise<DualPrinterState> {
     const defaultCounter: CounterPrinterState = {
-      printerModel: "KP206B-UB",
-      printerName: "POS-58-Series",
+      printerModel: "POS58",
+      printerName: "POS58 Printer",
       interface: "USB",
       paperWidthMm: 58,
       status: "OFFLINE",
@@ -321,8 +321,8 @@ export class PrinterClient {
           error: isKitchenReachable ? undefined : (kitchenData.message || kitchenData.error || "Kitchen printer offline"),
         },
         counter: {
-          printerModel: counterData.printerModel || "KP206B-UB",
-          printerName: counterData.printerName || "POS-58-Series",
+          printerModel: counterData.printerModel || "POS58",
+          printerName: counterData.printerName || "POS58 Printer",
           interface: "USB",
           paperWidthMm: counterData.paperWidthMm || 58,
           status: counterData.status || (counterData.ready ? "CONNECTED" : "DISCONNECTED"),

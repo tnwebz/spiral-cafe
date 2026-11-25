@@ -635,7 +635,7 @@ export default function AdminPrinterPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-zinc-500">Windows Queue</span>
                     <span className="font-semibold text-zinc-900 font-mono">
-                      {printer.counter.printerName || "POS-58-Series"}
+                      {printer.counter.printerName || "POS58 Printer"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -998,9 +998,9 @@ export default function AdminPrinterPage() {
                     </label>
                     <input
                       type="text"
-                      value={settings.qzPrinterName || "POS-58-Series"}
+                      value={settings.qzPrinterName || "POS58 Printer"}
                       onChange={(e) => setSettings({ ...settings, qzPrinterName: e.target.value })}
-                      placeholder="POS-58-Series"
+                      placeholder="POS58 Printer"
                       className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-zinc-950"
                     />
                     <p className="text-[11px] text-zinc-400 mt-1">Windows spooler queue for KP206B-UB</p>

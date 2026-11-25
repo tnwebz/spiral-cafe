@@ -368,7 +368,7 @@ export default function PrinterStatusModal({
                   <div>
                     <span className="text-zinc-500 block">Windows Print Queue</span>
                     <span className="font-mono font-bold text-zinc-800">
-                      {counterResult?.printerName || "POS-58-Series"}
+                      {counterResult?.printerName || "POS58 Printer"}
                     </span>
                   </div>
                   <div>

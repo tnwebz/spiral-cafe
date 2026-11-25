@@ -194,7 +194,7 @@ export default function ReceivePaymentModal({
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          Bill Printer Ready ({counterPrinter.printerName || "POS-58-Series"})
+          Bill Printer Ready ({counterPrinter.printerName || "POS58 Printer"})
         </span>
       );
     }
@@ -261,7 +261,7 @@ export default function ReceivePaymentModal({
             className="px-2.5 py-1 rounded-xl bg-white border border-stone-200 hover:bg-stone-100 text-[11px] font-extrabold text-[#3A1710] flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
             title={
               counterPrinter?.status === "CONNECTED"
-                ? "Quick print bill receipt to counter USB printer (POS-58-Series)"
+                ? "Quick print bill receipt to counter USB printer (POS58 Printer)"
                 : counterPrinter?.status === "NOT_READY"
                 ? "Printer readiness uncertain. Check Windows printer queue."
                 : "USB printer is unavailable or disconnected."
@@ -486,7 +486,7 @@ export default function ReceivePaymentModal({
                 {counterPrinter?.status === "NOT_READY" && (
                   <p className="text-[11px] text-amber-800 font-semibold text-center flex items-center justify-center gap-1.5 pt-0.5">
                     <AlertCircle size={13} className="shrink-0 text-amber-600" />
-                    <span>USB device detected, but Windows queue &apos;POS-58-Series&apos; readiness is uncertain.</span>
+                    <span>USB device detected, but Windows queue &apos;POS58 Printer&apos; readiness is uncertain.</span>
                   </p>
                 )}
                 {(!counterPrinter || counterPrinter.status === "OFFLINE") && (

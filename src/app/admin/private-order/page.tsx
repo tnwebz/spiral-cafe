@@ -513,7 +513,7 @@ export default function PrivateOrderPage() {
             <button
               onClick={() => setPrinterModalOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-black/10 text-xs font-bold text-zinc-700 hover:bg-zinc-50 transition-colors shadow-xs cursor-pointer"
-              title="Counter 58mm USB Bill Printer (POS-58-Series)"
+              title="Counter 58mm USB Bill Printer (POS58 Printer)"
             >
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
@@ -1326,7 +1326,7 @@ export default function PrivateOrderPage() {
                   />
                   <Printer size={15} className="text-[#3A1710]" />
                   <span className="font-bold text-[#1a120c]">
-                    Counter Bill Printer ({printer.counter?.printerName || "POS-58-Series"})
+                    Counter Bill Printer ({printer.counter?.printerName || "POS58 Printer"})
                   </span>
                 </div>
                 <span

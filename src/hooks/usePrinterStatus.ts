@@ -30,8 +30,8 @@ export function usePrinterStatus(pollIntervalMs = 4000): ExtendedPrinterHookStat
   };
 
   const defaultCounter: CounterPrinterState = {
-    printerModel: "KP206B-UB",
-    printerName: "POS-58-Series",
+    printerModel: "POS58",
+    printerName: "POS58 Printer",
     interface: "USB",
     paperWidthMm: 58,
     status: "OFFLINE",
