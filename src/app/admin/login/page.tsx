@@ -23,9 +23,9 @@ export default function AdminLoginPage() {
   const completeLoginAndRedirect = () => {
     setLoginSuccess(true);
     // The server has already set the secure HTTP-only session cookie (spiral_admin_token).
-    // A full window navigation commits the cookie and loads the authorized dashboard.
+    // A full window navigation commits the cookie and loads the authorized tables screen directly.
     if (typeof window !== "undefined") {
-      window.location.href = "/admin";
+      window.location.href = "/admin/tables";
     }
   };
 

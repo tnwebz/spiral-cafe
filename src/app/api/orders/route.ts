@@ -424,7 +424,15 @@ export async function GET(req: NextRequest) {
     const authError = await requireAdminAuth(req);
     if (authError) return authError;
 
-    const all = await getAllOrders();
+    const onlyPaid = searchParams.get("onlyPaid") === "true";
+    let all = await getAllOrders();
+    if (onlyPaid) {
+      all = all.filter(
+        (o) =>
+          o.paymentStatus === "PAID" ||
+          (o.status === "COMPLETED" && o.paymentStatus !== "UNPAID")
+      );
+    }
     return NextResponse.json({ success: true, orders: all });
   } catch (err: any) {
     return NextResponse.json(

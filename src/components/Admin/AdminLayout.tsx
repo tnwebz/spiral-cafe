@@ -122,10 +122,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     icon: any;
     targetBlank?: boolean;
   }> = [
-    { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-    { label: "Tables", href: "/admin/tables", icon: Grid2X2 },
+    { label: "Tables Floor", href: "/admin/tables", icon: Grid2X2 },
+    { label: "Billing Lists (Orders)", href: "/admin/orders", icon: ShoppingBag },
     { label: "Sales & Analytics", href: "/admin/analytics", icon: TrendingUp },
-    { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
+    { label: "Dashboard Overview", href: "/admin", icon: LayoutDashboard },
     { label: "Menu Management", href: "/admin/menu", icon: UtensilsCrossed },
     { label: "Inventory", href: "/admin/inventory", icon: FileSpreadsheet },
     { label: "Customers", href: "/admin/customers", icon: Users },
@@ -136,17 +136,25 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <div
       data-lenis-prevent="true"
-      className="min-h-screen bg-[#FFF9F5] text-[#2C1710] flex flex-col md:flex-row antialiased w-full relative"
+      className="min-h-screen bg-[#FFF9F5] text-[#2C1710] flex flex-col antialiased w-full relative"
     >
       {/* MOBILE HEADER */}
       <header className="md:hidden bg-[#3A1710] text-[#FFF9F5] px-4 py-3 flex items-center justify-between border-b border-[#CA340A]/20 sticky top-0 z-50 shadow-md">
         <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg bg-[#2C1710] text-[#FFF9F5] hover:bg-[#CA340A] transition-colors cursor-pointer"
+            aria-label="Open menu"
+          >
+            <MenuIcon size={20} />
+          </button>
           <div className="relative w-8 h-8 rounded-full bg-[#FFF9F5] p-1 flex items-center justify-center">
             <Image src="/logo.png" alt="Spiral Cafe" width={24} height={24} className="object-contain" />
           </div>
           <div>
             <span className="font-heading font-extrabold text-sm tracking-tight text-[#FFF9F5]">SPIRAL CAFE</span>
-            <span className="block text-[10px] text-[#E2C7BA] font-medium">Admin Console</span>
+            <span className="block text-[10px] text-[#E2C7BA] font-medium">Floor Tables</span>
           </div>
         </div>
 
@@ -155,32 +163,30 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"}`} />
             <span>{isConnected ? "LIVE" : "OFFLINE"}</span>
           </div>
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg bg-[#2C1710] text-[#FFF9F5] hover:bg-[#CA340A] transition-colors"
-          >
-            {sidebarOpen ? <X size={20} /> : <MenuIcon size={20} />}
-          </button>
         </div>
       </header>
 
-      {/* BACKDROP FOR MOBILE */}
+      {/* BACKDROP FOR SLIDE-OUT MENU (MOBILE & DESKTOP) */}
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity animate-in fade-in duration-200"
         />
       )}
 
-      {/* DESKTOP / TABLET SIDEBAR */}
+      {/* OFF-CANVAS SLIDE-OUT DRAWER MENU (CONTROLLED BY 3-LINE TOGGLE) */}
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-[#3A1710] text-[#FFF9F5] flex flex-col z-40 border-r border-[#CA340A]/15 transition-transform duration-200 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        } shadow-xl md:shadow-none shrink-0`}
+        className={`fixed top-0 left-0 h-screen w-72 bg-[#3A1710] text-[#FFF9F5] flex flex-col z-50 border-r border-[#CA340A]/20 shadow-2xl transition-transform duration-300 ease-in-out ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } shrink-0`}
       >
-        {/* Brand Header */}
+        {/* Brand Header with Close X */}
         <div className="p-5 border-b border-white/10 flex items-center justify-between">
-          <Link href="/admin" className="flex items-center gap-3">
+          <Link
+            href="/admin/tables"
+            onClick={() => setSidebarOpen(false)}
+            className="flex items-center gap-3"
+          >
             <div className="relative w-10 h-10 rounded-xl bg-[#FFF9F5] p-1.5 flex items-center justify-center shadow-md">
               <Image src="/logo.png" alt="Spiral Cafe" width={28} height={28} className="object-contain" />
             </div>
@@ -193,6 +199,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               </p>
             </div>
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="p-2 rounded-lg text-[#E2C7BA] hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            aria-label="Close navigation menu"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Live Status Pill */}
@@ -246,12 +261,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           })}
         </nav>
 
-        {/* Optional Install POS App (shown when installable & not yet in standalone mode) */}
+        {/* Optional Install POS App */}
         {canInstall && !isInstalled && (
           <div className="px-3 pb-3">
             <button
               type="button"
-              onClick={() => installApp()}
+              onClick={() => {
+                setSidebarOpen(false);
+                installApp();
+              }}
               className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#CA340A] hover:bg-[#A82806] text-white text-xs font-bold shadow-md shadow-[#CA340A]/30 transition-all cursor-pointer active:scale-95"
             >
               <Download size={14} />
@@ -286,16 +304,30 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN CONTENT AREA (FULL SCREEN WIDTH) */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        {/* TOP DESKTOP BAR */}
-        <header className="hidden md:flex bg-white border-b border-[#CA340A]/10 px-8 py-3.5 items-center justify-between sticky top-0 z-30 shadow-xs">
+        {/* TOP DESKTOP BAR WITH 3-LINE TOGGLE */}
+        <header className="hidden md:flex bg-white border-b border-[#CA340A]/10 px-6 py-3 items-center justify-between sticky top-0 z-30 shadow-xs">
           <div className="flex items-center gap-4">
+            {/* 3-LINE HAMBURGER TOGGLE BUTTON */}
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="p-2.5 rounded-xl bg-[#3A1710] text-[#FFF9F5] hover:bg-[#CA340A] transition-all flex items-center gap-2.5 cursor-pointer shadow-xs group"
+              title="Open Navigation Menu"
+            >
+              <MenuIcon size={19} className="group-hover:scale-110 transition-transform" />
+              <span className="font-heading font-extrabold text-xs tracking-wider uppercase">Menu</span>
+            </button>
+
             <div>
-              <h2 className="font-heading font-extrabold text-lg text-[#2C1710]">
-                Spiral Cafe Management
+              <h2 className="font-heading font-extrabold text-base text-[#2C1710] flex items-center gap-2">
+                <span>Spiral Cafe</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-[#CA340A]">
+                  Table Floor Operations
+                </span>
               </h2>
-              <p className="text-xs text-[#52525b]">
+              <p className="text-[11px] text-[#52525b]">
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
                   year: "numeric",
@@ -306,7 +338,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {canInstall && !isInstalled && (
               <button
                 type="button"
@@ -332,12 +364,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
             <div className="flex items-center gap-2 text-xs font-semibold text-[#2C1710]">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Realtime Connected</span>
+              <span>Realtime Live</span>
             </div>
           </div>
         </header>
 
-        {/* PAGE CONTENT CONTAINER */}
+        {/* PAGE CONTENT CONTAINER (FULL WIDTH) */}
         <main className="flex-1 p-3 sm:p-4 lg:p-5 w-full pb-8">
           <AdminConnectivityBar syncState={orderSync} />
           {children}

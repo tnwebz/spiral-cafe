@@ -90,7 +90,7 @@ export default function AdminOrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await fetch("/api/orders");
+      const res = await fetch("/api/orders?onlyPaid=true");
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) {
         setOrders(data.orders);
@@ -244,9 +244,125 @@ export default function AdminOrdersPage() {
     }
   };
 
-  // Filter logic
-  const filteredOrders = useMemo(() => {
+  // 1. Strict Order History Rule: Only show orders AFTER successful payment (never unpaid in-flight orders)
+  const paidOrdersOnly = useMemo(() => {
     return orders.filter((o) => {
+      return (
+        o.paymentStatus === "PAID" ||
+        (o.status === "COMPLETED" && o.paymentStatus !== "UNPAID")
+      );
+    });
+  }, [orders]);
+
+  // 2. Multi-Round Table Consolidation:
+  // If multiple orders were placed on the same table visit before payment,
+  // consolidate them into a single billing history record so it only shows ONCE.
+  const consolidatedOrders = useMemo(() => {
+    const groups = new Map<string, Order[]>();
+
+    paidOrdersOnly.forEach((ord) => {
+      const visitMatch = (ord.notes || "").match(/\[VISIT_ID:([^\]]+)\]/);
+      const visitKey = visitMatch ? visitMatch[1] : null;
+      const txnKey = ord.paymentTxnId && ord.paymentTxnId.trim() ? ord.paymentTxnId.trim() : null;
+      const isTableOrder = ord.tableNumber && ord.tableNumber !== "TAKEAWAY";
+
+      let key = "";
+      if (txnKey) {
+        key = `txn_${txnKey}_${ord.tableNumber}`;
+      } else if (visitKey) {
+        key = `visit_${visitKey}_${ord.tableNumber}`;
+      } else if (isTableOrder) {
+        // Group orders on the same table settled within the same 30-minute window
+        const dt = new Date(ord.updatedAt || ord.createdAt);
+        const roundedTime = Math.floor(dt.getTime() / (30 * 60 * 1000));
+        key = `tbl_${ord.tableNumber}_${roundedTime}`;
+      } else {
+        key = `ord_${ord.id}`;
+      }
+
+      const list = groups.get(key) || [];
+      list.push(ord);
+      groups.set(key, list);
+    });
+
+    const result: (Order & { consolidatedCount?: number; subOrders?: Order[] })[] = [];
+
+    groups.forEach((group) => {
+      if (group.length === 1) {
+        result.push(group[0]);
+        return;
+      }
+
+      // Multiple rounds placed on this table before payment:
+      // Sort chronologically (oldest round first)
+      group.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      const primary = group[0];
+      const latest = group[group.length - 1];
+
+      // Combine items from all rounds
+      const combinedItems: any[] = [];
+      group.forEach((o) => {
+        if (Array.isArray(o.items)) {
+          combinedItems.push(...o.items);
+        }
+      });
+
+      // Sum all financial amounts
+      const sumSubtotal = group.reduce(
+        (sum, o) => sum + (o.subtotal || o.grandTotal || 0),
+        0
+      );
+      const sumTax = group.reduce((sum, o) => sum + (o.tax || 0), 0);
+      const sumPackaging = group.reduce(
+        (sum, o) => sum + ((o as any).packagingFee || 0),
+        0
+      );
+      const sumGrand = group.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
+
+      // Clean order numbers e.g. "#121, #122"
+      const numberLabels = group
+        .map((o) => o.orderNumber.replace(/^(ORD-|#)/, ""))
+        .join(", #");
+
+      const mergedOrder: Order & { consolidatedCount?: number; subOrders?: Order[] } = {
+        ...primary,
+        id: primary.id,
+        orderNumber: `#${numberLabels}`,
+        items: combinedItems,
+        subtotal: sumSubtotal,
+        tax: sumTax,
+        grandTotal: sumGrand,
+        paymentStatus: "PAID",
+        paymentMethod: latest.paymentMethod || primary.paymentMethod || "CASH",
+        paymentTxnId: latest.paymentTxnId || primary.paymentTxnId,
+        status: "COMPLETED",
+        createdAt: latest.createdAt,
+        updatedAt: latest.updatedAt || latest.createdAt,
+        notes: `[CONSOLIDATED_VISIT: ${group.length} Rounds] ${primary.notes || ""}`,
+        consolidatedCount: group.length,
+        subOrders: group,
+      };
+
+      (mergedOrder as any).packagingFee = sumPackaging;
+
+      result.push(mergedOrder);
+    });
+
+    // Sort newest settlement first
+    result.sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt).getTime() -
+        new Date(a.updatedAt || a.createdAt).getTime()
+    );
+
+    return result;
+  }, [paidOrdersOnly]);
+
+  // Filter logic over consolidated paid orders
+  const filteredOrders = useMemo(() => {
+    return consolidatedOrders.filter((o) => {
       // 1. Date Filter
       if (dateFilter) {
         const orderDate = new Date(o.createdAt).toISOString().split("T")[0];
@@ -290,7 +406,7 @@ export default function AdminOrdersPage() {
       return true;
     });
   }, [
-    orders,
+    consolidatedOrders,
     dateFilter,
     orderIdFilter,
     paymentTypeFilter,
@@ -536,7 +652,7 @@ export default function AdminOrdersPage() {
                         </div>
 
                         {/* Full Payment Badge */}
-                        <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                               isSelected
@@ -548,6 +664,17 @@ export default function AdminOrdersPage() {
                           >
                             {isPaid ? "Full payment" : "Unpaid"}
                           </span>
+                          {(ord as any).consolidatedCount > 1 && (
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                isSelected
+                                  ? "bg-amber-400/20 text-amber-300 border border-amber-400/30"
+                                  : "bg-amber-100 text-amber-900 border border-amber-300"
+                              }`}
+                            >
+                              {(ord as any).consolidatedCount} Orders Combined
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -693,10 +820,17 @@ export default function AdminOrdersPage() {
                     <div className="p-5 overflow-y-auto space-y-5">
                       {/* Big Order Title */}
                       <div>
-                        <h2 className="font-heading font-black text-2xl text-[#1E1E24] tracking-tight">
-                          Order #
-                          {selectedOrder.orderNumber.replace(/^[A-Za-z]+-/, "")}
-                        </h2>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h2 className="font-heading font-black text-2xl text-[#1E1E24] tracking-tight">
+                            Order #
+                            {selectedOrder.orderNumber.replace(/^[A-Za-z]+-/, "")}
+                          </h2>
+                          {(selectedOrder as any).consolidatedCount > 1 && (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              {(selectedOrder as any).consolidatedCount} Orders Consolidated
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Key-Value Metadata Grid */}
