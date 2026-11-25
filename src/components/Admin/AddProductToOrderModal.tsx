@@ -29,6 +29,16 @@ interface MenuItem {
   available?: boolean;
 }
 
+function getDishDiet(dish: { name?: string; dietType?: string }) {
+  const nameLower = (dish.name || "").toLowerCase();
+  if (nameLower.includes("non-veg") || nameLower.includes("non veg")) return "non-veg";
+  if (nameLower.includes("(veg)") || nameLower.includes("[veg]") || nameLower.includes(" pure veg")) return "veg";
+  if (dish.dietType?.toLowerCase() === "non-veg") return "non-veg";
+  if (dish.dietType?.toLowerCase() === "veg") return "veg";
+  if (/\b(chicken|prawn|mutton|fish|egg|pork|beef|meat)\b/i.test(dish.name || "")) return "non-veg";
+  return "veg";
+}
+
 interface AddProductToOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -53,6 +63,7 @@ export default function AddProductToOrderModal({
   const [activeCategory, setActiveCategory] = useState("ALL");
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
   const [itemParcelFlags, setItemParcelFlags] = useState<Record<string, boolean>>({});
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
 
   // Custom Product State
   const [customName, setCustomName] = useState("");
@@ -387,39 +398,67 @@ export default function AddProductToOrderModal({
                     const qty = getQty(dish.id);
                     const isParcel = Boolean(itemParcelFlags[dish.id]);
                     const isAddingThis = addingId === dish.id;
+                    const diet = getDishDiet(dish);
+                    const isVeg = diet === "veg";
+                    const hasImage = Boolean(dish.image && !brokenImages.has(dish.id));
 
                     return (
                       <div
                         key={dish.id}
                         className="p-3.5 bg-white rounded-2xl border border-[#EBDAD0] hover:border-zinc-300 shadow-xs flex flex-col justify-between transition-all"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-zinc-100 shrink-0">
-                            {dish.image ? (
-                              <Image
+                        <div className="flex items-start gap-2.5">
+                          {hasImage && (
+                            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-zinc-100 shrink-0">
+                              <img
                                 src={dish.image}
                                 alt={dish.name}
-                                fill
-                                className="object-cover"
-                                unoptimized
+                                className="w-full h-full object-cover"
+                                onError={() =>
+                                  setBrokenImages((prev) => new Set(prev).add(dish.id))
+                                }
                               />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-zinc-400 bg-zinc-100">
-                                <UtensilsCrossed size={18} />
-                              </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
 
                           <div className="min-w-0 flex-1">
-                            <h4 className="font-heading font-extrabold text-xs text-[#2C1710] truncate">
-                              {dish.name}
-                            </h4>
-                            <p className="text-[11px] font-bold text-zinc-500 mt-0.5">
-                              {dish.categoryName || "Special"}
-                            </p>
-                            <span className="font-heading font-black text-xs text-[#CA340A] block mt-1">
-                              ₹{dish.price}
-                            </span>
+                            <div className="flex items-start gap-1.5">
+                              {/* Veg / Non-Veg Standard Indicator */}
+                              <span
+                                className={`inline-flex items-center justify-center w-3.5 h-3.5 border rounded-[3px] bg-white shrink-0 mt-0.5 ${
+                                  isVeg ? "border-emerald-600" : "border-rose-600"
+                                }`}
+                                title={isVeg ? "Pure Vegetarian" : "Non-Vegetarian"}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    isVeg ? "bg-emerald-600" : "bg-rose-600"
+                                  }`}
+                                />
+                              </span>
+
+                              <h4
+                                className="font-heading font-extrabold text-xs text-[#2C1710] leading-snug line-clamp-2 min-h-[2.1rem] break-words"
+                                title={dish.name}
+                              >
+                                {dish.name}
+                              </h4>
+                            </div>
+
+                            <div className="mt-1 flex items-center justify-between gap-1 flex-wrap">
+                              <span className="font-heading font-black text-xs text-[#CA340A]">
+                                ₹{dish.price}
+                              </span>
+                              <span
+                                className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                  isVeg
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {isVeg ? "Veg" : "Non-Veg"}
+                              </span>
+                            </div>
                           </div>
                         </div>
 

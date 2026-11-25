@@ -30,6 +30,16 @@ interface MenuItem {
   available?: boolean;
 }
 
+function getDishDiet(dish: { name?: string; dietType?: string }) {
+  const nameLower = (dish.name || "").toLowerCase();
+  if (nameLower.includes("non-veg") || nameLower.includes("non veg")) return "non-veg";
+  if (nameLower.includes("(veg)") || nameLower.includes("[veg]") || nameLower.includes(" pure veg")) return "veg";
+  if (dish.dietType?.toLowerCase() === "non-veg") return "non-veg";
+  if (dish.dietType?.toLowerCase() === "veg") return "veg";
+  if (/\b(chicken|prawn|mutton|fish|egg|pork|beef|meat)\b/i.test(dish.name || "")) return "non-veg";
+  return "veg";
+}
+
 interface CartEntry {
   item: MenuItem;
   quantity: number;
@@ -56,6 +66,7 @@ export default function AdminOrderModal({
   const [loadingMenu, setLoadingMenu] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
 
   // Order Details
   const [customerName, setCustomerName] = useState("");
@@ -572,6 +583,9 @@ export default function AdminOrderModal({
                     const dineInQty = getDishDineInQty(dish.id);
                     const parcelQty = getDishParcelQty(dish.id);
                     const hasSelection = dineInQty > 0 || parcelQty > 0;
+                    const diet = getDishDiet(dish);
+                    const isVeg = diet === "veg";
+                    const hasImage = Boolean(dish.image && !brokenImages.has(dish.id));
 
                     return (
                       <div
@@ -583,24 +597,56 @@ export default function AdminOrderModal({
                         }`}
                       >
                         <div className="flex items-start gap-2.5">
-                          {dish.image && (
-                            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-zinc-100 shrink-0">
-                              <Image
+                          {hasImage && (
+                            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-zinc-100 shrink-0">
+                              <img
                                 src={dish.image}
                                 alt={dish.name}
-                                fill
-                                className="object-cover"
-                                unoptimized
+                                className="w-full h-full object-cover"
+                                onError={() =>
+                                  setBrokenImages((prev) => new Set(prev).add(dish.id))
+                                }
                               />
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <h4 className="font-heading font-bold text-xs text-[#2C1710] truncate">
-                              {dish.name}
-                            </h4>
-                            <span className="font-heading font-extrabold text-xs text-[#CA340A]">
-                              ₹{dish.price}
-                            </span>
+                            <div className="flex items-start gap-1.5">
+                              {/* Veg / Non-Veg Standard Indicator */}
+                              <span
+                                className={`inline-flex items-center justify-center w-3.5 h-3.5 border rounded-[3px] bg-white shrink-0 mt-0.5 ${
+                                  isVeg ? "border-emerald-600" : "border-rose-600"
+                                }`}
+                                title={isVeg ? "Pure Vegetarian" : "Non-Vegetarian"}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    isVeg ? "bg-emerald-600" : "bg-rose-600"
+                                  }`}
+                                />
+                              </span>
+
+                              <h4
+                                className="font-heading font-bold text-xs text-[#2C1710] leading-snug line-clamp-2 min-h-[2.1rem] break-words"
+                                title={dish.name}
+                              >
+                                {dish.name}
+                              </h4>
+                            </div>
+
+                            <div className="mt-1 flex items-center justify-between gap-1 flex-wrap">
+                              <span className="font-heading font-extrabold text-xs text-[#CA340A]">
+                                ₹{dish.price}
+                              </span>
+                              <span
+                                className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                  isVeg
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {isVeg ? "Veg" : "Non-Veg"}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -786,8 +832,8 @@ export default function AdminOrderModal({
                       }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-[#2C1710] truncate flex items-center gap-1.5">
-                          <span className="truncate">{item.name}</span>
+                        <div className="font-bold text-[#2C1710] flex items-center gap-1.5 min-w-0">
+                          <span className="line-clamp-1 break-words min-w-0" title={item.name}>{item.name}</span>
                           {/* Clickable Parcel Toggle Pill */}
                           <button
                             type="button"
