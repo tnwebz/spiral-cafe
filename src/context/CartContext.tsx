@@ -802,7 +802,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const totalItems = cart.reduce((sum, it) => sum + it.quantity, 0);
   const subtotal = cart.reduce((sum, it) => sum + it.price * it.quantity, 0);
   const tax = Math.round((subtotal * taxPercentage) / 100);
-  const grandTotal = subtotal + tax + packagingFee;
+  const hasParcel = cart.some(
+    (it) => it.isParcel || it.id.includes("__parcel") || it.name.toLowerCase().includes("(parcel)")
+  );
+  const isTakeaway = tableNumber === "TAKEAWAY";
+  const effectivePackagingFee = (hasParcel || isTakeaway) ? packagingFee : 0;
+  const grandTotal = subtotal + tax + effectivePackagingFee;
 
   // Place Order with Idempotency Key & Safe Unsubmitted Cart Clearing
   const placeOrder = useCallback(
@@ -1151,7 +1156,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         subtotal,
         taxPercentage,
         tax,
-        packagingFee,
+        packagingFee: effectivePackagingFee,
         grandTotal,
         isCartOpen,
         setIsCartOpen,

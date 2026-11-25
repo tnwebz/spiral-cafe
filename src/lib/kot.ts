@@ -80,41 +80,27 @@ export class KotReceiptEngine {
     const width = 32;
     const divider = "-".repeat(width);
 
-    const hasParcelItem = data.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
-    const hasDineInItem = data.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
-    const isMixedOrder = Boolean(data.isMixed || (hasParcelItem && hasDineInItem));
+    const lines: string[] = [];
+    lines.push(`Table No: ${data.tableNumber}`);
 
-    const lines: string[] = ["          SPIRAL CAFE"];
-
-    if (data.isPrivateOrder) {
-      lines.push("*** PRIVATE ORDER ***");
-    } else if (isMixedOrder) {
-      lines.push("*** DINE IN & TAKE AWAY ***");
-    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway || (hasParcelItem && !hasDineInItem)) {
-      lines.push("*** TAKE AWAY ***");
-    }
-
-    lines.push(`TABLE ${data.tableNumber.toUpperCase()}`);
-    lines.push(divider);
-
-    const cleanOrderNum = (data.orderNumber || "").replace(/^#/, "");
-    const dateStr = data.dateStr || new Date().toLocaleDateString("en-GB");
-    lines.push(this.formatLine(`Order: #${cleanOrderNum}`, `Date: ${dateStr}`, width));
+    const dateTimeStr = data.timeStr
+      ? `${(data.dateStr || "").replace(/-/g, "/")} ${data.timeStr.toLowerCase()}`
+      : (data.dateStr || "").replace(/-/g, "/");
+    lines.push(`Date: ${dateTimeStr}`);
+    lines.push(`Terminal : ${data.terminalName || "Billing 1"}`);
 
     if (data.round && data.round > 1) {
       lines.push(`Round: ${data.round} (Add-on)`);
     }
 
     lines.push(divider);
-    lines.push(this.formatLine("ITEM", "QTY", width));
+    lines.push(this.formatLine("Item", "Qty", width));
     lines.push(divider);
 
     data.items.forEach((item) => {
       const isItemParcel =
         item.name.toLowerCase().includes("(parcel)") ||
-        (item.notes || "").toLowerCase().includes("parcel") ||
-        data.tableNumber === "TAKEAWAY" ||
-        (!isMixedOrder && Boolean(data.isTakeaway));
+        (item.notes || "").toLowerCase().includes("parcel");
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
         .replace(/\s*-\s*\(dine in\)/gi, "")
@@ -123,18 +109,17 @@ export class KotReceiptEngine {
         .replace(/\s*\[parcel\]/gi, "")
         .replace(/\s*\[dine in\]/gi, "")
         .trim();
-      const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
-      const fullName = `${cleanName} - ${tag}`;
+      const displayName = isItemParcel ? `${cleanName} (Parcel)` : cleanName;
       const qtyStr = String(item.quantity);
       const maxFirstLine = width - qtyStr.length - 1;
-      const wrapped = this.wrapText(fullName, maxFirstLine);
-      const firstLine = wrapped[0] || fullName.substring(0, maxFirstLine);
+      const wrapped = this.wrapText(displayName, maxFirstLine);
+      const firstLine = wrapped[0] || displayName.substring(0, maxFirstLine);
       lines.push(this.formatLine(firstLine, qtyStr, width));
       for (let i = 1; i < wrapped.length; i++) {
         lines.push(wrapped[i]);
       }
 
-      // Print legitimate kitchen customization notes, but skip redundant dine-in/parcel tags
+      // Print legitimate kitchen customization notes
       if (item.notes) {
         const cleanNote = item.notes
           .replace(/\[[^\]]+\]/g, "")
@@ -157,95 +142,62 @@ export class KotReceiptEngine {
       lines.push(`"${cleanInst}"`);
     }
 
-    lines.push(divider);
-    lines.push("        —— ORDER SLIP ——");
-
     return lines.join("\n");
   }
 
   /**
    * Generates standard ESC/POS binary command string for 58mm thermal receipt printer
-   * Formatted to match the approved physical reference design.
+   * Formatted to match the approved physical reference design (Image 2).
    */
   static generateEscPosCommands(data: KotData): string {
     const ESC = "\x1B";
     const GS = "\x1D";
     const width = 32;
+    const divider = "-".repeat(width) + "\n";
 
     let commands = "";
 
     // 1. Initialize printer
     commands += `${ESC}@`;
 
-    // 2. Set character code page to standard PC437, Font A (12x24), Normal 1x1 size, and default line spacing
+    // 2. Set character code page to standard PC437, Font A (12x24), Normal 1x1 size, Left align
     commands += `${ESC}t\x00`;
     commands += `${ESC}M\x00`; // Standard Font A
-    commands += `${GS}!\x00`;  // Normal size (1x width, 1x height)
     commands += `${ESC}2`;     // Default line spacing
-    commands += `${ESC}E\x00`; // Bold OFF
-    commands += `${GS}B\x00`;  // Reverse OFF
-
-    const hasParcelItem = data.items.some((i) => i.name.toLowerCase().includes("(parcel)") || (i.notes || "").toLowerCase().includes("parcel"));
-    const hasDineInItem = data.items.some((i) => !i.name.toLowerCase().includes("(parcel)") && !(i.notes || "").toLowerCase().includes("parcel"));
-    const isMixedOrder = Boolean(data.isMixed || (hasParcelItem && hasDineInItem));
-
-    // Centered SPIRAL CAFE in bold
-    commands += `${ESC}a\x01`; // Center
-    commands += `${ESC}E\x01`; // Bold ON
-    commands += `SPIRAL CAFE\n`;
-
-    // Reverse color banner for DINE IN & TAKE AWAY
-    commands += `${GS}B\x01`; // Reverse ON
-    if (data.isPrivateOrder) {
-      commands += ` *** PRIVATE ORDER *** \n`;
-    } else if (isMixedOrder) {
-      commands += ` *** DINE IN & TAKE AWAY *** \n`;
-    } else if (data.tableNumber === "TAKEAWAY" || data.isTakeaway || (hasParcelItem && !hasDineInItem)) {
-      commands += ` *** TAKE AWAY *** \n`;
-    } else {
-      commands += ` *** DINE IN *** \n`;
-    }
-    commands += `${GS}B\x00`; // Reverse OFF
-
-    // Large Bold Table Number
-    commands += `${GS}!\x11`; // Double size
-    commands += `TABLE ${data.tableNumber.toUpperCase()}\n`;
-    commands += `${GS}!\x00`; // Normal size
-    commands += `${ESC}E\x00`; // Bold OFF
-
-    // Divider
-    const divider = "-".repeat(width);
-    commands += `${divider}\n`;
-
-    // Order: #106 | Date: DD/MM/YYYY
     commands += `${ESC}a\x00`; // Align Left
-    const cleanOrderNum = (data.orderNumber || "").replace(/^#/, "");
-    const dateStr = data.dateStr || new Date().toLocaleDateString("en-GB");
-    const orderText = `Order: #${cleanOrderNum}`;
-    const dateText = `Date: ${dateStr}`;
-    const sp = Math.max(1, width - orderText.length - dateText.length);
+
+    // 3. Table No: <tableNumber> (Bold, Double size GS ! 0x11)
+    commands += `${GS}!\x11`;
     commands += `${ESC}E\x01`;
-    commands += orderText;
+    commands += `Table No: ${data.tableNumber}\n`;
+    commands += `${GS}!\x00`;
     commands += `${ESC}E\x00`;
-    commands += `${" ".repeat(sp)}${dateText}\n`;
+
+    // 4. Date & Terminal (Bold, Normal size 1x1)
+    commands += `${ESC}E\x01`;
+    const dateTimeStr = data.timeStr
+      ? `${(data.dateStr || "").replace(/-/g, "/")} ${data.timeStr.toLowerCase()}`
+      : (data.dateStr || "").replace(/-/g, "/");
+    commands += `Date: ${dateTimeStr}\n`;
+    commands += `Terminal : ${data.terminalName || "Billing 1"}\n`;
 
     if (data.round && data.round > 1) {
-      commands += `Round: ${data.round} (Add-on Order)\n`;
+      commands += `Round: ${data.round} (Add-on)\n`;
     }
-
-    commands += `${divider}\n`;
-    commands += `${ESC}E\x01`;
-    commands += `${this.formatLine("ITEM", "QTY", width)}\n`;
     commands += `${ESC}E\x00`;
-    commands += `${divider}\n`;
 
-    // Items with (Dine In) / (Parcel)
-    const isTakeaway = data.tableNumber === "TAKEAWAY" || (!isMixedOrder && Boolean(data.isTakeaway));
+    // 5. Divider
+    commands += divider;
+
+    // 6. Header: Item                         Qty (Title Case)
+    commands += `${this.formatLine("Item", "Qty", width)}\n`;
+    commands += divider;
+
+    // 7. Items in Bold
     data.items.forEach((item) => {
       const isItemParcel =
         item.name.toLowerCase().includes("(parcel)") ||
-        (item.notes || "").toLowerCase().includes("parcel") ||
-        isTakeaway;
+        (item.notes || "").toLowerCase().includes("parcel");
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
         .replace(/\s*-\s*\(dine in\)/gi, "")
@@ -254,15 +206,14 @@ export class KotReceiptEngine {
         .replace(/\s*\[parcel\]/gi, "")
         .replace(/\s*\[dine in\]/gi, "")
         .trim();
-      const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
-      const fullName = `${cleanName} - ${tag}`;
+      const displayName = isItemParcel ? `${cleanName} (Parcel)` : cleanName;
 
       commands += `${GS}!\x00`;  // Normal size (1x width, 1x height)
       commands += `${ESC}E\x01`; // Bold ON
       const qtyStr = String(item.quantity);
       const maxFirstLine = width - qtyStr.length - 1;
-      const wrapped = this.wrapText(fullName, maxFirstLine);
-      const firstLine = wrapped[0] || fullName.substring(0, maxFirstLine);
+      const wrapped = this.wrapText(displayName, maxFirstLine);
+      const firstLine = wrapped[0] || displayName.substring(0, maxFirstLine);
       commands += `${this.formatLine(firstLine, qtyStr, width)}\n`;
       for (let i = 1; i < wrapped.length; i++) {
         commands += `${wrapped[i]}\n`;
@@ -281,25 +232,22 @@ export class KotReceiptEngine {
       }
     });
 
-    commands += `${divider}\n`;
+    // 8. Divider
+    commands += divider;
+
+    // 9. Total Items: X       Total Qty: Y (Bold)
     commands += `${ESC}E\x01`;
     commands += `${this.formatLine(`Total Items: ${data.totalItems}`, `Total Qty: ${data.totalQuantity}`, width)}\n`;
     commands += `${ESC}E\x00`;
 
     if (data.specialInstructions && data.specialInstructions.trim()) {
       const cleanInst = data.specialInstructions.trim().replace(/^"+|"+$/g, "");
-      commands += `${divider}\n`;
+      commands += divider;
       commands += `${ESC}E\x01`;
       commands += `SPECIAL REQUEST:\n`;
       commands += `${ESC}E\x00`;
       commands += `"${cleanInst}"\n`;
     }
-
-    commands += `${divider}\n`;
-    commands += `${ESC}a\x01`; // Center
-    commands += `${ESC}E\x01`;
-    commands += `—— ORDER SLIP ——\n`;
-    commands += `${ESC}E\x00`;
 
     // Minimal paper feed (2 lines) and cut
     commands += `\n\n`;

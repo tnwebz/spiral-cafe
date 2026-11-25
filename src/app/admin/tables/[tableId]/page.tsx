@@ -388,12 +388,18 @@ export default function TableDetailPage() {
         });
         const newSubtotal = newItems.reduce((acc, it) => acc + (it.lineTotal || it.price * it.quantity), 0);
         const newTax = Math.round(newSubtotal * 0.05);
+        const hasParcel = newItems.some(
+          (it) => it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel")
+        );
+        const isTakeaway = ord.tableNumber === "TAKEAWAY";
+        const newPkg = (hasParcel || isTakeaway) ? (ord.packagingFee || 5) : 0;
         return {
           ...ord,
           items: newItems,
           subtotal: newSubtotal,
           tax: newTax,
-          grandTotal: newSubtotal + newTax + (ord.packagingFee || 0) + (ord.serviceCharge || 0),
+          packagingFee: newPkg,
+          grandTotal: newSubtotal + newTax + newPkg + (ord.serviceCharge || 0),
         };
       })
     );
@@ -429,12 +435,18 @@ export default function TableDetailPage() {
         const newItems = ord.items.filter((it) => (item.id ? it.id !== item.id : it.name !== item.name));
         const newSubtotal = newItems.reduce((acc, it) => acc + (it.lineTotal || it.price * it.quantity), 0);
         const newTax = Math.round(newSubtotal * 0.05);
+        const hasParcel = newItems.some(
+          (it) => it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel")
+        );
+        const isTakeaway = ord.tableNumber === "TAKEAWAY";
+        const newPkg = (hasParcel || isTakeaway) ? (ord.packagingFee || 5) : 0;
         return {
           ...ord,
           items: newItems,
           subtotal: newSubtotal,
           tax: newTax,
-          grandTotal: newSubtotal + newTax + (ord.packagingFee || 0) + (ord.serviceCharge || 0),
+          packagingFee: newPkg,
+          grandTotal: newSubtotal + newTax + newPkg + (ord.serviceCharge || 0),
           status: newItems.length === 0 ? "CANCELLED" : ord.status,
         };
       })

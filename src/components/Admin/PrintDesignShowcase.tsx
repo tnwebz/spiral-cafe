@@ -80,18 +80,11 @@ export default function PrintDesignShowcase() {
   const getKitchenKotText = (): string => {
     const W = 32;
     const div = "-".repeat(W);
-    let banner = isMixed
-      ? " *** DINE IN & TAKE AWAY *** \n"
-      : isAllTakeaway
-      ? " *** TAKE AWAY *** \n"
-      : " *** DINE IN *** \n";
-
-    let out = `          SPIRAL CAFE\n${banner}           TABLE ${displayTable}\n${div}\n`;
-    out += `Order: #${orderNumInput}${" ".repeat(Math.max(1, W - 9 - orderNumInput.length - 16))}Date: ${dateInput}\n`;
-    out += `${div}\nITEM                         QTY\n${div}\n`;
+    let out = `Table No: ${displayTable}\nDate: ${dateInput} 10:56:45 pm\nTerminal : Billing 1\n${div}\n`;
+    out += `Item                         Qty\n${div}\n`;
     currentItems.forEach((it) => {
-      const tag = it.isParcel || isAllTakeaway ? "(Parcel)" : "(Dine In)";
-      const fullName = `${it.name} - ${tag}`;
+      const tag = it.isParcel || isAllTakeaway ? " (Parcel)" : "";
+      const fullName = `${it.name}${tag}`;
       const qtyStr = String(it.quantity);
       const pad = Math.max(1, W - fullName.length - qtyStr.length);
       out += `${fullName}${" ".repeat(pad)}${qtyStr}\n`;
@@ -100,36 +93,11 @@ export default function PrintDesignShowcase() {
     if (hasSpecialRequest && specialRequest) {
       out += `${div}\nSPECIAL REQUEST:\n"${specialRequest}"\n`;
     }
-    out += `${div}\n        —— ORDER SLIP ——\n`;
     return out;
   };
 
   const getCounterKotText = (): string => {
-    const W = 32;
-    const div = "-".repeat(W);
-    let banner = isMixed
-      ? " *** DINE IN & TAKE AWAY *** \n"
-      : isAllTakeaway
-      ? " *** TAKE AWAY *** \n"
-      : " *** DINE IN *** \n";
-
-    let out = `! EMERGENCY KOT (COUNTER SLIP) !\n${banner}`;
-    out += `TABLE: ${displayTable}   |   DATE: ${dateInput}\n${div}\n`;
-    out += `ITEM                         QTY\n${div}\n`;
-    currentItems.forEach((it) => {
-      const tag = it.isParcel || isAllTakeaway ? "(Parcel)" : "(Dine In)";
-      const fullName = `${it.name} - ${tag}`;
-      const qtyStr = String(it.quantity);
-      const pad = Math.max(1, W - fullName.length - qtyStr.length);
-      out += `${fullName}${" ".repeat(pad)}${qtyStr}\n`;
-    });
-    out += `${div}\nItems: ${totalItems}${" ".repeat(Math.max(1, W - 9 - 7))}Qty: ${totalQuantity}\n`;
-    out += `- - - - - - - - - - - - - - - - \n`;
-    if (hasSpecialRequest && specialRequest) {
-      out += `SPECIAL REQUEST:\n"${specialRequest}"\n- - - - - - - - - - - - - - - - \n`;
-    }
-    out += `     - - - 58MM TEAR - - -\n`;
-    return out;
+    return getKitchenKotText();
   };
 
   const getCounterBillText = (): string => {

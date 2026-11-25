@@ -124,6 +124,41 @@ export function normalizeTableNumber(table: string): string {
   return stripped.toUpperCase() || "A1";
 }
 
+export function isOrderPackagingApplicable(params: {
+  tableNumber?: string | null;
+  notes?: string | null;
+  items?: Array<{ name?: string | null; notes?: string | null }> | null;
+  isTakeaway?: boolean;
+}): boolean {
+  const cleanTable = (params.tableNumber || "").trim().toUpperCase();
+  if (cleanTable === "TAKEAWAY" || cleanTable === "TAKE AWAY" || params.isTakeaway) {
+    return true;
+  }
+  const notes = (params.notes || "").toUpperCase();
+  if (
+    notes.includes("[TAKEAWAY]") ||
+    notes.includes("[PARCEL]") ||
+    notes.includes("DINE_IN_AND_TAKEAWAY") ||
+    notes.includes("[ORDER_TYPE:TAKEAWAY]")
+  ) {
+    return true;
+  }
+  if (params.items && Array.isArray(params.items)) {
+    const hasParcelItem = params.items.some((it) => {
+      const name = (it.name || "").toLowerCase();
+      const itemNotes = (it.notes || "").toLowerCase();
+      return (
+        name.includes("(parcel)") ||
+        name.includes(" - parcel") ||
+        itemNotes.includes("parcel") ||
+        itemNotes.includes("[parcel]")
+      );
+    });
+    if (hasParcelItem) return true;
+  }
+  return false;
+}
+
 export function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
   const mappedItems: OrderItem[] =
     items.length > 0
@@ -166,6 +201,17 @@ export function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
   const noteMatch = notesStr.match(/\[PRIVATE_NOTE:([^\]]+)\]/);
   const privateNote: string | undefined = noteMatch ? noteMatch[1].trim() : undefined;
 
+  const isPackagingApp = isOrderPackagingApplicable({
+    tableNumber: row.table_number,
+    notes: row.notes,
+    items: mappedItems,
+    isTakeaway: row.table_number === "TAKEAWAY" || (row.notes || "").includes("[TAKEAWAY]"),
+  });
+  const rawPackaging = Number(row.packaging_fee || 0);
+  const packagingFee = isPackagingApp ? rawPackaging : 0;
+  const rawGrandTotal = Number(row.grand_total || 0);
+  const grandTotal = isPackagingApp ? rawGrandTotal : Math.max(0, rawGrandTotal - rawPackaging);
+
   return {
     id: row.id,
     orderNumber: row.order_number,
@@ -179,9 +225,9 @@ export function mapDbOrderToOrder(row: any, items: OrderItem[] = []): Order {
     items: mappedItems,
     subtotal: Number(row.subtotal || 0),
     tax: Number(row.tax || 0),
-    packagingFee: Number(row.packaging_fee || 0),
+    packagingFee,
     serviceCharge: Number(row.service_charge || 0),
-    grandTotal: Number(row.grand_total || 0),
+    grandTotal,
     status: row.status as OrderStatus,
     paymentStatus: row.payment_status as PaymentStatus,
     paymentMethod: row.payment_method as PaymentMethod,
@@ -924,9 +970,6 @@ export async function addItemsToExistingOrder(params: {
   const allItems = [...current.items, ...newOrderItems];
   const subtotal = allItems.reduce((sum, it) => sum + it.lineTotal, 0);
   const tax = Math.round((subtotal * config.taxPercentage) / 100);
-  const packagingFee = config.packagingFee;
-  const serviceCharge = config.serviceCharge;
-  const grandTotal = subtotal + tax + packagingFee + serviceCharge;
 
   // Clean adding-food flag from notes and append any new customer note
   let updatedNotes = current.notes || "";
@@ -934,6 +977,15 @@ export async function addItemsToExistingOrder(params: {
   if (params.notes && params.notes.trim()) {
     updatedNotes = updatedNotes ? `${updatedNotes} | ${params.notes.trim()}` : params.notes.trim();
   }
+
+  const isPackagingApplicable = isOrderPackagingApplicable({
+    tableNumber: current.tableNumber,
+    notes: updatedNotes,
+    items: allItems,
+  });
+  const packagingFee = isPackagingApplicable ? (config.packagingFee || 0) : 0;
+  const serviceCharge = config.serviceCharge || 0;
+  const grandTotal = subtotal + tax + packagingFee + serviceCharge;
 
   const itemsPayload: Database["public"]["Tables"]["order_items"]["Insert"][] = newOrderItems.map((it) => ({
     id: it.id!,
@@ -1216,13 +1268,20 @@ export async function updateOrderItemQuantityOrDelete(params: {
       (current.notes || "").includes("[ORDER_TYPE:PRIVATE]");
     const taxRate = typeof config.taxPercentage === "number" ? config.taxPercentage : 0;
     const newTax = isPrivate ? 0 : Math.round((newSubtotal * taxRate) / 100);
-    const newGrandTotal = newSubtotal + newTax + (current.packagingFee || 0) + (current.serviceCharge || 0);
+    const isPackagingApp = isOrderPackagingApplicable({
+      tableNumber: current.tableNumber,
+      notes: current.notes,
+      items: remaining,
+    });
+    const newPackagingFee = isPackagingApp ? (config.packagingFee || 0) : 0;
+    const newGrandTotal = newSubtotal + newTax + newPackagingFee + (current.serviceCharge || 0);
 
     await supabaseAdmin
       .from("orders")
       .update({
         subtotal: newSubtotal,
         tax: newTax,
+        packaging_fee: newPackagingFee,
         grand_total: newGrandTotal,
         updated_at: now,
       })
@@ -1309,7 +1368,13 @@ export async function addOrderItemToOrder(params: {
     (current.notes || "").includes("[ORDER_TYPE:PRIVATE]");
   const taxRate = typeof config.taxPercentage === "number" ? config.taxPercentage : 0;
   const newTax = isPrivate ? 0 : Math.round((newSubtotal * taxRate) / 100);
-  const newGrandTotal = newSubtotal + newTax + (current.packagingFee || 0) + (current.serviceCharge || 0);
+  const isPackagingApp = isOrderPackagingApplicable({
+    tableNumber: current.tableNumber,
+    notes: current.notes,
+    items: allItems,
+  });
+  const newPackagingFee = isPackagingApp ? (config.packagingFee || 0) : 0;
+  const newGrandTotal = newSubtotal + newTax + newPackagingFee + (current.serviceCharge || 0);
 
   // If order was CANCELLED earlier, bring it back to PENDING since items are present
   const newStatus = current.status === "CANCELLED" ? "PENDING" : current.status;
@@ -1319,6 +1384,7 @@ export async function addOrderItemToOrder(params: {
     .update({
       subtotal: newSubtotal,
       tax: newTax,
+      packaging_fee: newPackagingFee,
       grand_total: newGrandTotal,
       status: newStatus,
       updated_at: now,
@@ -1441,10 +1507,21 @@ export async function toggleOrderItemParcel(params: {
       .trim();
   }
 
+  const config = await getConfig();
+  const isPackagingApp = isOrderPackagingApplicable({
+    tableNumber: current.tableNumber,
+    notes: updatedOrderNotes,
+    items: allItems,
+  });
+  const newPackagingFee = isPackagingApp ? (config.packagingFee || 0) : 0;
+  const newGrandTotal = current.subtotal + current.tax + newPackagingFee + (current.serviceCharge || 0);
+
   await supabaseAdmin
     .from("orders")
     .update({
       notes: updatedOrderNotes,
+      packaging_fee: newPackagingFee,
+      grand_total: newGrandTotal,
       updated_at: new Date().toISOString(),
     })
     .eq("id", current.id);
@@ -1715,11 +1792,15 @@ export async function createOrder(params: {
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const tax = Math.round((subtotal * config.taxPercentage) / 100);
-  const packagingFee = config.packagingFee;
-  const serviceCharge = config.serviceCharge;
-  const grandTotal = subtotal + tax + packagingFee + serviceCharge;
-
   const cleanTable = normalizeTableNumber(params.tableNumber);
+  const isPackagingApplicable = isOrderPackagingApplicable({
+    tableNumber: cleanTable,
+    notes: params.notes,
+    items: orderItems,
+  });
+  const packagingFee = isPackagingApplicable ? (config.packagingFee || 0) : 0;
+  const serviceCharge = config.serviceCharge || 0;
+  const grandTotal = subtotal + tax + packagingFee + serviceCharge;
 
   const orderPayload = {
     id: orderId,

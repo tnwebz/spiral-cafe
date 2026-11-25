@@ -10,7 +10,7 @@ import {
 } from "@/lib/tables";
 import { buildKotData, KotReceiptEngine } from "@/lib/kot";
 import { getPrinterSettings } from "@/lib/tables";
-import { Order, getActiveVisitOrdersForTable } from "@/lib/db";
+import { Order, getActiveVisitOrdersForTable, isOrderPackagingApplicable } from "@/lib/db";
 
 export async function GET(
   req: NextRequest,
@@ -52,6 +52,28 @@ export async function GET(
           : null,
         printerSettings,
       });
+    }
+
+    // Synchronize & heal any stale packaging fees in database
+    for (const ord of orders) {
+      const isApplicable = isOrderPackagingApplicable({
+        tableNumber: ord.tableNumber,
+        notes: ord.notes,
+        items: ord.items,
+      });
+      if (!isApplicable && ord.packagingFee === 0) {
+        // If DB row had a nonzero packaging_fee, heal it asynchronously
+        supabaseAdmin
+          .from("orders")
+          .update({
+            packaging_fee: 0,
+            grand_total: ord.grandTotal,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", ord.id)
+          .gt("packaging_fee", 0)
+          .then(() => {});
+      }
     }
 
     // Determine target order for KOT print action (prefer newest pending order)
