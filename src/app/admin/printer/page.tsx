@@ -316,7 +316,9 @@ export default function AdminPrinterPage() {
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
                   Dual Hardware POS
                 </span>
-                <span className="text-xs text-zinc-400 font-mono">v1.2.0</span>
+                <span className="text-xs text-zinc-400 font-mono">
+                  v{printer.version || CONNECTOR_RELEASE.version}
+                </span>
               </div>
               <h1 className="text-3xl font-extrabold tracking-tight text-zinc-950 font-serif">
                 Printer Connectivity
