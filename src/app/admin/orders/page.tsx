@@ -696,10 +696,10 @@ export default function AdminOrdersPage() {
                           {dateStr} {timeStr}
                         </div>
 
-                        {/* Terminal Badge */}
-                        <div>
+                        {/* Terminal Badge & Quick Print */}
+                        <div className="flex items-center justify-end gap-1.5">
                           <span
-                            className={`px-2.5 py-0.5 rounded-md text-[9px] font-bold ${
+                            className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
                               isSelected
                                 ? "bg-black/30 text-zinc-200"
                                 : "bg-zinc-200/80 text-zinc-700"
@@ -707,6 +707,21 @@ export default function AdminOrdersPage() {
                           >
                             Billing 1
                           </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDirectPrintCustomerBill(ord, false);
+                            }}
+                            title="Print Counter Bill (58mm)"
+                            className={`p-1 rounded-md transition-colors cursor-pointer ${
+                              isSelected
+                                ? "hover:bg-white/20 text-white"
+                                : "hover:bg-zinc-200 text-zinc-600"
+                            }`}
+                          >
+                            <Printer size={12} className={printingOrderId === ord.id ? "animate-spin text-[#CA340A]" : ""} />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -818,8 +833,26 @@ export default function AdminOrdersPage() {
                 {detailTab === "ORDERS" && (
                   <div className="flex-1 flex flex-col justify-between overflow-hidden">
                     <div className="p-5 overflow-y-auto space-y-5">
-                      {/* Big Order Title */}
-                      <div>
+                      {/* Print Feedback Banner */}
+                      {printFeedback && printFeedback.id === selectedOrder.id && (
+                        <div
+                          className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 border animate-in fade-in ${
+                            printFeedback.success
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              : "bg-red-50 text-red-800 border-red-200"
+                          }`}
+                        >
+                          {printFeedback.success ? (
+                            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                          ) : (
+                            <AlertCircle size={16} className="text-red-600 shrink-0" />
+                          )}
+                          <span>{printFeedback.message}</span>
+                        </div>
+                      )}
+
+                      {/* Big Order Title & Top Quick Print Buttons */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 pb-3">
                         <div className="flex items-center gap-2.5 flex-wrap">
                           <h2 className="font-heading font-black text-2xl text-[#1E1E24] tracking-tight">
                             Order #
@@ -830,6 +863,31 @@ export default function AdminOrdersPage() {
                               {(selectedOrder as any).consolidatedCount} Orders Consolidated
                             </span>
                           )}
+                        </div>
+
+                        {/* Top Direct Print Controls */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleDirectPrintCustomerBill(selectedOrder, false)}
+                            disabled={printingOrderId === selectedOrder.id}
+                            className="py-1.5 px-3 bg-[#3B1220] hover:bg-[#2A0B16] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                            title="Print Counter Bill to 58mm Thermal Printer"
+                          >
+                            <Printer size={13} className={printingOrderId === selectedOrder.id ? "animate-spin" : ""} />
+                            <span>{printingOrderId === selectedOrder.id ? "Printing..." : "Print Bill (58mm)"}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDirectPrintCustomerBill(selectedOrder, true)}
+                            disabled={printingOrderId === selectedOrder.id}
+                            className="py-1.5 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-300 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                            title="Reprint Bill with DUPLICATE Tag"
+                          >
+                            <RotateCcw size={13} className="text-[#CA340A]" />
+                            <span>Reprint Bill</span>
+                          </button>
                         </div>
                       </div>
 
@@ -997,20 +1055,21 @@ export default function AdminOrdersPage() {
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex items-center gap-2 pt-1">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                         <button
+                          type="button"
                           onClick={() =>
-                            handleDirectPrintCustomerBill(selectedOrder, true)
+                            handleDirectPrintCustomerBill(selectedOrder, false)
                           }
                           disabled={printingOrderId === selectedOrder.id}
-                          className="flex-1 py-2 px-3 bg-white hover:bg-zinc-100 border border-zinc-300 rounded-xl text-xs font-bold text-zinc-800 flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                          className="flex-1 py-2 px-3 bg-[#3B1220] hover:bg-[#2A0B16] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                         >
                           <Printer
                             size={14}
                             className={
                               printingOrderId === selectedOrder.id
-                                ? "animate-spin text-[#CA340A]"
-                                : "text-[#CA340A]"
+                                ? "animate-spin text-white"
+                                : "text-white"
                             }
                           />
                           <span>
@@ -1021,11 +1080,24 @@ export default function AdminOrdersPage() {
                         </button>
 
                         <button
+                          type="button"
+                          onClick={() =>
+                            handleDirectPrintCustomerBill(selectedOrder, true)
+                          }
+                          disabled={printingOrderId === selectedOrder.id}
+                          className="flex-1 py-2 px-3 bg-white hover:bg-zinc-100 border border-zinc-300 rounded-xl text-xs font-bold text-zinc-800 flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <RotateCcw size={14} className="text-[#CA340A]" />
+                          <span>Reprint Bill</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => handleViewInvoice(selectedOrder.id)}
-                          className="flex-1 py-2 px-3 bg-[#3B1220] hover:bg-[#2A0B16] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                          className="py-2 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
                         >
                           <Receipt size={14} />
-                          <span>View Tax Invoice</span>
+                          <span>Invoice</span>
                         </button>
                       </div>
                     </div>

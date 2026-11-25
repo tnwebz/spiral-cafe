@@ -311,9 +311,9 @@ export default function SalesAndAnalyticsPage() {
           {/* Back link & Store Dashboard Title */}
           <div className="flex items-center gap-3">
             <Link
-              href="/admin/dashboard"
+              href="/admin/tables"
               className="p-1.5 rounded-xl hover:bg-black/5 text-[#4a1525] transition-colors"
-              title="Return to Dashboard"
+              title="Return to Tables"
             >
               <ArrowLeft size={18} className="text-[#4a1525]" />
             </Link>

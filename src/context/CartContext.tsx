@@ -637,11 +637,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               o.status !== "CANCELLED" &&
               !(o.paymentStatus === "PAID" && o.status === "COMPLETED")
           );
+          // Preserve local cache if user is seated at table so refresh does not vanish content
           try {
             if (remaining.length > 0) {
               localStorage.setItem("spiral_placed_orders", JSON.stringify(remaining));
-            } else {
-              localStorage.removeItem("spiral_placed_orders");
             }
           } catch {}
           return remaining;
@@ -659,29 +658,50 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     fetchSessionOrders();
 
     const supabase = getSupabaseBrowserClient();
-    const channelName = `customer_orders_${customerSessionId}`;
+    const cleanTable = (tableNumber || "").replace(/^Table\s*/i, "").trim().toUpperCase();
+    const channelName = `customer_orders_${customerSessionId}_${cleanTable || "all"}`;
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
+    const channel = supabase.channel(channelName);
+
+    // 1. Listen for updates matching customer session ID
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "orders",
+        filter: `customer_session_id=eq.${customerSessionId}`,
+      },
+      () => {
+        if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+        realtimeTimerRef.current = setTimeout(() => {
+          fetchSessionOrders();
+        }, 200);
+      }
+    );
+
+    // 2. Also listen for updates matching this physical table (e.g. staff adding manual order at counter)
+    if (cleanTable && cleanTable !== "TAKEAWAY") {
+      channel.on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "orders",
-          filter: `customer_session_id=eq.${customerSessionId}`,
+          filter: `table_number=eq.${cleanTable}`,
         },
         () => {
-          // Debounce rapid event changes before authoritative fetch
           if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
           realtimeTimerRef.current = setTimeout(() => {
             fetchSessionOrders();
           }, 200);
         }
-      )
-      .subscribe((status, err) => {
-        if (err) console.warn("Supabase Realtime customer subscription notice:", err);
-      });
+      );
+    }
+
+    channel.subscribe((status, err) => {
+      if (err) console.warn("Supabase Realtime customer subscription notice:", err);
+    });
 
     // 15s fallback poll for offline/reconnect edge cases
     const pollInterval = setInterval(() => {

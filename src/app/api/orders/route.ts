@@ -329,7 +329,11 @@ export async function GET(req: NextRequest) {
       if (sessionId && activeOrders.length > 0) {
         const adminSession = await verifyAdminSession(req);
         if (!adminSession.authenticated) {
-          const belongsToCustomer = activeOrders.some((o) => o.customerSessionId === sessionId);
+          const belongsToCustomer = activeOrders.some(
+            (o) =>
+              o.customerSessionId === sessionId ||
+              (sessionId && o.notes?.includes(sessionId))
+          );
           if (!belongsToCustomer) {
             return NextResponse.json({ success: true, orders: [], visitId: null });
           }
@@ -360,10 +364,26 @@ export async function GET(req: NextRequest) {
         const activeVisit = await getActiveVisitOrdersForTable(cleanTable);
         detectedVisitId = activeVisit.visitId;
 
-        // Include any table orders belonging to this customer session
-        for (const o of activeVisit.orders) {
-          if (!o.customerSessionId || o.customerSessionId === sessionId) {
+        // Check if this customer session is the seated diner at this table
+        const customerBelongsToTable =
+          orderMap.size > 0 ||
+          activeVisit.orders.some(
+            (o) =>
+              o.customerSessionId === sessionId ||
+              (sessionId && o.notes?.includes(sessionId))
+          );
+
+        if (customerBelongsToTable) {
+          // Add all active orders for this table's dining visit so manual staff orders appear on customer screen!
+          for (const o of activeVisit.orders) {
             orderMap.set(o.id, o);
+          }
+        } else {
+          // Extra guest: only include unassigned or matching orders
+          for (const o of activeVisit.orders) {
+            if (!o.customerSessionId || o.customerSessionId === sessionId) {
+              orderMap.set(o.id, o);
+            }
           }
         }
       }

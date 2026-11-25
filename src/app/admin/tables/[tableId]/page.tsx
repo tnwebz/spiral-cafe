@@ -616,7 +616,9 @@ export default function TableDetailPage() {
           ...prev,
           [target.id]: {
             type: "SUCCESS",
-            message: `KOT Ticket #${printResult.kotId} for Order #${target.orderNumber} successfully transmitted to kitchen printer (TCP delivered). Kitchen notified.`,
+            message: forceReprint
+              ? `KOT Ticket for Order #${target.orderNumber} successfully re-sent to kitchen printer! Kitchen notified. ✅`
+              : `KOT Ticket #${printResult.kotId} for Order #${target.orderNumber} successfully transmitted to kitchen printer (TCP delivered). Kitchen notified.`,
           },
         }));
         await fetchTableData();
@@ -1575,24 +1577,37 @@ export default function TableDetailPage() {
                           </div>
                         </>
                       ) : (
-                        <div className="flex items-center justify-between w-full">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
                           <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200">
                             <CheckCircle2 size={14} className="text-emerald-600" />
                             <span>
                               {isManuallyHandedOver
                                 ? "HANDED OVER (Paper)"
-                                : "KOT SENT 🔒 (Locked against duplicate print)"}
+                                : "KOT SENT TO KITCHEN"}
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleSendKot(ord.id, true)}
-                            disabled={sendingKotOrderId === ord.id}
-                            className="py-1.5 px-3 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                          >
-                            <Printer size={13} />
-                            <span>Reprint Ticket</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSendKot(ord.id, true)}
+                              disabled={sendingKotOrderId === ord.id}
+                              className="py-2 px-3.5 rounded-xl bg-[#CA340A] hover:bg-[#B73F1D] text-white font-bold text-xs shadow-md shadow-[#CA340A]/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                              title="Resend this KOT ticket to the kitchen printer (send as many times as needed)"
+                            >
+                              <RotateCcw size={13} className={sendingKotOrderId === ord.id ? "animate-spin" : ""} />
+                              <span>{sendingKotOrderId === ord.id ? "Sending KOT..." : "Resend KOT"}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePrintCounterKot(ord.id)}
+                              disabled={printingCounterKotOrderId === ord.id}
+                              className="py-2 px-3 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-100 transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                              title="Print 58mm emergency ticket at Counter"
+                            >
+                              <Printer size={13} />
+                              <span>Counter Slip</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

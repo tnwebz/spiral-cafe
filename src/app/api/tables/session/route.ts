@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getActiveOrderForTable, normalizeTableNumber } from "@/lib/db";
+import { getActiveOrderForTable, getActiveVisitOrdersForTable, normalizeTableNumber } from "@/lib/db";
 import { getActiveReservations, getActiveCustomerVisit } from "@/lib/tables";
 
 export async function GET(req: NextRequest) {
@@ -26,20 +26,25 @@ export async function GET(req: NextRequest) {
       activeCustomerVisit.tableNumber.toUpperCase() !== cleanTable.toUpperCase()
     );
 
-    const activeOrder = await getActiveOrderForTable(cleanTable);
+    const activeVisit = await getActiveVisitOrdersForTable(cleanTable);
+    const activeOrder = activeVisit.orders[0] || (await getActiveOrderForTable(cleanTable));
 
-    if (activeOrder) {
+    if (activeOrder || (activeVisit.orders && activeVisit.orders.length > 0)) {
       // Table is occupied with an active, unpaid dining order
       const existingVisitId =
-        activeOrder.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
-        (activeOrder as any).visit_id ||
-        `VISIT-${cleanTable}-${activeOrder.id.slice(0, 8).toUpperCase()}`;
+        activeVisit.visitId ||
+        activeOrder?.notes?.match(/\[VISIT_ID:([^\]]+)\]/)?.[1] ||
+        (activeOrder as any)?.visit_id ||
+        `VISIT-${cleanTable}-${(activeOrder?.id || Date.now().toString()).slice(0, 8).toUpperCase()}`;
 
-      const isMyActiveTable = Boolean(
-        (visitorId && activeOrder.customerSessionId === visitorId) ||
-        (sessionId && activeOrder.customerSessionId === sessionId) ||
-        (phone && activeOrder.customerPhone && activeOrder.customerPhone.slice(-10) === phone.slice(-10))
-      );
+      // Check across ALL active orders for this table visit to see if the current customer is the seated diner
+      const allVisitOrders = activeVisit.orders.length > 0 ? activeVisit.orders : (activeOrder ? [activeOrder] : []);
+      const isMyActiveTable = allVisitOrders.some((ord) => {
+        const matchesVisitor = Boolean(visitorId && (ord.customerSessionId === visitorId || ord.notes?.includes(visitorId)));
+        const matchesSession = Boolean(sessionId && (ord.customerSessionId === sessionId || ord.notes?.includes(sessionId)));
+        const matchesPhone = Boolean(phone && ord.customerPhone && ord.customerPhone.slice(-10) === phone.slice(-10));
+        return matchesVisitor || matchesSession || matchesPhone;
+      });
 
       const isViewOnlyMenu = !isMyActiveTable && cleanTable !== "TAKEAWAY";
 
@@ -48,8 +53,8 @@ export async function GET(req: NextRequest) {
         tableNumber: cleanTable,
         status: "OCCUPIED",
         visitId: existingVisitId,
-        orderId: activeOrder.id,
-        orderNumber: activeOrder.orderNumber,
+        orderId: activeOrder?.id || allVisitOrders[0]?.id,
+        orderNumber: activeOrder?.orderNumber || allVisitOrders[0]?.orderNumber,
         isMyActiveTable,
         isViewOnlyMenu,
         isTableBookedByOther: isViewOnlyMenu,

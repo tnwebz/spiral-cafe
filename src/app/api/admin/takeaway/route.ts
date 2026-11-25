@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { mapDbOrderToOrder, createOrder, Order } from "@/lib/db";
+import { mapDbOrderToOrder, createOrder, getActiveVisitOrdersForTable, normalizeTableNumber, Order } from "@/lib/db";
 import { buildKotData, KotReceiptEngine } from "@/lib/kot";
 
 const CONNECTOR_URL = process.env.NEXT_PUBLIC_PRINT_CONNECTOR_URL || "http://127.0.0.1:4318";
@@ -111,7 +111,38 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const sessionId = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const cleanTable = normalizeTableNumber(tableNumber);
+    let sessionId = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    let inheritedPhone = cleanPhone || undefined;
+    let targetVisitId: string | null = null;
+
+    if (cleanTable !== "TAKEAWAY") {
+      try {
+        const activeVisit = await getActiveVisitOrdersForTable(cleanTable);
+        if (activeVisit.orders && activeVisit.orders.length > 0) {
+          targetVisitId = activeVisit.visitId;
+          // Inherit active customer's session ID so their device sees this order in real-time!
+          const primaryCustomerOrder =
+            activeVisit.orders.find(
+              (o) => o.customerSessionId && !o.customerSessionId.startsWith("admin_")
+            ) || activeVisit.orders[0];
+
+          if (primaryCustomerOrder && primaryCustomerOrder.customerSessionId) {
+            sessionId = primaryCustomerOrder.customerSessionId;
+          }
+          if (!inheritedPhone && primaryCustomerOrder && primaryCustomerOrder.customerPhone) {
+            inheritedPhone = primaryCustomerOrder.customerPhone;
+          }
+        }
+      } catch (err) {
+        console.warn("Could not check active visit for table in takeaway route:", err);
+      }
+    }
+
+    if (targetVisitId && !fullNotes.includes(`[VISIT_ID:`)) {
+      fullNotes = `[VISIT_ID:${targetVisitId}] ${fullNotes}`.trim();
+    }
+    fullNotes = `${fullNotes} [MANUAL_ORDER_STAFF]`.trim();
 
     const createdOrder = await createOrder({
       tableNumber:
@@ -119,7 +150,7 @@ export async function POST(req: NextRequest) {
           ? "TAKEAWAY"
           : tableNumber.toUpperCase(),
       customerSessionId: sessionId,
-      customerPhone: cleanPhone || undefined,
+      customerPhone: inheritedPhone,
       items: processedItems,
       notes: fullNotes,
     });
