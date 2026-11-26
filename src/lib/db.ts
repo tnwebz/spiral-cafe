@@ -2519,19 +2519,19 @@ export async function updateMenuItem(
   };
 
   if (updates.name !== undefined) dbUpdates.name = updates.name;
-  if (updates.description !== undefined) dbUpdates.description = updates.description;
+  if (updates.description !== undefined) dbUpdates.description = updates.description || "";
   if (updates.price !== undefined) dbUpdates.price = updates.price;
-  if (updates.originalPrice !== undefined) dbUpdates.original_price = updates.originalPrice;
+  if (updates.originalPrice !== undefined) dbUpdates.original_price = updates.originalPrice ?? null;
   if (updates.categoryId !== undefined) dbUpdates.category_id = updates.categoryId;
   if (updates.categoryName !== undefined) dbUpdates.category_name = updates.categoryName;
   if (updates.dietType !== undefined) dbUpdates.diet_type = updates.dietType;
   if (updates.badge !== undefined) dbUpdates.badge = updates.badge;
   if (updates.rating !== undefined) dbUpdates.rating = updates.rating;
   if (updates.reviewsCount !== undefined) dbUpdates.reviews_count = updates.reviewsCount;
-  if (updates.image !== undefined) dbUpdates.image = updates.image;
-  if (updates.storagePath !== undefined) dbUpdates.cloudinary_public_id = updates.storagePath;
-  else if (updates.cloudinaryPublicId !== undefined) dbUpdates.cloudinary_public_id = updates.cloudinaryPublicId;
-  if (updates.available !== undefined) dbUpdates.available = updates.available;
+  if (updates.image !== undefined) dbUpdates.image = updates.image ?? "";
+  if (updates.storagePath !== undefined) dbUpdates.cloudinary_public_id = updates.storagePath || null;
+  else if (updates.cloudinaryPublicId !== undefined) dbUpdates.cloudinary_public_id = updates.cloudinaryPublicId || null;
+  if (updates.available !== undefined) dbUpdates.available = Boolean(updates.available);
 
   const { data, error } = await supabaseAdmin
     .from("menu_items")

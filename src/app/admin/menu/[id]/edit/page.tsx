@@ -78,7 +78,13 @@ export default function EditMenuItemPage() {
           setRating(String(it.rating || 4.8));
           setReviewsCount(String(it.reviewsCount || 100));
           setAvailable(it.available ?? true);
-          setImagePreview(it.image || null);
+          const defaultBucket = "product-images";
+          const resolvedImage =
+            it.image ||
+            (it.storagePath
+              ? `https://bksrcekfswexsikspods.supabase.co/storage/v1/object/public/${defaultBucket}/${it.storagePath}`
+              : "");
+          setImagePreview(resolvedImage || null);
           setUploadedUrl(it.image || "");
           setStoragePath(it.storagePath || it.cloudinaryPublicId || "");
         } else {
@@ -160,7 +166,7 @@ export default function EditMenuItemPage() {
           badge,
           rating: parseFloat(rating) || 4.8,
           reviewsCount: parseInt(reviewsCount, 10) || 100,
-          image: uploadedUrl || imagePreview,
+          image: uploadedUrl || imagePreview || "",
           storagePath: storagePath || undefined,
           available,
           adminUser: "Admin",
