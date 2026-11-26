@@ -50,6 +50,8 @@ interface AdminOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultTableNumber?: string; // "TAKEAWAY" or "A1", "B2", etc.
+  existingOrderId?: string;
+  existingOrderNumber?: string;
   onOrderCreated?: (order: any) => void;
 }
 
@@ -57,6 +59,8 @@ export default function AdminOrderModal({
   isOpen,
   onClose,
   defaultTableNumber = "TAKEAWAY",
+  existingOrderId,
+  existingOrderNumber,
   onOrderCreated,
 }: AdminOrderModalProps) {
   const isSeparateTakeaway = defaultTableNumber === "TAKEAWAY";
@@ -78,7 +82,7 @@ export default function AdminOrderModal({
   const [customName, setCustomName] = useState("");
   const [customPrice, setCustomPrice] = useState("");
   const [customQty, setCustomQty] = useState(1);
-  const [customIsParcel, setCustomIsParcel] = useState(false);
+  const [customIsParcel, setCustomIsParcel] = useState(isSeparateTakeaway);
 
   // Cart: Map of key `${item.id}__${isParcel ? 'parcel' : 'dinein'}` -> CartEntry
   const [cart, setCart] = useState<Map<string, CartEntry>>(new Map());
@@ -169,14 +173,15 @@ export default function AdminOrderModal({
 
   // Add Item
   const handleAddItem = (item: MenuItem, isParcel: boolean) => {
-    const key = `${item.id}__${isParcel ? "parcel" : "dinein"}`;
+    const forcedParcel = isSeparateTakeaway ? true : isParcel;
+    const key = `${item.id}__${forcedParcel ? "parcel" : "dinein"}`;
     setCart((prev) => {
       const next = new Map(prev);
       const existing = next.get(key);
       if (existing) {
         next.set(key, { ...existing, quantity: existing.quantity + 1 });
       } else {
-        next.set(key, { item, quantity: 1, isParcel });
+        next.set(key, { item, quantity: 1, isParcel: forcedParcel });
       }
       return next;
     });
@@ -184,7 +189,8 @@ export default function AdminOrderModal({
 
   // Remove / Decrease Item
   const handleRemoveItem = (itemId: string, isParcel: boolean) => {
-    const key = `${itemId}__${isParcel ? "parcel" : "dinein"}`;
+    const forcedParcel = isSeparateTakeaway ? true : isParcel;
+    const key = `${itemId}__${forcedParcel ? "parcel" : "dinein"}`;
     setCart((prev) => {
       const next = new Map(prev);
       const existing = next.get(key);
@@ -200,6 +206,7 @@ export default function AdminOrderModal({
 
   // Toggle parcel flag for a specific cart row
   const handleToggleItemParcel = (cartKey: string) => {
+    if (isSeparateTakeaway) return; // In takeaway mode, strictly parcel only!
     setCart((prev) => {
       const entry = prev.get(cartKey);
       if (!entry) return prev;
@@ -338,6 +345,47 @@ export default function AdminOrderModal({
         };
       });
 
+      if (existingOrderId) {
+        // Appending new order items directly to this existing Takeaway order
+        const res = await fetch(`/api/admin/orders/${existingOrderId}/items`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: payloadItems.map((it) => ({
+              productId: it.id,
+              name: it.name,
+              price: it.price,
+              quantity: it.quantity,
+              image: it.image,
+              notes: it.isParcel ? "[PARCEL]" : undefined,
+            })),
+            adminUser: "Cashier Staff",
+          }),
+        });
+
+        const data = await res.json();
+        if (data.success && data.order) {
+          setFeedback({
+            type: "SUCCESS",
+            message: `Dishes added to Takeaway Order #${data.order.orderNumber} successfully! Total bill updated. ✅`,
+          });
+          setCart(new Map());
+          if (onOrderCreated) {
+            onOrderCreated(data.order);
+          }
+          setTimeout(() => {
+            onClose();
+          }, 800);
+          return;
+        } else {
+          setFeedback({
+            type: "ERROR",
+            message: data.error || "Failed to add items to takeaway order.",
+          });
+          return;
+        }
+      }
+
       const res = await fetch("/api/admin/takeaway", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -405,10 +453,14 @@ export default function AdminOrderModal({
               </div>
               <div className="truncate">
                 <span className="font-heading font-black text-xs tracking-wider block text-white truncate uppercase">
-                  {isSeparateTakeaway ? "TAKEAWAY" : `TABLE ${defaultTableNumber}`}
+                  {isSeparateTakeaway
+                    ? existingOrderNumber
+                      ? `TAKEAWAY #${existingOrderNumber}`
+                      : "TAKEAWAY"
+                    : `TABLE ${defaultTableNumber}`}
                 </span>
                 <span className="text-[10px] text-[#E2C7BA] font-semibold block truncate">
-                  Manual Order
+                  {existingOrderNumber ? "Add Order / Items" : "Manual Order"}
                 </span>
               </div>
             </div>
@@ -576,15 +628,22 @@ export default function AdminOrderModal({
               </div>
 
               <div className="flex items-center justify-between gap-3 pt-1">
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-zinc-600 select-none">
-                  <input
-                    type="checkbox"
-                    checked={customIsParcel}
-                    onChange={(e) => setCustomIsParcel(e.target.checked)}
-                    className="rounded text-[#CA340A] focus:ring-[#CA340A] w-4 h-4"
-                  />
-                  <span>Mark as Parcel / Takeaway</span>
-                </label>
+                {isSeparateTakeaway ? (
+                  <span className="text-xs font-bold text-[#CA340A] flex items-center gap-1.5 bg-[#FFF0EB] px-2.5 py-1 rounded-lg border border-[#CA340A]/30">
+                    <ShoppingBag size={13} />
+                    <span>Takeaway: Added as Parcel Only</span>
+                  </span>
+                ) : (
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-zinc-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={customIsParcel}
+                      onChange={(e) => setCustomIsParcel(e.target.checked)}
+                      className="rounded text-[#CA340A] focus:ring-[#CA340A] w-4 h-4"
+                    />
+                    <span>Mark as Parcel / Takeaway</span>
+                  </label>
+                )}
 
                 <button
                   type="submit"
@@ -592,7 +651,7 @@ export default function AdminOrderModal({
                   className="px-5 py-2 bg-[#CA340A] hover:bg-[#A72B08] text-white font-heading font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Plus size={14} />
-                  <span>Add to Order</span>
+                  <span>{existingOrderId ? "Add to Order" : "Add to Order"}</span>
                 </button>
               </div>
             </form>
@@ -623,7 +682,7 @@ export default function AdminOrderModal({
                 return (
                   <div
                     key={dish.id}
-                    onClick={() => handleAddItem(dish, false)}
+                    onClick={() => handleAddItem(dish, isSeparateTakeaway ? true : false)}
                     className={`bg-white rounded-2xl p-4 border transition-all duration-150 flex flex-col justify-between min-h-[132px] cursor-pointer select-none group relative ${
                       totalInCart > 0
                         ? "border-[#CA340A] shadow-md ring-2 ring-[#CA340A]/20 bg-[#FFFBF7]"
@@ -667,14 +726,14 @@ export default function AdminOrderModal({
                           type="button"
                           onClick={() => handleAddItem(dish, true)}
                           className={`h-7 px-2.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
-                            parcelQty > 0
+                            (isSeparateTakeaway ? totalInCart : parcelQty) > 0
                               ? "bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40 shadow-2xs"
                               : "bg-zinc-100 hover:bg-[#FFF0EB] text-zinc-600 hover:text-[#CA340A]"
                           }`}
-                          title="Add as Takeaway Parcel"
+                          title={isSeparateTakeaway ? "Add to Takeaway" : "Add as Takeaway Parcel"}
                         >
                           <ShoppingBag size={14} />
-                          <span className="text-[11px]">Parcel</span>
+                          <span className="text-[11px]">{isSeparateTakeaway ? "Add Parcel" : "Parcel"}</span>
                         </button>
                       </div>
                     </div>
@@ -766,17 +825,23 @@ export default function AdminOrderModal({
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-[11px] text-zinc-500 font-mono">₹{item.price}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleItemParcel(key)}
-                        className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase transition-colors cursor-pointer ${
-                          isParcel
-                            ? "bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40"
-                            : "bg-zinc-200 text-zinc-600 hover:bg-zinc-300"
-                        }`}
-                      >
-                        {isParcel ? "Parcel" : "Dine-In"}
-                      </button>
+                      {isSeparateTakeaway ? (
+                        <span className="text-[9px] font-black px-1.5 py-0.2 rounded uppercase bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40">
+                          Parcel
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleItemParcel(key)}
+                          className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase transition-colors cursor-pointer ${
+                            isParcel
+                              ? "bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40"
+                              : "bg-zinc-200 text-zinc-600 hover:bg-zinc-300"
+                          }`}
+                        >
+                          {isParcel ? "Parcel" : "Dine-In"}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -861,7 +926,13 @@ export default function AdminOrderModal({
               ) : (
                 <>
                   <CheckCircle2 size={17} />
-                  <span>PLACE ORDER • ₹{grandTotal}</span>
+                  <span>
+                    {existingOrderId
+                      ? `ADD TO ORDER • ₹${grandTotal}`
+                      : isSeparateTakeaway
+                      ? `PLACE TAKE AWAY • ₹${grandTotal}`
+                      : `PLACE ORDER • ₹${grandTotal}`}
+                  </span>
                 </>
               )}
             </button>

@@ -452,7 +452,32 @@ export default function AdminTablesPage() {
             {/* Horizontal Cards Scroll */}
             <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-thin">
               {activeTakeaways.map((ord) => {
-                const isPendingKot = ord.status === "PENDING" && !(ord.notes || "").includes("[KOT_CONFIRMED");
+                const notes = ord.notes || "";
+                const hasKotConfirmed =
+                  notes.includes("[KOT_CONFIRMED") ||
+                  notes.includes("[KOT_MANUALLY_DELIVERED]") ||
+                  ord.status === "PREPARING" ||
+                  ord.status === "READY";
+                const hasViewedExited =
+                  notes.includes("[KOT_VIEWED_EXITED]") ||
+                  notes.includes("[KOT_EXITED_WITHOUT_KOT]") ||
+                  notes.includes("[KOT_FAILED]") ||
+                  notes.includes("[KOT_UNKNOWN]");
+
+                let takeawayColor: "RED" | "YELLOW" | "GREEN" = "RED";
+                let takeawayStatusLabel = "NEW ORDER";
+
+                if (hasKotConfirmed) {
+                  takeawayColor = "GREEN";
+                  takeawayStatusLabel = "KOT SENT";
+                } else if (hasViewedExited) {
+                  takeawayColor = "YELLOW";
+                  takeawayStatusLabel = "ACTION NEEDED";
+                } else {
+                  takeawayColor = "RED";
+                  takeawayStatusLabel = "NEW ORDER";
+                }
+
                 const itemsCount = ord.items?.length || 0;
                 const elapsedMins = Math.max(0, Math.floor((Date.now() - new Date(ord.createdAt).getTime()) / 60000));
                 const customerMatch = ord.notes?.match(/\[CUSTOMER_NAME:([^\]]+)\]/);
@@ -469,28 +494,51 @@ export default function AdminTablesPage() {
                     }}
                     onDragEnd={() => setDraggedTakeaway(null)}
                     onClick={() => setSelectedTakeawayOrder(ord)}
-                    className={`min-w-[260px] max-w-[290px] p-3.5 bg-[#FFFBF7] hover:bg-amber-50/70 border ${
+                    className={`min-w-[260px] max-w-[290px] p-3.5 border-2 rounded-2xl shadow-xs transition-all cursor-grab active:cursor-grabbing shrink-0 flex flex-col justify-between select-none ${
                       isBeingDragged
                         ? "border-amber-600 ring-2 ring-amber-400 opacity-60 scale-98"
-                        : "border-[#EBDAD0] hover:border-amber-400"
-                    } rounded-2xl shadow-xs transition-all cursor-grab active:cursor-grabbing shrink-0 flex flex-col justify-between select-none`}
+                        : takeawayColor === "RED"
+                        ? "bg-[#FEF2F2] border-red-400 hover:border-red-500 hover:shadow-md"
+                        : takeawayColor === "YELLOW"
+                        ? "bg-[#FFFBEB] border-amber-400 hover:border-amber-500 hover:shadow-md"
+                        : "bg-[#F0FDF4] border-emerald-400 hover:border-emerald-500 hover:shadow-md"
+                    }`}
                     title="Drag this card onto any floor table card to merge orders"
                   >
                     <div className="flex items-center justify-between text-xs mb-2">
                       <div className="flex items-center gap-1.5">
                         <span className="text-zinc-400 font-normal">⠿</span>
-                        <span className="font-heading font-extrabold text-xs text-[#2C1710]">
+                        <span
+                          className={`font-heading font-extrabold text-xs ${
+                            takeawayColor === "RED"
+                              ? "text-red-700"
+                              : takeawayColor === "YELLOW"
+                              ? "text-amber-800"
+                              : "text-emerald-800"
+                          }`}
+                        >
                           #{ord.orderNumber}
                         </span>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                        isPendingKot
-                          ? "bg-red-100 text-red-700 border border-red-200 animate-pulse"
-                          : ord.status === "PREPARING"
-                          ? "bg-amber-100 text-amber-800 border border-amber-300"
-                          : "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                      }`}>
-                        {isPendingKot ? "KOT PENDING" : ord.status}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 shadow-2xs ${
+                          takeawayColor === "RED"
+                            ? "bg-red-500 text-white animate-pulse"
+                            : takeawayColor === "YELLOW"
+                            ? "bg-amber-400 text-amber-950 font-bold"
+                            : "bg-emerald-600 text-white"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            takeawayColor === "RED"
+                              ? "bg-white animate-ping"
+                              : takeawayColor === "YELLOW"
+                              ? "bg-amber-900"
+                              : "bg-white"
+                          }`}
+                        />
+                        {takeawayStatusLabel}
                       </span>
                     </div>
 
@@ -503,10 +551,18 @@ export default function AdminTablesPage() {
                       </div>
                     </div>
 
-                    <div className="mt-2.5 pt-2 border-t border-[#EBDAD0] flex items-center justify-between text-xs">
+                    <div className="mt-2.5 pt-2 border-t border-black/5 flex items-center justify-between text-xs">
                       <div>
                         <span className="text-[10px] text-zinc-500 font-medium block">Total Bill</span>
-                        <span className="font-heading font-extrabold text-sm text-[#CA340A]">
+                        <span
+                          className={`font-heading font-extrabold text-sm ${
+                            takeawayColor === "RED"
+                              ? "text-red-700"
+                              : takeawayColor === "YELLOW"
+                              ? "text-amber-800"
+                              : "text-emerald-800"
+                          }`}
+                        >
                           ₹{ord.grandTotal}
                         </span>
                       </div>

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Order, OrderItem } from "@/lib/db";
 import { PrinterClient, CustomerBillPayload } from "@/services/printerClient";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
+import AdminOrderModal from "@/components/Admin/AdminOrderModal";
 import {
   X,
   ShoppingBag,
@@ -20,6 +21,7 @@ import {
   User,
   Phone,
   Clock,
+  PlusCircle,
 } from "lucide-react";
 
 interface TakeawayDetailModalProps {
@@ -41,6 +43,7 @@ export default function TakeawayDetailModal({
   const [printingBill, setPrintingBill] = useState(false);
   const [collectingCash, setCollectingCash] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [addOrderModalOpen, setAddOrderModalOpen] = useState(false);
   const [banner, setBanner] = useState<{ type: "SUCCESS" | "ERROR" | "WARNING"; message: string } | null>(null);
   const printer = usePrinterStatus(10000);
 
@@ -51,9 +54,37 @@ export default function TakeawayDetailModal({
 
   if (!isOpen || !currentOrder) return null;
 
-  const isPendingKot =
-    currentOrder.status === "PENDING" &&
-    !(currentOrder.notes || "").includes("[KOT_CONFIRMED");
+  const notes = currentOrder.notes || "";
+  const hasKotConfirmed =
+    notes.includes("[KOT_CONFIRMED") ||
+    notes.includes("[KOT_MANUALLY_DELIVERED]") ||
+    currentOrder.status === "PREPARING" ||
+    currentOrder.status === "READY";
+  const hasViewedExited =
+    notes.includes("[KOT_VIEWED_EXITED]") ||
+    notes.includes("[KOT_EXITED_WITHOUT_KOT]") ||
+    notes.includes("[KOT_FAILED]") ||
+    notes.includes("[KOT_UNKNOWN]");
+
+  const statusColor: "RED" | "YELLOW" | "GREEN" = hasKotConfirmed
+    ? "GREEN"
+    : hasViewedExited
+    ? "YELLOW"
+    : "RED";
+
+  const isPendingKot = !hasKotConfirmed;
+
+  const handleCloseWithCheck = () => {
+    if (isPendingKot) {
+      fetch("/api/tables/TAKEAWAY", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: currentOrder.id, exitedWithoutKot: true }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+    onClose();
+  };
 
   const customerMatch = currentOrder.notes?.match(/\[CUSTOMER_NAME:([^\]]+)\]/);
   const customerName = customerMatch ? customerMatch[1].trim() : "";
@@ -326,13 +357,28 @@ export default function TakeawayDetailModal({
                   TAKE AWAY (PARCEL)
                 </span>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                    isPendingKot
-                      ? "bg-red-100 text-red-700 border border-red-200 animate-pulse"
-                      : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1.5 ${
+                    statusColor === "RED"
+                      ? "bg-red-500 text-white shadow-xs animate-pulse"
+                      : statusColor === "YELLOW"
+                      ? "bg-amber-400 text-amber-950 font-bold shadow-xs"
+                      : "bg-emerald-600 text-white shadow-xs"
                   }`}
                 >
-                  {isPendingKot ? "KOT PENDING" : "KOT CONFIRMED"}
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      statusColor === "RED"
+                        ? "bg-white animate-ping"
+                        : statusColor === "YELLOW"
+                        ? "bg-amber-900"
+                        : "bg-white"
+                    }`}
+                  />
+                  {statusColor === "RED"
+                    ? "NEW ORDER (KOT PENDING)"
+                    : statusColor === "YELLOW"
+                    ? "ACTION NEEDED (KOT MISSED)"
+                    : "KOT SENT (COOKING)"}
                 </span>
               </div>
               <p className="text-xs text-[#8C5E51] mt-0.5 flex items-center gap-2">
@@ -359,7 +405,7 @@ export default function TakeawayDetailModal({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={handleCloseWithCheck}
             className="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-600 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X size={16} />
@@ -390,7 +436,15 @@ export default function TakeawayDetailModal({
         <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1">
           <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
             <span>Ordered Dishes ({(currentOrder.items || []).length})</span>
-            <span>Quantity / Price</span>
+            <button
+              type="button"
+              onClick={() => setAddOrderModalOpen(true)}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+              title="Add more items or another order for this person"
+            >
+              <Plus size={13} />
+              <span>+ Add Another Order / Items</span>
+            </button>
           </div>
 
           <div className="divide-y divide-zinc-100 border rounded-2xl bg-[#FFFBF7]/50 border-[#EBDAD0] overflow-hidden">
@@ -465,6 +519,16 @@ export default function TakeawayDetailModal({
               );
             })}
           </div>
+
+          {/* Quick Add Order / Dish Button */}
+          <button
+            type="button"
+            onClick={() => setAddOrderModalOpen(true)}
+            className="w-full py-2.5 px-3 border-2 border-dashed border-amber-300 hover:border-amber-500 bg-amber-50/60 hover:bg-amber-100/70 rounded-2xl text-xs font-bold text-amber-950 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+          >
+            <PlusCircle size={15} className="text-amber-700" />
+            <span>+ Add Another Order to Takeaway #{currentOrder.orderNumber}</span>
+          </button>
 
           {/* Kitchen Special Request */}
           {cleanSpecialReq && (
@@ -588,6 +652,21 @@ export default function TakeawayDetailModal({
           </div>
         </div>
       </div>
+
+      {/* Embedded Menu Catalog for Adding Another Order to this Takeaway */}
+      {addOrderModalOpen && (
+        <AdminOrderModal
+          isOpen={addOrderModalOpen}
+          onClose={() => setAddOrderModalOpen(false)}
+          defaultTableNumber="TAKEAWAY"
+          existingOrderId={currentOrder.id}
+          existingOrderNumber={currentOrder.orderNumber}
+          onOrderCreated={(updated) => {
+            setCurrentOrder(updated);
+            onOrderUpdated();
+          }}
+        />
+      )}
     </div>
   );
 }

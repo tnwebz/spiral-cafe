@@ -14,6 +14,7 @@ export async function GET() {
       .select("*, order_items(*)")
       .ilike("table_number", "%takeaway%")
       .neq("status", "CANCELLED")
+      .neq("status", "COMPLETED")
       .neq("payment_status", "PAID")
       .gte("created_at", cutoffIso)
       .order("created_at", { ascending: false });

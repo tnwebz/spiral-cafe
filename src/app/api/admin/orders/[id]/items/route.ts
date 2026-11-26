@@ -12,32 +12,45 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const { item, adminUser = "Admin Staff" } = body;
+    const { item, items, adminUser = "Admin Staff" } = body;
 
-    if (!item || !item.name || typeof item.price !== "number") {
+    const itemsToAdd = Array.isArray(items) && items.length > 0 ? items : item ? [item] : [];
+
+    if (itemsToAdd.length === 0) {
       return NextResponse.json(
         { success: false, error: "Valid product name and price are required." },
         { status: 400 }
       );
     }
 
-    const updatedOrder = await addOrderItemToOrder({
-      orderId: id,
-      item: {
-        productId: item.productId || item.id,
-        name: item.name,
-        price: Number(item.price) || 0,
-        quantity: Math.max(1, Number(item.quantity) || 1),
-        image: item.image || undefined,
-        notes: item.notes || undefined,
-      },
-      adminUser,
-    });
+    let updatedOrder: any = null;
+    for (const it of itemsToAdd) {
+      if (!it.name || typeof it.price !== "number") continue;
+      updatedOrder = await addOrderItemToOrder({
+        orderId: id,
+        item: {
+          productId: it.productId || it.id,
+          name: it.name,
+          price: Number(it.price) || 0,
+          quantity: Math.max(1, Number(it.quantity) || 1),
+          image: it.image || undefined,
+          notes: it.notes || undefined,
+        },
+        adminUser,
+      });
+    }
+
+    if (!updatedOrder) {
+      return NextResponse.json(
+        { success: false, error: "Failed to add items to order." },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       order: updatedOrder,
-      message: `"${item.name}" added to order #${updatedOrder.orderNumber}`,
+      message: `${itemsToAdd.length} item(s) added to order #${updatedOrder.orderNumber}`,
     });
   } catch (err: any) {
     console.error("Add order item error:", err);
