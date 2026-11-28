@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
+import AnalyticsPinGate from "@/components/Admin/AnalyticsPinGate";
 import PrintDesignShowcase from "@/components/Admin/PrintDesignShowcase";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
 import {
@@ -37,6 +38,7 @@ import {
 } from "lucide-react";
 
 export default function AdminPrinterPage() {
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const printer = usePrinterStatus(3500);
 
   // Persistent settings state
@@ -300,6 +302,20 @@ export default function AdminPrinterPage() {
   const candidatesNeedingApproval = printer.kitchen.discoveryResult?.candidates?.filter(
     (c: DiscoveredPrinterCandidate) => c.confidence === "AMBIGUOUS"
   ) || [];
+
+  if (!isUnlocked) {
+    return (
+      <AdminLayout>
+        <AnalyticsPinGate
+          title="Kitchen Printer Protected"
+          subtitle="Enter the 4-digit security PIN to access kitchen printer diagnostics and controls."
+          storageKey="spiral_printer_unlocked"
+          backHref="/admin/tables"
+          onUnlock={() => setIsUnlocked(true)}
+        />
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>

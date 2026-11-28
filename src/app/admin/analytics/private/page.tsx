@@ -83,17 +83,7 @@ export default function PrivateSalesAnalyticsPage() {
   const [reprintFeedback, setReprintFeedback] = useState<string | null>(null);
 
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
-  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
-
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem("spiral_analytics_unlocked");
-      if (saved === "true") {
-        setIsUnlocked(true);
-      }
-    } catch {}
-    setCheckingUnlock(false);
-  }, []);
+  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(false);
 
   // Inventory Table & Trending Metric state
   const [showInventoryTable, setShowInventoryTable] = useState<boolean>(false);

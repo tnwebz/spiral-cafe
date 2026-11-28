@@ -60,19 +60,9 @@ export default function DataManagementPage() {
   const [overview, setOverview] = useState<StorageOverview | null>(null);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
 
-  // Security Lock Protection (1234)
+  // Security Lock Protection
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
-  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
-
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem("spiral_settings_unlocked");
-      if (saved === "true") {
-        setIsUnlocked(true);
-      }
-    } catch {}
-    setCheckingUnlock(false);
-  }, []);
+  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(false);
 
   // Tab 2: Export State
   const [startDate, setStartDate] = useState(() => {
@@ -494,7 +484,7 @@ export default function DataManagementPage() {
           storageKey="spiral_settings_unlocked"
           backHref="/admin/settings"
           title="Data Management Protected"
-          subtitle="Enter the 4-digit security PIN (1234) to view and manage database records and archives."
+          subtitle="Enter the 4-digit security PIN to view and manage database records and archives."
           onUnlock={() => setIsUnlocked(true)}
         />
       </AdminLayout>

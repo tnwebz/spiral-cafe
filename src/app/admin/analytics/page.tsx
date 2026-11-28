@@ -107,17 +107,7 @@ export default function SalesAndAnalyticsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [productSortBy, setProductSortBy] = useState<"revenue" | "quantity">("revenue");
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
-  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
-
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem("spiral_analytics_unlocked");
-      if (saved === "true") {
-        setIsUnlocked(true);
-      }
-    } catch {}
-    setCheckingUnlock(false);
-  }, []);
+  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(false);
 
   // Dynamic time greeting: Good morning / Good afternoon / Good evening
   const greeting = useMemo(() => {

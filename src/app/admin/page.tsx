@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import AdminLayout from "@/components/Admin/AdminLayout";
+import AnalyticsPinGate from "@/components/Admin/AnalyticsPinGate";
 import CollectCashModal from "@/components/Admin/CollectCashModal";
 import ThermalReceiptModal from "@/components/Admin/ThermalReceipt";
 import { Order, Invoice } from "@/lib/db";
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [data, setData] = useState<{
     kpis: {
       todaySales: number;
@@ -217,6 +219,20 @@ export default function AdminDashboardPage() {
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
+
+  if (!isUnlocked) {
+    return (
+      <AdminLayout>
+        <AnalyticsPinGate
+          title="Dashboard Overview Protected"
+          subtitle="Enter the 4-digit security PIN to access the dashboard overview."
+          storageKey="spiral_dashboard_unlocked"
+          backHref="/admin/tables"
+          onUnlock={() => setIsUnlocked(true)}
+        />
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>

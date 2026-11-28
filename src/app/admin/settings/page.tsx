@@ -29,9 +29,9 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
 
-  // Security Lock Protection (Same admin pass: 1234)
+  // Security Lock Protection
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
-  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(true);
+  const [checkingUnlock, setCheckingUnlock] = useState<boolean>(false);
 
   // Remember last active tax & fee values when toggling Taxes & Extra Charges ON/OFF
   const [lastActiveTaxRate, setLastActiveTaxRate] = useState<number>(5);
@@ -46,16 +46,6 @@ export default function AdminSettingsPage() {
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem("spiral_settings_unlocked");
-      if (saved === "true") {
-        setIsUnlocked(true);
-      }
-    } catch {}
-    setCheckingUnlock(false);
-  }, []);
 
   const fetchData = async () => {
     try {
@@ -245,7 +235,7 @@ export default function AdminSettingsPage() {
         <AnalyticsPinGate
           storageKey="spiral_settings_unlocked"
           title="Settings & Audit Protected"
-          subtitle="Enter the 4-digit security PIN (1234) to view and manage cafe settings."
+          subtitle="Enter the 4-digit security PIN to view and manage cafe settings."
           onUnlock={() => setIsUnlocked(true)}
         />
       </AdminLayout>

