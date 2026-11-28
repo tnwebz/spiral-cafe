@@ -17,7 +17,9 @@ import {
   Phone,
   FileText,
   Sparkles,
+  Printer,
 } from "lucide-react";
+import { PrinterClient } from "@/services/printerClient";
 
 interface MenuItem {
   id: string;
@@ -89,6 +91,7 @@ export default function AdminOrderModal({
   const [taxRate, setTaxRate] = useState<number>(0);
   const [packagingFeePerParcelItem, setPackagingFeePerParcelItem] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState<"KOT" | "ORDER" | null>(null);
   const [feedback, setFeedback] = useState<{ type: "SUCCESS" | "ERROR" | "WARNING"; message: string } | null>(null);
 
   useEffect(() => {
@@ -326,10 +329,11 @@ export default function AdminOrderModal({
   const hasAnyParcel = cartEntriesList.some((c) => c.isParcel) || isSeparateTakeaway;
   const hasAnyDineIn = cartEntriesList.some((c) => !c.isParcel) && !isSeparateTakeaway;
 
-  // Submit Order (Places order in PENDING status without printing KOT immediately)
-  const handleSubmitOrder = async () => {
+  // Submit Order (Places order, optionally dispatches KOT immediately)
+  const handleSubmitOrder = async (sendKot: boolean = false) => {
     if (cart.size === 0 || submitting) return;
     setSubmitting(true);
+    setSubmittingAction(sendKot ? "KOT" : "ORDER");
     setFeedback(null);
 
     try {
@@ -365,17 +369,40 @@ export default function AdminOrderModal({
 
         const data = await res.json();
         if (data.success && data.order) {
-          setFeedback({
-            type: "SUCCESS",
-            message: `Dishes added to Takeaway Order #${data.order.orderNumber} successfully! Total bill updated. ✅`,
-          });
+          if (sendKot) {
+            try {
+              const kotRes = await PrinterClient.dispatchKotPrint(data.order.id, 1, "Billing 1", true);
+              if (kotRes.success) {
+                setFeedback({
+                  type: "SUCCESS",
+                  message: `Items added to #${data.order.orderNumber} & KOT sent to Kitchen! 🖨️✅`,
+                });
+              } else {
+                setFeedback({
+                  type: "SUCCESS",
+                  message: `Items added to #${data.order.orderNumber}! (${kotRes.message || "Kitchen printer offline"})`,
+                });
+              }
+            } catch (kotErr: any) {
+              setFeedback({
+                type: "SUCCESS",
+                message: `Items added to #${data.order.orderNumber}! (KOT not printed: ${kotErr.message || "printer error"})`,
+              });
+            }
+          } else {
+            setFeedback({
+              type: "SUCCESS",
+              message: `Dishes added to Takeaway Order #${data.order.orderNumber} successfully! Total bill updated. ✅`,
+            });
+          }
+
           setCart(new Map());
           if (onOrderCreated) {
             onOrderCreated(data.order);
           }
           setTimeout(() => {
             onClose();
-          }, 800);
+          }, 1200);
           return;
         } else {
           setFeedback({
@@ -395,16 +422,39 @@ export default function AdminOrderModal({
           customerPhone: customerPhone.trim(),
           notes: orderNotes.trim(),
           items: payloadItems,
-          sendKotImmediately: false, // Place only, do not print KOT yet
+          sendKotImmediately: false, // Let frontend PrinterClient handle direct browser-to-connector TCP dispatch
         }),
       });
 
       const data = await res.json();
       if (data.success && data.order) {
-        setFeedback({
-          type: "SUCCESS",
-          message: data.message || `Order #${data.order.orderNumber} placed successfully! You can send KOT from the table screen. ✅`,
-        });
+        if (sendKot) {
+          try {
+            const kotRes = await PrinterClient.dispatchKotPrint(data.order.id, 1, "Billing 1", true);
+            if (kotRes.success) {
+              setFeedback({
+                type: "SUCCESS",
+                message: `Order #${data.order.orderNumber} placed & Kitchen KOT printed! 🖨️✅`,
+              });
+            } else {
+              setFeedback({
+                type: "SUCCESS",
+                message: `Order #${data.order.orderNumber} placed! (${kotRes.message || "Kitchen printer offline - send KOT from table screen"})`,
+              });
+            }
+          } catch (kotErr: any) {
+            setFeedback({
+              type: "SUCCESS",
+              message: `Order #${data.order.orderNumber} placed! (KOT notice: ${kotErr.message || "Printer offline"})`,
+            });
+          }
+        } else {
+          setFeedback({
+            type: "SUCCESS",
+            message: data.message || `Order #${data.order.orderNumber} placed successfully! You can send KOT from the table screen. ✅`,
+          });
+        }
+
         setCart(new Map());
         setCustomerName("");
         setCustomerPhone("");
@@ -428,6 +478,7 @@ export default function AdminOrderModal({
       });
     } finally {
       setSubmitting(false);
+      setSubmittingAction(null);
     }
   };
 
@@ -911,31 +962,58 @@ export default function AdminOrderModal({
               </div>
             </div>
 
-            {/* Place Order Button */}
-            <button
-              type="button"
-              disabled={cart.size === 0 || submitting}
-              onClick={handleSubmitOrder}
-              className="w-full py-3.5 px-4 bg-[#CA340A] hover:bg-[#A72B08] text-white font-heading font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-[#CA340A]/20 active:scale-98 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 size={17} className="animate-spin" />
-                  <span>Submitting Order...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={17} />
-                  <span>
-                    {existingOrderId
-                      ? `ADD TO ORDER • ₹${grandTotal}`
-                      : isSeparateTakeaway
-                      ? `PLACE TAKE AWAY • ₹${grandTotal}`
-                      : `PLACE ORDER • ₹${grandTotal}`}
-                  </span>
-                </>
-              )}
-            </button>
+            {/* Action Buttons: Place & Send KOT + Save Order Only */}
+            <div className="space-y-2 pt-1">
+              {/* Primary: Place & Send KOT immediately to kitchen */}
+              <button
+                type="button"
+                disabled={cart.size === 0 || submitting}
+                onClick={() => handleSubmitOrder(true)}
+                className="w-full py-3.5 px-4 bg-[#CA340A] hover:bg-[#A72B08] text-white font-heading font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-[#CA340A]/20 active:scale-98 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting && submittingAction === "KOT" ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    <span>Placing & Printing KOT...</span>
+                  </>
+                ) : (
+                  <>
+                    <Printer size={17} />
+                    <span>
+                      {existingOrderId
+                        ? `ADD & SEND KOT • ₹${grandTotal}`
+                        : isSeparateTakeaway
+                        ? `TAKEAWAY & SEND KOT • ₹${grandTotal}`
+                        : `PLACE & SEND KOT • ₹${grandTotal}`}
+                    </span>
+                  </>
+                )}
+              </button>
+
+              {/* Secondary: Place Order Only (Pending KOT, can send later) */}
+              <button
+                type="button"
+                disabled={cart.size === 0 || submitting}
+                onClick={() => handleSubmitOrder(false)}
+                className="w-full py-2 px-3 bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 hover:border-zinc-300 font-heading font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs active:scale-98 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting && submittingAction === "ORDER" ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Saving Order...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={14} className="text-zinc-500" />
+                    <span>
+                      {existingOrderId
+                        ? "Add to Order Only (No KOT)"
+                        : "Save Order Only (No KOT)"}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </aside>
       </div>
