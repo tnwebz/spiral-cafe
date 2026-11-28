@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import BottomNav from "@/components/BottomNav";
 import HeroBanner from "@/components/Home/HeroBanner";
 import CategoryCardsList from "@/components/Menu/CategoryCardsList";
@@ -11,39 +11,174 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Sparkles, MapPin, Clock } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { DynamicMenuItem } from "@/lib/db";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function Home() {
   const router = useRouter();
   const { foodPreference } = useCart();
   const [searchQuery, setSearchQuery] = useState("");
+  const [dynamicItems, setDynamicItems] = useState<DynamicMenuItem[]>([]);
 
-  // Helper to filter according to dietary preference
-  const isDietMatch = (item: { badges?: string[] }) =>
-    foodPreference === "ALL" ||
-    (item.badges &&
-      item.badges.some(
-        (b) => typeof b === "string" && b.toLowerCase() === "veg",
-      ));
+  // Fetch dynamic menu items
+  const fetchDynamicMenu = useCallback(async () => {
+    try {
+      const res = await fetch("/api/menu/items");
+      const json = await res.json();
+      if (json.success && Array.isArray(json.items) && json.items.length > 0) {
+        setDynamicItems(json.items);
+      }
+    } catch (e) {
+      console.error("Failed to load live menu items for home:", e);
+    }
+  }, []);
+
+  const homeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    fetchDynamicMenu();
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel("home_menu_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "menu_items",
+        },
+        () => {
+          if (homeTimerRef.current) clearTimeout(homeTimerRef.current);
+          homeTimerRef.current = setTimeout(() => {
+            fetchDynamicMenu();
+          }, 200);
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) console.warn("Supabase Realtime home notice:", err);
+      });
+
+    return () => {
+      if (homeTimerRef.current) clearTimeout(homeTimerRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [fetchDynamicMenu]);
+
+  // Construct category structure combining static hero info with dynamic live items
+  const categoriesForHome = useMemo(() => {
+    const knownCats = [...menuData];
+
+    if (dynamicItems.length > 0) {
+      dynamicItems.forEach((d) => {
+        const catId = (d.categoryId || "").toLowerCase().trim();
+        const catName = (d.categoryName || "").trim();
+        const exists = knownCats.some(
+          (k) =>
+            k.id.toLowerCase() === catId ||
+            k.name.toLowerCase() === catName.toLowerCase() ||
+            k.id.toLowerCase().replace(/[^a-z0-9]/g, "") === catId.replace(/[^a-z0-9]/g, "")
+        );
+        if (!exists && (catId || catName)) {
+          knownCats.push({
+            id: catId || catName.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+            name: catName || catId,
+            icon: "utensils",
+            heroImage:
+              d.image ||
+              "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop",
+            description: `Fresh handcrafted ${catName || "dishes"} from Spiral Cafe.`,
+            items: [],
+          });
+        }
+      });
+    }
+
+    knownCats.sort((a, b) => {
+      if (a.id === "combos") return 1;
+      if (b.id === "combos") return -1;
+      return 0;
+    });
+
+    return knownCats
+      .map((cat) => {
+        const catIdNorm = cat.id.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const catNameNorm = cat.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+        let rawItems = cat.items;
+        if (dynamicItems.length > 0) {
+          const liveForCat = dynamicItems.filter((it) => {
+            const itCatId = (it.categoryId || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const itCatName = (it.categoryName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            return (
+              itCatId === catIdNorm ||
+              itCatName === catNameNorm ||
+              itCatId.includes(catIdNorm) ||
+              catIdNorm.includes(itCatId)
+            );
+          });
+
+          if (liveForCat.length > 0) {
+            rawItems = liveForCat.map((d) => {
+              const staticMatch = cat.items.find(
+                (s) => s.id === d.id || s.name.toLowerCase().trim() === d.name.toLowerCase().trim()
+              );
+              const resolvedImage =
+                d.image && d.image.trim() && !d.image.startsWith("blob:")
+                  ? d.image
+                  : staticMatch?.image && staticMatch.image.trim()
+                  ? staticMatch.image
+                  : cat.heroImage ||
+                    "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop";
+
+              return {
+                id: d.id,
+                name: d.name,
+                description: d.description,
+                price: d.price,
+                originalPrice: d.originalPrice ?? Math.round(d.price * 1.35),
+                image: resolvedImage,
+                rating: d.rating ?? 4.8,
+                reviewsCount: d.reviewsCount ?? 120,
+                badges: [
+                  ...(d.dietType === "veg" ? (["veg"] as any[]) : []),
+                  ...(d.dietType === "non-veg" ? (["non-veg"] as any[]) : []),
+                  ...(d.badge && d.badge !== "none" ? [d.badge] : []),
+                ],
+                available: d.available ?? true,
+              };
+            });
+          }
+        }
+
+        const filteredByPref =
+          foodPreference === "VEG_ONLY"
+            ? rawItems.filter((item) =>
+                item.badges?.some(
+                  (b) => typeof b === "string" && b.toLowerCase() === "veg"
+                )
+              )
+            : rawItems;
+
+        return {
+          ...cat,
+          items: filteredByPref,
+        };
+      })
+      .filter((cat) => cat.items.length > 0);
+  }, [dynamicItems, foodPreference]);
 
   // Filter items if search query is entered
   const allFilteredItems = searchQuery.trim()
-    ? menuData.flatMap((cat) =>
-        cat.items
-          .filter(isDietMatch)
-          .filter(
-            (item) =>
-              item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              cat.name.toLowerCase().includes(searchQuery.toLowerCase()),
-          ),
+    ? categoriesForHome.flatMap((cat) =>
+        cat.items.filter(
+          (item) =>
+            item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            cat.name.toLowerCase().includes(searchQuery.toLowerCase())
+        )
       )
     : [];
-
-  const categoriesForHome = menuData
-    .map((cat) => ({
-      ...cat,
-      items: cat.items.filter(isDietMatch),
-    }))
-    .filter((cat) => cat.items.length > 0);
 
   return (
     <main className="min-h-screen bg-background pb-28">

@@ -161,6 +161,11 @@ export default function CreateComboModal({
     e.preventDefault();
     setError("");
 
+    if (isUploading) {
+      setError("Please wait for combo image upload to finish.");
+      return;
+    }
+
     if (!name.trim()) {
       setError("Please enter a Combo Package name.");
       return;
@@ -180,9 +185,11 @@ export default function CreateComboModal({
     }
 
     const finalImage =
-      uploadedUrl ||
-      manualImageUrl.trim() ||
-      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop";
+      uploadedUrl && !uploadedUrl.startsWith("blob:")
+        ? uploadedUrl
+        : manualImageUrl.trim() && !manualImageUrl.startsWith("blob:")
+        ? manualImageUrl.trim()
+        : "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop";
 
     // Build clear included products description string
     const itemsDescription = selectedProducts
@@ -451,7 +458,7 @@ export default function CreateComboModal({
                     src={imagePreview || manualImageUrl}
                     alt="Combo preview"
                     fill
-                    className="object-cover"
+                    className="object-contain object-center p-1 bg-[#FFF9F5]"
                   />
                 ) : (
                   <Package size={28} className="text-zinc-300" />

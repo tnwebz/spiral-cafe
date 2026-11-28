@@ -107,6 +107,11 @@ export default function AddMenuItemPage() {
       return;
     }
 
+    if (isUploading) {
+      setFormError("Please wait for image upload to complete before saving.");
+      return;
+    }
+
     setSaving(true);
     setFormError("");
 
@@ -116,9 +121,9 @@ export default function AddMenuItemPage() {
     };
 
     const finalImage =
-      uploadedUrl ||
-      imagePreview ||
-      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80";
+      uploadedUrl && !uploadedUrl.startsWith("blob:")
+        ? uploadedUrl
+        : "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80";
 
     try {
       const res = await fetch("/api/menu/items", {
@@ -339,11 +344,11 @@ export default function AddMenuItemPage() {
                 </label>
 
                 {imagePreview ? (
-                  <div className="relative w-full h-44 rounded-2xl overflow-hidden bg-zinc-100 border border-zinc-200">
+                  <div className="relative w-full h-44 rounded-2xl overflow-hidden bg-[#FFF9F5] border border-zinc-200">
                     <img
                       src={imagePreview}
                       alt="Preview"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain object-center p-1"
                     />
                     <button
                       type="button"

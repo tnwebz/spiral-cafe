@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `File size exceeds 5MB limit (${(blob.size / 1024 / 1024).toFixed(1)}MB).`,
+          error: `File size exceeds 5MB limit in Supabase (${(blob.size / 1024 / 1024).toFixed(1)}MB).`,
         },
         { status: 400 }
       );

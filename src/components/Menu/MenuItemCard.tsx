@@ -37,6 +37,10 @@ export default function MenuItemCard({
 }: MenuItemCardProps) {
   const calculatedOriginalPrice = originalPrice || Math.round(price * 1.35);
   const itemId = id || name.toLowerCase().replace(/\s+/g, "-");
+  const displayImage =
+    image && image.trim() && !image.startsWith("blob:")
+      ? image
+      : "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop";
 
   const {
     addToCart,
@@ -58,16 +62,28 @@ export default function MenuItemCard({
       transition={{ duration: 0.4, delay: Math.min(index * 0.04, 0.25) }}
       className="bg-card rounded-3xl overflow-hidden border border-border/80 shadow-[0_6px_20px_rgba(74,33,23,0.05)] hover:shadow-[0_14px_32px_rgba(183,63,29,0.12)] md:hover:-translate-y-1 transition-all duration-300 flex flex-col group h-full justify-between"
     >
-      {/* Top Half: Image with Badge Overlay */}
-      <div className="relative w-full h-44 sm:h-48 md:h-44 lg:h-48 bg-muted overflow-hidden shrink-0">
+      {/* Top Half: Centered Full-Fitted Photo (No Crop / No Cut) */}
+      <div className="relative w-full h-48 sm:h-52 md:h-48 lg:h-52 bg-[#FFFBF7] overflow-hidden shrink-0 flex items-center justify-center">
+        {/* Ambient atmospheric backdrop */}
         <Image
-          src={image}
-          alt={name}
+          src={displayImage}
+          alt=""
           fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className="object-cover transition-transform duration-700 group-hover:scale-105"
+          aria-hidden="true"
+          className="object-cover blur-xl opacity-25 scale-110 pointer-events-none"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/15 pointer-events-none" />
+
+        {/* Crisp Uncropped Centered Food Photography */}
+        <div className="relative w-full h-full p-2.5 flex items-center justify-center z-5">
+          <Image
+            src={displayImage}
+            alt={name}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-contain object-center transition-transform duration-500 group-hover:scale-105 drop-shadow-md"
+          />
+        </div>
 
         {/* Top Badges */}
         <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">

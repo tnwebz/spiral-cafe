@@ -266,7 +266,7 @@ export default function AdminMenuPage() {
                               <img
                                 src={item.image}
                                 alt={item.name}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain object-center p-0.5 bg-[#FFF9F5]"
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-zinc-400">

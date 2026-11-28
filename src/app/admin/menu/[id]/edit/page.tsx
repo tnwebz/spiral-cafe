@@ -144,6 +144,11 @@ export default function EditMenuItemPage() {
       return;
     }
 
+    if (isUploading) {
+      setFormError("Please wait for image upload to complete before saving.");
+      return;
+    }
+
     setSaving(true);
     setFormError("");
 
@@ -151,6 +156,13 @@ export default function EditMenuItemPage() {
       id: categoryId,
       name: categoryId,
     };
+
+    const finalImage =
+      uploadedUrl && !uploadedUrl.startsWith("blob:")
+        ? uploadedUrl
+        : imagePreview && !imagePreview.startsWith("blob:")
+        ? imagePreview
+        : "";
 
     try {
       const res = await fetch(`/api/menu/items/${id}`, {
@@ -167,7 +179,7 @@ export default function EditMenuItemPage() {
           badge,
           rating: parseFloat(rating) || 4.8,
           reviewsCount: parseInt(reviewsCount, 10) || 100,
-          image: uploadedUrl || imagePreview || "",
+          image: finalImage,
           storagePath: storagePath || undefined,
           available,
           adminUser: "Admin",
@@ -374,11 +386,11 @@ export default function EditMenuItemPage() {
                 </label>
 
                 {imagePreview ? (
-                  <div className="relative w-full h-44 rounded-2xl overflow-hidden bg-zinc-100 border border-zinc-200">
+                  <div className="relative w-full h-44 rounded-2xl overflow-hidden bg-[#FFF9F5] border border-zinc-200">
                     <img
                       src={imagePreview}
                       alt="Preview"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain object-center p-1"
                     />
                     {fileSizeInfo && (
                       <div className="absolute top-2 left-2 px-2 py-0.5 bg-emerald-600/90 text-white rounded-md text-[10px] font-bold flex items-center gap-1 shadow-xs">

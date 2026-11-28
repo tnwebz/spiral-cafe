@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useCallback, useRef } from "react";
+import { useState, useEffect, Suspense, useCallback, useRef, useMemo } from "react";
 import Image from "next/image";
 import { Search, Sparkles, ShoppingBag, ArrowLeft, ArrowRight, Utensils, X, ChevronRight } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -238,50 +238,111 @@ function MenuContent() {
   }, [fetchDynamicMenu]);
 
   // Construct category structure combining static hero info with dynamic live items
-  const categoriesToRender = menuData
-    .map((cat) => {
-      let rawItems = cat.items;
-      if (dynamicItems.length > 0) {
-        const liveForCat = dynamicItems.filter(
-          (it) => it.categoryId.toLowerCase() === cat.id.toLowerCase()
+  const categoriesToRender = useMemo(() => {
+    // 1. Gather all unique category identifiers from both static menuData and dynamicItems
+    const knownCats = [...menuData];
+
+    // Find any new categories in dynamicItems that aren't in menuData
+    if (dynamicItems.length > 0) {
+      dynamicItems.forEach((d) => {
+        const catId = (d.categoryId || "").toLowerCase().trim();
+        const catName = (d.categoryName || "").trim();
+        const exists = knownCats.some(
+          (k) =>
+            k.id.toLowerCase() === catId ||
+            k.name.toLowerCase() === catName.toLowerCase() ||
+            k.id.toLowerCase().replace(/[^a-z0-9]/g, "") === catId.replace(/[^a-z0-9]/g, "")
         );
-
-        if (liveForCat.length > 0) {
-          rawItems = liveForCat.map((d) => ({
-            id: d.id,
-            name: d.name,
-            description: d.description,
-            price: d.price,
-            originalPrice: d.originalPrice ?? Math.round(d.price * 1.35),
-            image: d.image,
-            rating: d.rating,
-            reviewsCount: d.reviewsCount,
-            badges: [
-              ...(d.dietType === "veg" ? (["veg"] as any[]) : []),
-              ...(d.dietType === "non-veg" ? (["non-veg"] as any[]) : []),
-              ...(d.badge && d.badge !== "none" ? [d.badge] : []),
-            ],
-            available: d.available,
-          }));
+        if (!exists && (catId || catName)) {
+          knownCats.push({
+            id: catId || catName.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+            name: catName || catId,
+            icon: "utensils",
+            heroImage:
+              d.image ||
+              "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop",
+            description: `Fresh handcrafted ${catName || "dishes"} from Spiral Cafe.`,
+            items: [],
+          });
         }
-      }
+      });
+    }
 
-      // Filter by food preference (VEG_ONLY vs ALL)
-      const filteredByPref =
-        foodPreference === "VEG_ONLY"
-          ? rawItems.filter((item) =>
-              item.badges?.some(
-                (b) => typeof b === "string" && b.toLowerCase() === "veg"
+    // Ensure Special Combos (combos) is always sorted to the very last position
+    knownCats.sort((a, b) => {
+      if (a.id === "combos") return 1;
+      if (b.id === "combos") return -1;
+      return 0;
+    });
+
+    return knownCats
+      .map((cat) => {
+        const catIdNorm = cat.id.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const catNameNorm = cat.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+        let rawItems = cat.items;
+        if (dynamicItems.length > 0) {
+          const liveForCat = dynamicItems.filter((it) => {
+            const itCatId = (it.categoryId || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const itCatName = (it.categoryName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            return (
+              itCatId === catIdNorm ||
+              itCatName === catNameNorm ||
+              itCatId.includes(catIdNorm) ||
+              catIdNorm.includes(itCatId)
+            );
+          });
+
+          if (liveForCat.length > 0) {
+            rawItems = liveForCat.map((d) => {
+              const staticMatch = cat.items.find(
+                (s) => s.id === d.id || s.name.toLowerCase().trim() === d.name.toLowerCase().trim()
+              );
+              const resolvedImage =
+                d.image && d.image.trim() && !d.image.startsWith("blob:")
+                  ? d.image
+                  : staticMatch?.image && staticMatch.image.trim()
+                  ? staticMatch.image
+                  : cat.heroImage ||
+                    "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop";
+
+              return {
+                id: d.id,
+                name: d.name,
+                description: d.description,
+                price: d.price,
+                originalPrice: d.originalPrice ?? Math.round(d.price * 1.35),
+                image: resolvedImage,
+                rating: d.rating ?? 4.8,
+                reviewsCount: d.reviewsCount ?? 120,
+                badges: [
+                  ...(d.dietType === "veg" ? (["veg"] as any[]) : []),
+                  ...(d.dietType === "non-veg" ? (["non-veg"] as any[]) : []),
+                  ...(d.badge && d.badge !== "none" ? [d.badge] : []),
+                ],
+                available: d.available ?? true,
+              };
+            });
+          }
+        }
+
+        // Filter by food preference (VEG_ONLY vs ALL)
+        const filteredByPref =
+          foodPreference === "VEG_ONLY"
+            ? rawItems.filter((item) =>
+                item.badges?.some(
+                  (b) => typeof b === "string" && b.toLowerCase() === "veg"
+                )
               )
-            )
-          : rawItems;
+            : rawItems;
 
-      return {
-        ...cat,
-        items: filteredByPref,
-      };
-    })
-    .filter((cat) => cat.items.length > 0);
+        return {
+          ...cat,
+          items: filteredByPref,
+        };
+      })
+      .filter((cat) => cat.items.length > 0);
+  }, [dynamicItems, foodPreference]);
 
   const hasActiveCat = selectedCategory
     ? categoriesToRender.some((c) => c.id.toLowerCase() === selectedCategory.toLowerCase())

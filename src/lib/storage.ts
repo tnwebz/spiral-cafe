@@ -40,11 +40,12 @@ export async function compressImageToTargetSize(
   const {
     targetMinKb = 200,
     targetMaxKb = 300,
-    maxWidth = 1400,
-    maxHeight = 1400,
+    maxWidth = 1200,
+    maxHeight = 1200,
   } = options;
 
   const targetMaxBytes = targetMaxKb * 1024;
+  const targetMinBytes = targetMinKb * 1024;
 
   // Don't process non-browser environments or SVGs
   if (typeof window === "undefined" || (file as any).type === "image/svg+xml") {
@@ -68,7 +69,7 @@ export async function compressImageToTargetSize(
 
     let { naturalWidth: width, naturalHeight: height } = img;
 
-    // Constrain max dimensions while preserving aspect ratio
+    // Constrain max dimensions to 1200px while preserving aspect ratio perfectly
     if (width > maxWidth || height > maxHeight) {
       if (width > height) {
         height = Math.round((height * maxWidth) / width);
@@ -79,16 +80,15 @@ export async function compressImageToTargetSize(
       }
     }
 
-    const canvas = document.createElement("canvas");
+    let canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
 
-    const ctx = canvas.getContext("2d", { willReadFrequently: false });
+    let ctx = canvas.getContext("2d", { willReadFrequently: false });
     if (!ctx) {
       throw new Error("HTML Canvas 2D context unavailable for image compression.");
     }
 
-    // High quality scaling
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(img, 0, 0, width, height);
@@ -96,42 +96,45 @@ export async function compressImageToTargetSize(
     // Prefer WebP for superior compression & edge delivery, fallback to JPEG
     const outputFormat = "image/webp";
 
-    // Helper to get blob at given quality
-    const getCanvasBlob = (quality: number): Promise<Blob | null> => {
+    const getCanvasBlob = (c: HTMLCanvasElement, quality: number): Promise<Blob | null> => {
       return new Promise((res) => {
-        canvas.toBlob((b) => res(b), outputFormat, quality);
+        c.toBlob((b) => res(b), outputFormat, quality);
       });
     };
 
-    // Stepwise compression search to hit the 250KB - 300KB window
-    let quality = 0.88;
-    let candidateBlob = await getCanvasBlob(quality);
+    // Stepwise compression search to hit the exact 200KB - 300KB window
+    let quality = 0.85;
+    let candidateBlob = await getCanvasBlob(canvas, quality);
 
-    // If initial output exceeds 300KB, dial down quality
-    const qualities = [0.82, 0.75, 0.68, 0.60, 0.52, 0.45];
+    // Fine-grained qualities ladder
+    const qualities = [0.80, 0.72, 0.64, 0.55, 0.46, 0.38];
     for (const q of qualities) {
       if (!candidateBlob || candidateBlob.size <= targetMaxBytes) {
         break;
       }
       quality = q;
-      candidateBlob = await getCanvasBlob(quality);
+      candidateBlob = await getCanvasBlob(canvas, quality);
     }
 
-    // If still over 300KB at quality 0.45, downscale canvas dimensions by 20%
+    // If still over 300KB after lowest quality (rare for very complex photos), scale down dimensions
     if (candidateBlob && candidateBlob.size > targetMaxBytes) {
-      const scaledWidth = Math.round(width * 0.8);
-      const scaledHeight = Math.round(height * 0.8);
-      const smallerCanvas = document.createElement("canvas");
-      smallerCanvas.width = scaledWidth;
-      smallerCanvas.height = scaledHeight;
-      const sCtx = smallerCanvas.getContext("2d");
-      if (sCtx) {
-        sCtx.imageSmoothingEnabled = true;
-        sCtx.imageSmoothingQuality = "high";
-        sCtx.drawImage(canvas, 0, 0, scaledWidth, scaledHeight);
-        candidateBlob = await new Promise((res) =>
-          smallerCanvas.toBlob(res, outputFormat, 0.75)
-        );
+      const scaleFactors = [0.85, 0.70, 0.55];
+      for (const scale of scaleFactors) {
+        const scaledWidth = Math.round(width * scale);
+        const scaledHeight = Math.round(height * scale);
+        const smallerCanvas = document.createElement("canvas");
+        smallerCanvas.width = scaledWidth;
+        smallerCanvas.height = scaledHeight;
+        const sCtx = smallerCanvas.getContext("2d");
+        if (sCtx) {
+          sCtx.imageSmoothingEnabled = true;
+          sCtx.imageSmoothingQuality = "high";
+          sCtx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+          candidateBlob = await getCanvasBlob(smallerCanvas, 0.75);
+          if (candidateBlob && candidateBlob.size <= targetMaxBytes) {
+            break;
+          }
+        }
       }
     }
 
@@ -145,9 +148,9 @@ export async function compressImageToTargetSize(
     });
 
     console.log(
-      `[Image Compressor] Auto-resized: ${(file.size / 1024).toFixed(0)}KB ➔ ${(
+      `[Image Size Reducer] Successfully compressed from ${(file.size / 1024).toFixed(0)}KB to ${(
         finalFile.size / 1024
-      ).toFixed(0)}KB (${width}x${height}, WebP)`
+      ).toFixed(0)}KB (${finalFile.size <= targetMaxBytes ? "✓ Under 300KB target" : "Processed"}, WebP)`
     );
 
     return finalFile;
@@ -175,8 +178,8 @@ export async function uploadToStorage(
       uploadFile = await compressImageToTargetSize(file, {
         targetMinKb: 200,
         targetMaxKb: 300,
-        maxWidth: 1400,
-        maxHeight: 1400,
+        maxWidth: 1200,
+        maxHeight: 1200,
       });
       if (onProgress) onProgress(25);
     } catch (compressionErr) {
@@ -185,6 +188,14 @@ export async function uploadToStorage(
         file instanceof File
           ? file
           : new File([file], "image.jpg", { type: (file as Blob).type || "image/jpeg" });
+    }
+
+    // Enforce 5MB upload limit
+    if (uploadFile.size > 5 * 1024 * 1024) {
+      return {
+        success: false,
+        error: "Image exceeds 5MB limit. Please select an image under 5MB or retry optimization.",
+      };
     }
 
     // 2. Transmit optimized payload to server endpoint
