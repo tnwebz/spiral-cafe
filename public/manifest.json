@@ -2,8 +2,8 @@
   "name": "Spiral Cafe POS",
   "short_name": "Spiral POS",
   "description": "Spiral Cafe Point of Sale & Kitchen Management Terminal",
-  "id": "/admin/login",
-  "start_url": "/admin/login",
+  "id": "/admin-sp-access/login",
+  "start_url": "/admin-sp-access/login",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "window-controls-overlay"],
@@ -42,7 +42,7 @@
       "name": "POS Tables Grid",
       "short_name": "Tables",
       "description": "Live floor tables management and order billing",
-      "url": "/admin/tables",
+      "url": "/admin-sp-access/tables",
       "icons": [
         {
           "src": "/icons/icon-192x192.png",
@@ -68,7 +68,7 @@
       "name": "Printer Connectivity",
       "short_name": "Printer",
       "description": "Hardware printer diagnostics and connector setup",
-      "url": "/admin/printer",
+      "url": "/admin-sp-access/printer",
       "icons": [
         {
           "src": "/icons/icon-192x192.png",

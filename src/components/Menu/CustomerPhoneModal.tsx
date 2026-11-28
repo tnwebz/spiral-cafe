@@ -145,7 +145,7 @@ export default function CustomerPhoneModal({
 
   // Check customer session on load - prompt entry flow (Phone -> Veg/Non-Veg -> Dine In/Takeaway)
   useEffect(() => {
-    if (pathname?.startsWith("/admin") || pathname?.startsWith("/kitchen")) {
+    if (pathname?.startsWith("/admin-sp-access") || pathname?.startsWith("/kitchen")) {
       return;
     }
     if (isViewOnlyMenu || isTableBookedByOther) {
@@ -627,7 +627,7 @@ export default function CustomerPhoneModal({
     setStep("phone");
   };
 
-  if (!isOpen || pathname?.startsWith("/admin") || pathname?.startsWith("/kitchen")) return null;
+  if (!isOpen || pathname?.startsWith("/admin-sp-access") || pathname?.startsWith("/kitchen")) return null;
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">

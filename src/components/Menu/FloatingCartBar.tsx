@@ -12,7 +12,7 @@ export default function FloatingCartBar() {
   // Do not show on view-only guest menu, admin, kitchen, or invoice screen
   if (
     isViewOnlyMenu ||
-    pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/admin-sp-access") ||
     pathname?.startsWith("/kitchen") ||
     pathname?.startsWith("/invoice")
   ) {

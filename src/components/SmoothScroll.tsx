@@ -10,7 +10,7 @@ export default function SmoothScroll({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Disable Lenis on operational dashboard, kitchen display, and invoice views
     if (
-      pathname?.startsWith("/admin") ||
+      pathname?.startsWith("/admin-sp-access") ||
       pathname?.startsWith("/kitchen") ||
       pathname?.startsWith("/invoice")
     ) {

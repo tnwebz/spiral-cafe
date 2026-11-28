@@ -14,7 +14,7 @@ export default function GlobalSplashScreen() {
 
     // Never display splash screen on internal operational portals
     if (
-      pathname?.startsWith("/admin") ||
+      pathname?.startsWith("/admin-sp-access") ||
       pathname?.startsWith("/kitchen") ||
       pathname?.startsWith("/invoice")
     ) {

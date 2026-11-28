@@ -17,7 +17,7 @@ export default function AnalyticsPinGate({
   title = "Protected Section",
   subtitle = "Enter the 4-digit security PIN to access this section.",
   storageKey = "spiral_section_unlocked",
-  backHref = "/admin/tables",
+  backHref = "/admin-sp-access/tables",
 }: AnalyticsPinGateProps) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");

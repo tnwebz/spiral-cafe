@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   // Authenticate user session strictly via secure HTTP-only cookies
   useEffect(() => {
-    if (pathname === "/admin/login") return;
+    if (pathname === "/admin-sp-access/login") return;
 
     fetch("/api/auth/admin/me", { credentials: "same-origin" })
       .then((res) => {
@@ -67,20 +67,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       })
       .then((data) => {
         if (!data.authenticated) {
-          router.replace("/admin/login");
+          router.replace("/admin-sp-access/login");
         } else {
           setAdminUser(data.user || "Admin");
           setAdminRole(data.role || "ADMIN");
         }
       })
       .catch(() => {
-        router.replace("/admin/login");
+        router.replace("/admin-sp-access/login");
       });
   }, [pathname, router]);
 
   // Connect to Supabase Realtime for live order alerts & connection status
   useEffect(() => {
-    if (pathname === "/admin/login") return;
+    if (pathname === "/admin-sp-access/login") return;
 
     const supabase = getSupabaseBrowserClient();
     const channel = supabase
@@ -109,11 +109,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     try {
       await fetch("/api/auth/admin/me", { method: "POST" });
     } catch {}
-    window.location.href = "/admin/login";
+    window.location.href = "/admin-sp-access/login";
   };
 
   // If on login page, render without admin chrome
-  if (pathname === "/admin/login") {
+  if (pathname === "/admin-sp-access/login") {
     return <>{children}</>;
   }
 
@@ -123,20 +123,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     icon: any;
     targetBlank?: boolean;
   }> = [
-    { label: "Tables Floor", href: "/admin/tables", icon: Grid2X2 },
-    { label: "Billing Lists (Orders)", href: "/admin/orders", icon: ShoppingBag },
-    { label: "Sales & Analytics", href: "/admin/analytics", icon: TrendingUp },
-    { label: "Dashboard Overview", href: "/admin/dashboard", icon: LayoutDashboard },
-    { label: "Menu Management", href: "/admin/menu", icon: UtensilsCrossed },
-    { label: "Inventory", href: "/admin/inventory", icon: FileSpreadsheet },
-    { label: "Customers", href: "/admin/customers", icon: Users },
-    { label: "Kitchen Printer", href: "/admin/printer", icon: Printer },
-    { label: "Settings & Audit", href: "/admin/settings", icon: Settings },
+    { label: "Tables Floor", href: "/admin-sp-access/tables", icon: Grid2X2 },
+    { label: "Billing Lists (Orders)", href: "/admin-sp-access/orders", icon: ShoppingBag },
+    { label: "Sales & Analytics", href: "/admin-sp-access/analytics", icon: TrendingUp },
+    { label: "Dashboard Overview", href: "/admin-sp-access/dashboard", icon: LayoutDashboard },
+    { label: "Menu Management", href: "/admin-sp-access/menu", icon: UtensilsCrossed },
+    { label: "Inventory", href: "/admin-sp-access/inventory", icon: FileSpreadsheet },
+    { label: "Customers", href: "/admin-sp-access/customers", icon: Users },
+    { label: "Kitchen Printer", href: "/admin-sp-access/printer", icon: Printer },
+    { label: "Settings & Audit", href: "/admin-sp-access/settings", icon: Settings },
   ];
 
   const activePageTitle =
     navItems.find(
-      (item) => pathname === item.href || (item.href !== "/admin/tables" && pathname.startsWith(item.href))
+      (item) => pathname === item.href || (item.href !== "/admin-sp-access/tables" && pathname.startsWith(item.href))
     )?.label || "Table Floor Operations";
 
   return (
@@ -161,7 +161,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Brand Header with Close X */}
         <div className="p-6 border-b border-white/10 flex items-center justify-between">
           <Link
-            href="/admin/tables"
+            href="/admin-sp-access/tables"
             onClick={() => setSidebarOpen(false)}
             className="flex items-center gap-3.5"
           >
@@ -204,7 +204,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
-              (item.href !== "/admin/tables" && pathname.startsWith(item.href));
+              (item.href !== "/admin-sp-access/tables" && pathname.startsWith(item.href));
             const Icon = item.icon;
 
             return (
@@ -229,7 +229,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   <span>{item.label}</span>
                 </div>
 
-                {item.href === "/admin/orders" && liveOrdersCount > 0 && (
+                {item.href === "/admin-sp-access/orders" && liveOrdersCount > 0 && (
                   <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-white animate-bounce">
                     +{liveOrdersCount}
                   </span>
@@ -294,7 +294,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 if (typeof window !== "undefined" && window.history.length > 1) {
                   router.back();
                 } else {
-                  router.push("/admin/tables");
+                  router.push("/admin-sp-access/tables");
                 }
               }}
               className="px-3 py-2 sm:px-3.5 sm:py-2 rounded-xl bg-[#FFF9F5] border border-[#CA340A]/20 text-[#2C1710] hover:bg-[#CA340A] hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs group shrink-0 active:scale-95"

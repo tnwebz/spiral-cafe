@@ -683,7 +683,7 @@ export default function KitchenDisplayPage() {
           </div>
 
           <Link
-            href="/admin"
+            href="/admin-sp-access"
             className="px-3 py-1.5 rounded-xl bg-[#FAF5EE] border border-[#DAC8B8] hover:bg-[#F3EBE0] text-[#4A2D22] text-xs font-bold transition-colors hidden md:block"
           >
             Admin

@@ -4,23 +4,28 @@ import { verifyAdminSession } from "@/lib/auth";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. Allow login page and public assets freely
-  if (pathname === "/admin/login") {
-    // If user is already authenticated and visits /admin/login, redirect to /admin/tables
+  // 1. Block/redirect legacy /admin access completely
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  // 2. Allow login page and public assets freely
+  if (pathname === "/admin-sp-access/login") {
+    // If user is already authenticated and visits /admin-sp-access/login, redirect to /admin-sp-access/tables
     const session = await verifyAdminSession(req);
     if (session.authenticated) {
-      return NextResponse.redirect(new URL("/admin/tables", req.url));
+      return NextResponse.redirect(new URL("/admin-sp-access/tables", req.url));
     }
     return NextResponse.next();
   }
 
-  // 2. Protect nested Admin UI routes (/admin, /admin/tables, /admin/orders, etc.)
-  if (pathname.startsWith("/admin")) {
+  // 3. Protect nested Admin UI routes (/admin-sp-access, /admin-sp-access/tables, /admin-sp-access/orders, etc.)
+  if (pathname.startsWith("/admin-sp-access")) {
     const session = await verifyAdminSession(req);
 
     if (!session.authenticated) {
-      const loginUrl = new URL("/admin/login", req.url);
-      if (pathname !== "/admin" && pathname !== "/admin/tables") {
+      const loginUrl = new URL("/admin-sp-access/login", req.url);
+      if (pathname !== "/admin-sp-access" && pathname !== "/admin-sp-access/tables") {
         loginUrl.searchParams.set("redirect", pathname);
       }
       return NextResponse.redirect(loginUrl);
@@ -50,7 +55,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/admin-sp-access/:path*", "/admin/:path*", "/admin", "/api/admin/:path*"],
 };
 
 export { middleware as proxy };

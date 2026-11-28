@@ -116,7 +116,7 @@ export default function AdminConnectivityBar({ syncState }: AdminConnectivityBar
 
           {/* Kitchen Printer CN811 */}
           <Link
-            href="/admin/printer"
+            href="/admin-sp-access/printer"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold border transition-all hover:opacity-90 ${
               isKitchenOnline
                 ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -136,7 +136,7 @@ export default function AdminConnectivityBar({ syncState }: AdminConnectivityBar
 
           {/* Counter USB Printer (KOT & Bill) */}
           <Link
-            href="/admin/printer"
+            href="/admin-sp-access/printer"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold border transition-all hover:opacity-90 ${
               isCounterOnline
                 ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -230,7 +230,7 @@ export default function AdminConnectivityBar({ syncState }: AdminConnectivityBar
 
           <div className="flex items-center gap-2">
             <Link
-              href="/admin/tables"
+              href="/admin-sp-access/tables"
               className="px-3 py-1 rounded-lg bg-[#CA340A] text-white font-bold text-[11px] hover:bg-[#A82A08] transition-colors flex items-center gap-1"
             >
               <span>Manage Kitchen Orders</span>

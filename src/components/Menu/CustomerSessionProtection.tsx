@@ -52,7 +52,7 @@ export default function CustomerSessionProtection() {
   }, []);
 
   const isAdminOrKitchen =
-    pathname?.startsWith("/admin") || pathname?.startsWith("/kitchen");
+    pathname?.startsWith("/admin-sp-access") || pathname?.startsWith("/kitchen");
 
   // Determine active dining state
   const hasActiveOrders = Boolean(
