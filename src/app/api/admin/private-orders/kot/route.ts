@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderById } from "@/lib/db";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const CONNECTOR_URL = process.env.NEXT_PUBLIC_PRINT_CONNECTOR_URL || "http://127.0.0.1:4318";
 const ADMIN_SECRET =
@@ -93,11 +94,21 @@ export async function POST(req: NextRequest) {
 
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
+        const confirmedNotes = `${order.notes || ""} [KOT_CONFIRMED:ROUND_1_AT_${Date.now()}]`.trim();
+        await supabaseAdmin
+          .from("orders" as any)
+          .update({
+            notes: confirmedNotes,
+            status: "PREPARING",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", order.id);
+
         return NextResponse.json({
           success: true,
           printed: true,
           kotId,
-          message: `Kitchen KOT sent to Kitchen CN811-UEWB (GIVE ON COUNTER).`,
+          message: `Kitchen KOT sent to Kitchen CN811-UEWB (${dest}).`,
         });
       } else {
         return NextResponse.json({

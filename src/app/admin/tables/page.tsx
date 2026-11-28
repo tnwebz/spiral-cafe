@@ -8,6 +8,7 @@ import CreateTableModal from "@/components/Admin/CreateTableModal";
 import PrinterStatusModal from "@/components/Admin/PrinterStatusModal";
 import AdminOrderModal from "@/components/Admin/AdminOrderModal";
 import TakeawayDetailModal from "@/components/Admin/TakeawayDetailModal";
+import PrivateOrderDetailModal from "@/components/Admin/PrivateOrderDetailModal";
 import { TableCardStatus } from "@/lib/tables";
 import { usePrinterStatus } from "@/hooks/usePrinterStatus";
 import { PrinterClient } from "@/services/printerClient";
@@ -35,6 +36,8 @@ import {
   Lock,
   ShoppingBag,
   UtensilsCrossed,
+  ShieldAlert,
+  MapPin,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -59,6 +62,10 @@ export default function AdminTablesPage() {
   const [availablePromptTable, setAvailablePromptTable] = useState<TableCardStatus | null>(null);
   const [activeTakeaways, setActiveTakeaways] = useState<any[]>([]);
   const [selectedTakeawayOrder, setSelectedTakeawayOrder] = useState<any | null>(null);
+
+  // Active Private Orders State
+  const [activePrivateOrders, setActivePrivateOrders] = useState<any[]>([]);
+  const [selectedPrivateOrder, setSelectedPrivateOrder] = useState<any | null>(null);
 
   // Drag and drop / Merge takeaway into table
   const [draggedTakeaway, setDraggedTakeaway] = useState<any | null>(null);
@@ -85,6 +92,20 @@ export default function AdminTablesPage() {
       const d = await res.json();
       if (d.success && Array.isArray(d.orders)) {
         setActiveTakeaways(d.orders);
+      }
+    } catch {}
+  }, []);
+
+  // Fetch active private orders (3-color cycle: New Red -> Missed Yellow -> Sent Green -> Paid Vanish)
+  const fetchPrivateOrders = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/private-orders?limit=50");
+      const d = await res.json();
+      if (d.success && Array.isArray(d.orders)) {
+        const active = d.orders.filter(
+          (o: any) => o.status !== "COMPLETED" && o.status !== "CANCELLED"
+        );
+        setActivePrivateOrders(active);
       }
     } catch {}
   }, []);
@@ -218,12 +239,14 @@ export default function AdminTablesPage() {
     fetchTables();
     fetchTransfers();
     fetchTakeaways();
+    fetchPrivateOrders();
 
-    // Fast polling every 5s for live table, transfer, and takeaway updates
+    // Fast polling every 5s for live table, transfer, takeaway, and private order updates
     const pollTimer = setInterval(() => {
       fetchTables(true);
       fetchTransfers();
       fetchTakeaways();
+      fetchPrivateOrders();
     }, 5000);
 
     // Listen to Supabase Realtime for instant order changes
@@ -237,6 +260,7 @@ export default function AdminTablesPage() {
           fetchTables(true);
           fetchTransfers();
           fetchTakeaways();
+          fetchPrivateOrders();
         }
       )
       .subscribe();
@@ -245,7 +269,7 @@ export default function AdminTablesPage() {
       clearInterval(pollTimer);
       supabase.removeChannel(channel);
     };
-  }, [fetchTables, fetchTransfers, fetchTakeaways]);
+  }, [fetchTables, fetchTransfers, fetchTakeaways, fetchPrivateOrders]);
 
   // Next suggested table number for Create Table dialog
   const suggestedNextTable = useMemo(() => {
@@ -417,6 +441,164 @@ export default function AdminTablesPage() {
             </button>
           </div>
         </div>
+
+        {/* ACTIVE PRIVATE ORDERS (Counter & Staff/Owner Orders) */}
+        {activePrivateOrders.length > 0 && (
+          <div className="bg-white/80 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-purple-200/90 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-900 flex items-center justify-center font-bold">
+                  <ShieldAlert size={14} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-heading font-extrabold text-xs sm:text-sm text-[#2C1710]">
+                      Active Private Orders
+                    </h3>
+                    <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-900 border border-purple-300">
+                      {activePrivateOrders.length} Active
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#8C5E51]">
+                    On-counter &amp; internal orders: 🔴 Placed (Red) &rarr; 🟡 Missed KOT (Yellow) &rarr; 🟢 KOT Sent (Green) &rarr; Paid/Finished (Vanish)
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/admin/private-order"
+                className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-heading font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={13} />
+                <span>+ New Private Order</span>
+              </Link>
+            </div>
+
+            {/* Horizontal Cards Scroll */}
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-thin">
+              {activePrivateOrders.map((ord) => {
+                const notes = ord.notes || "";
+                const hasKotConfirmed =
+                  notes.includes("[KOT_CONFIRMED") ||
+                  notes.includes("[KOT_MANUALLY_DELIVERED]") ||
+                  ord.status === "PREPARING" ||
+                  ord.status === "READY" ||
+                  ord.status === "SERVED";
+                const hasViewedExited =
+                  notes.includes("[KOT_VIEWED_EXITED]") ||
+                  notes.includes("[KOT_EXITED_WITHOUT_KOT]") ||
+                  notes.includes("[KOT_FAILED]") ||
+                  notes.includes("[KOT_UNKNOWN]");
+
+                let color: "RED" | "YELLOW" | "GREEN" = "RED";
+                let statusLabel = "NEW ORDER";
+
+                if (hasKotConfirmed) {
+                  color = "GREEN";
+                  statusLabel = "KOT SENT";
+                } else if (hasViewedExited) {
+                  color = "YELLOW";
+                  statusLabel = "ACTION NEEDED";
+                } else {
+                  color = "RED";
+                  statusLabel = "NEW ORDER";
+                }
+
+                const itemsCount = ord.items?.length || 0;
+                const elapsedMins = Math.max(
+                  0,
+                  Math.floor((Date.now() - new Date(ord.createdAt).getTime()) / 60000)
+                );
+                const dest =
+                  ord.tableNumber === "COUNTER" ||
+                  ord.tableNumber === "GIVE ON COUNTER" ||
+                  !ord.tableNumber
+                    ? "COUNTER"
+                    : `TABLE ${ord.tableNumber.toUpperCase()}`;
+
+                return (
+                  <div
+                    key={ord.id}
+                    onClick={() => setSelectedPrivateOrder(ord)}
+                    className={`min-w-[260px] max-w-[290px] p-3.5 border-2 rounded-2xl shadow-xs transition-all cursor-pointer hover:scale-101 shrink-0 flex flex-col justify-between select-none ${
+                      color === "RED"
+                        ? "bg-[#FEF2F2] border-rose-400 hover:border-rose-500 hover:shadow-md"
+                        : color === "YELLOW"
+                        ? "bg-[#FFFBEB] border-amber-400 hover:border-amber-500 hover:shadow-md"
+                        : "bg-[#F0FDF4] border-emerald-400 hover:border-emerald-500 hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-heading font-extrabold text-xs ${
+                            color === "RED"
+                              ? "text-rose-700"
+                              : color === "YELLOW"
+                              ? "text-amber-800"
+                              : "text-emerald-800"
+                          }`}
+                        >
+                          #{ord.orderNumber}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800">
+                          {ord.privatePurpose || "STAFF"}
+                        </span>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 ${
+                          color === "RED"
+                            ? "bg-rose-500 text-white animate-pulse"
+                            : color === "YELLOW"
+                            ? "bg-amber-400 text-amber-950 font-bold"
+                            : "bg-emerald-600 text-white font-bold"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            color === "RED"
+                              ? "bg-white animate-ping"
+                              : color === "YELLOW"
+                              ? "bg-amber-950"
+                              : "bg-white"
+                          }`}
+                        />
+                        {statusLabel}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 mb-2.5">
+                      <div className="text-xs font-bold text-zinc-900 flex items-center justify-between">
+                        <span className="flex items-center gap-1 text-purple-900 font-extrabold">
+                          <MapPin size={11} /> {dest}
+                        </span>
+                        <span className="text-[11px] font-mono text-zinc-500">
+                          {elapsedMins}m ago
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-600 line-clamp-1">
+                        {ord.items && ord.items.length > 0
+                          ? ord.items.map((i: any) => `${i.quantity}x ${i.name}`).join(", ")
+                          : `${itemsCount} item(s)`}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-zinc-200/60 flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] text-zinc-400 uppercase tracking-wider block">Total Bill</span>
+                        <span className="font-heading font-black text-sm text-[#CA340A] font-mono">
+                          ₹{ord.grandTotal}
+                        </span>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-white/90 border border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-2xs">
+                        View &amp; Settle &rarr;
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ACTIVE TAKE AWAY ORDERS BAR */}
         {activeTakeaways.length > 0 && (
@@ -1037,6 +1219,7 @@ export default function AdminTablesPage() {
         onOrderCreated={() => {
           fetchTables();
           fetchTakeaways();
+          fetchPrivateOrders();
         }}
       />
 
@@ -1048,6 +1231,7 @@ export default function AdminTablesPage() {
         onOrderCreated={() => {
           fetchTables();
           fetchTakeaways();
+          fetchPrivateOrders();
         }}
       />
 
@@ -1059,8 +1243,23 @@ export default function AdminTablesPage() {
         onOrderUpdated={() => {
           fetchTables();
           fetchTakeaways();
+          fetchPrivateOrders();
         }}
       />
+
+      {/* Private Order Detail & Action Inspector Modal */}
+      {selectedPrivateOrder && (
+        <PrivateOrderDetailModal
+          isOpen={Boolean(selectedPrivateOrder)}
+          order={selectedPrivateOrder}
+          onClose={() => setSelectedPrivateOrder(null)}
+          onOrderUpdated={() => {
+            fetchTables();
+            fetchTakeaways();
+            fetchPrivateOrders();
+          }}
+        />
+      )}
 
       {/* Available Table Choice Prompt */}
       {availablePromptTable && (
