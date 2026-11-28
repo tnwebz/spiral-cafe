@@ -440,7 +440,7 @@ export default function AdminOrderModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[96vw] h-[92vh] lg:w-[84vw] lg:h-[84vh] max-w-[1550px] max-h-[900px] bg-[#FAF6F0] rounded-3xl border border-[#CA340A]/20 shadow-2xl flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in zoom-in-95 duration-150">
+      <div className="w-[96vw] h-[92vh] lg:w-[86vw] lg:h-[86vh] max-w-[1650px] max-h-[920px] bg-[#FAF6F0] rounded-3xl border border-[#CA340A]/20 shadow-2xl flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in zoom-in-95 duration-150">
         {/* ========================================================= */}
         {/* TOP HEADER (Orange & Half-White Brand Gallery Style) */}
         {/* ========================================================= */}

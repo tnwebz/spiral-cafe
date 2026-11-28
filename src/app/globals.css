@@ -122,14 +122,20 @@
   }
 }
 
-/* System-wide desktop zoom-out scaling: 
- * Ensures that at 100% standard browser zoom, all pages (Table Management, 
- * Sales & Analytics, Menu Management, POS Orders) display with crisp, 
- * compact editorial proportions rather than feeling oversized/zoomed-in.
+/* System-wide responsive zoom-out scaling: 
+ * Delivers an expansive, compact editorial overview across all pages.
+ * Desktop/Tablet (>=640px): 0.68 zoom (additional 20% zoom-out from 0.85).
+ * Mobile (<640px): 0.90 zoom for clean, compact proportions.
  */
-@media (min-width: 768px) {
+@media (max-width: 639px) {
   html {
-    zoom: 0.85;
+    zoom: 0.90;
+  }
+}
+
+@media (min-width: 640px) {
+  html {
+    zoom: 0.68;
   }
 }
 
