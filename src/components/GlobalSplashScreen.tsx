@@ -10,6 +10,16 @@ export default function GlobalSplashScreen() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Never display splash screen on internal operational portals or installed POS app
+    if (
+      typeof window !== "undefined" &&
+      (window.matchMedia("(display-mode: standalone)").matches ||
+       window.matchMedia("(display-mode: window-controls-overlay)").matches ||
+       (window.navigator as unknown as { standalone?: boolean }).standalone === true)
+    ) {
+      return;
+    }
+
     setMounted(true);
 
     // Never display splash screen on internal operational portals

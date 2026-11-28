@@ -36,6 +36,17 @@ export default function Home() {
   const homeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        window.matchMedia("(display-mode: window-controls-overlay)").matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+      if (isStandalone) {
+        window.location.replace("/admin-sp-access/tables");
+        return;
+      }
+    }
+
     fetchDynamicMenu();
 
     const supabase = getSupabaseBrowserClient();

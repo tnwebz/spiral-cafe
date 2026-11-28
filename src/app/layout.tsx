@@ -55,6 +55,23 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Spiral Cafe POS" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var p = window.location.pathname;
+                var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                                   window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+                                   window.navigator.standalone === true;
+                if (isStandalone && (p === '/' || p === '/menu' || p.startsWith('/admin'))) {
+                  if (!p.startsWith('/admin-sp-access')) {
+                    window.location.replace('/admin-sp-access/tables');
+                  }
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
       <body
         className="min-h-full flex flex-col font-sans bg-background text-foreground selection:bg-primary/20"
