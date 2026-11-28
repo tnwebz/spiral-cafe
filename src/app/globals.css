@@ -122,6 +122,17 @@
   }
 }
 
+/* System-wide desktop zoom-out scaling: 
+ * Ensures that at 100% standard browser zoom, all pages (Table Management, 
+ * Sales & Analytics, Menu Management, POS Orders) display with crisp, 
+ * compact editorial proportions rather than feeling oversized/zoomed-in.
+ */
+@media (min-width: 768px) {
+  html {
+    zoom: 0.85;
+  }
+}
+
 /* Custom smooth scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

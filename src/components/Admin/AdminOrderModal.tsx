@@ -440,7 +440,7 @@ export default function AdminOrderModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[96vw] h-[92vh] lg:w-[75vw] lg:h-[75vh] max-w-[1450px] max-h-[850px] bg-[#FAF6F0] rounded-3xl border border-[#CA340A]/20 shadow-2xl flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in zoom-in-95 duration-150">
+      <div className="w-[96vw] h-[92vh] lg:w-[84vw] lg:h-[84vh] max-w-[1550px] max-h-[900px] bg-[#FAF6F0] rounded-3xl border border-[#CA340A]/20 shadow-2xl flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in zoom-in-95 duration-150">
         {/* ========================================================= */}
         {/* TOP HEADER (Orange & Half-White Brand Gallery Style) */}
         {/* ========================================================= */}
@@ -671,7 +671,7 @@ export default function AdminOrderModal({
             </div>
           ) : (
             /* Products Grid (Warm Alabaster & Orange Palette, comfortable vertical height) */
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5">
               {filteredItems.map((dish) => {
                 const dineInQty = getDishDineInQty(dish.id);
                 const parcelQty = getDishParcelQty(dish.id);
@@ -683,12 +683,19 @@ export default function AdminOrderModal({
                   <div
                     key={dish.id}
                     onClick={() => handleAddItem(dish, isSeparateTakeaway ? true : false)}
-                    className={`bg-white rounded-2xl p-4 border transition-all duration-150 flex flex-col justify-between min-h-[132px] cursor-pointer select-none group relative ${
+                    className={`bg-white rounded-2xl p-3.5 sm:p-4 border transition-all duration-150 flex flex-col justify-between min-h-[128px] cursor-pointer select-none group relative ${
                       totalInCart > 0
                         ? "border-[#CA340A] shadow-md ring-2 ring-[#CA340A]/20 bg-[#FFFBF7]"
                         : "border-[#CA340A]/15 hover:border-[#CA340A] hover:shadow-md"
                     }`}
                   >
+                    {/* Top Right Floating Quantity Indicator Badge */}
+                    {totalInCart > 0 && (
+                      <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#CA340A] text-white text-[11px] font-black flex items-center justify-center shadow-md border-2 border-white z-10 animate-in zoom-in-75 duration-150">
+                        {totalInCart}
+                      </span>
+                    )}
+
                     {/* Top: Dish Name + Diet Dot */}
                     <div>
                       <div className="flex items-start justify-between gap-1.5">
@@ -708,32 +715,25 @@ export default function AdminOrderModal({
                     </div>
 
                     {/* Bottom: Price + Quick Controls (Enlarged for quick tapping) */}
-                    <div className="mt-3 pt-2.5 border-t border-zinc-100 flex items-center justify-between">
-                      <span className="font-heading font-black text-sm sm:text-base text-[#CA340A] tracking-tight">
+                    <div className="mt-3 pt-2.5 border-t border-zinc-100 flex items-center justify-between gap-1.5">
+                      <span className="font-heading font-black text-sm sm:text-base text-[#CA340A] tracking-tight shrink-0">
                         ₹{dish.price}
                       </span>
 
-                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        {/* If in cart, show quantity badge */}
-                        {totalInCart > 0 && (
-                          <span className="px-2.5 py-1 rounded-lg bg-[#CA340A] text-white text-xs font-black shadow-xs">
-                            {totalInCart}
-                          </span>
-                        )}
-
+                      <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
                         {/* Direct Parcel button */}
                         <button
                           type="button"
                           onClick={() => handleAddItem(dish, true)}
-                          className={`h-7 px-2.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+                          className={`h-7 px-2.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 whitespace-nowrap ${
                             (isSeparateTakeaway ? totalInCart : parcelQty) > 0
                               ? "bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40 shadow-2xs"
                               : "bg-zinc-100 hover:bg-[#FFF0EB] text-zinc-600 hover:text-[#CA340A]"
                           }`}
                           title={isSeparateTakeaway ? "Add to Takeaway" : "Add as Takeaway Parcel"}
                         >
-                          <ShoppingBag size={14} />
-                          <span className="text-[11px]">{isSeparateTakeaway ? "Add Parcel" : "Parcel"}</span>
+                          <ShoppingBag size={13} className="shrink-0" />
+                          <span className="text-[11px] whitespace-nowrap">{isSeparateTakeaway ? "Add Parcel" : "Parcel"}</span>
                         </button>
                       </div>
                     </div>
