@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrderById } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-const CONNECTOR_URL = process.env.NEXT_PUBLIC_PRINT_CONNECTOR_URL || "http://127.0.0.1:4318";
-const ADMIN_SECRET =
-  process.env.PRINT_CONNECTOR_SECRET || "spiral_kot_sig_7f8a9b2c3d4e5f6018273645";
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { orderId } = body;
+    const { orderId, action = "PREPARE", kotId: incomingKotId, printedAtCounter } = body;
 
     if (!orderId) {
       return NextResponse.json(
@@ -26,6 +22,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Confirmation action: update database status to PREPARING and mark KOT as confirmed
+    if (action === "CONFIRM") {
+      const confirmedNotes = `${order.notes || ""} [KOT_CONFIRMED:ROUND_1_AT_${Date.now()}]${
+        printedAtCounter ? " [PRINTED_AT_COUNTER]" : ""
+      }`.trim();
+
+      await supabaseAdmin
+        .from("orders" as any)
+        .update({
+          notes: confirmedNotes,
+          status: "PREPARING",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+
+      return NextResponse.json({
+        success: true,
+        printed: true,
+        kotId: incomingKotId || `PRV-KOT-${order.orderNumber}`,
+        message: `Kitchen KOT confirmed for #${order.orderNumber}. Order marked PREPARING.`,
+      });
+    }
+
+    // Build KOT payload from authoritative database record
     const items = (order.items || []).map((it) => ({
       name: it.name,
       quantity: it.quantity,
@@ -41,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     const totalQuantity = items.reduce((acc, it) => acc + it.quantity, 0);
     const totalItems = items.length;
-    const kotId = `PRV-KOT-${order.orderNumber}-${Date.now().toString().slice(-4)}`;
+    const kotId = incomingKotId || `PRV-KOT-${order.orderNumber}-${Date.now().toString().slice(-4)}`;
 
     const dest =
       order.tableNumber && order.tableNumber !== "COUNTER" && order.tableNumber !== "GIVE ON COUNTER"
@@ -61,6 +81,8 @@ export async function POST(req: NextRequest) {
       orderNumber: order.orderNumber,
       purpose: order.privatePurpose || "STAFF",
       isPrivateOrder: true,
+      privatePurpose: order.privatePurpose || "STAFF",
+      tableNumber: dest,
       destination: dest,
       terminalName: "Billing 1",
       dateStr: new Date().toLocaleDateString("en-GB"),
@@ -78,60 +100,22 @@ export async function POST(req: NextRequest) {
 
     const attemptId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-    // Try transmitting to local print connector
-    try {
-      const res = await fetch(`${CONNECTOR_URL}/printer/print-private-kot`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${ADMIN_SECRET}`,
-        },
-        body: JSON.stringify({
-          attemptId,
-          kotPayload,
-        }),
-      });
-
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.success) {
-        const confirmedNotes = `${order.notes || ""} [KOT_CONFIRMED:ROUND_1_AT_${Date.now()}]`.trim();
-        await supabaseAdmin
-          .from("orders" as any)
-          .update({
-            notes: confirmedNotes,
-            status: "PREPARING",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", order.id);
-
-        return NextResponse.json({
-          success: true,
-          printed: true,
-          kotId,
-          message: `Kitchen KOT sent to Kitchen CN811-UEWB (${dest}).`,
-        });
-      } else {
-        return NextResponse.json({
-          success: true,
-          printed: false,
-          warning: json.error || "Printer connector reported issue.",
-          kotId,
-        });
-      }
-    } catch (netErr: any) {
-      return NextResponse.json({
-        success: true,
-        printed: false,
-        warning: "Local Print Connector is not running or unreachable on port 4318.",
-        kotId,
-      });
-    }
+    // Return the prepared payload for browser direct transmission to local print connector
+    return NextResponse.json({
+      success: true,
+      attemptId,
+      kotPayload,
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        destination: dest,
+      },
+    });
   } catch (error: any) {
     console.error("Private KOT route error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to dispatch private KOT" },
+      { success: false, error: error.message || "Failed to process private KOT" },
       { status: 500 }
     );
   }
 }
-

@@ -407,37 +407,28 @@ export default function PrivateOrderPage() {
     setKotPrintSuccess(null);
     setManualSentNotice(null);
     try {
-      const res = await fetch("/api/admin/private-orders/kot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
-      });
-      const json = await res.json();
-      if (json.success && json.printed) {
+      const result = await PrinterClient.dispatchPrivateKotPrint(orderId);
+      if (result.success) {
         setKotPrintSuccess(
-          `KOT Ticket #${json.kotId || "GIVE ON COUNTER"} successfully sent to Kitchen CN811-UEWB printer!`
+          `KOT Ticket #${result.kotId} successfully sent to Kitchen printer!`
         );
         setKotPrintStatus({
           success: true,
-          message: json.message || "Kitchen KOT sent to Kitchen CN811-UEWB (GIVE ON COUNTER)",
+          message: result.message || "Kitchen KOT sent to Kitchen CN811-UEWB",
         });
       } else {
-        const warning =
-          json.warning ||
-          "Print connection was interrupted. Please check with kitchen before resending to avoid duplicate tickets.";
-        setKotPrintWarning(warning);
+        setKotPrintWarning(result.message);
         setKotPrintStatus({
           success: false,
-          message: warning,
+          message: result.message,
         });
       }
     } catch (e: any) {
-      const warning =
-        "Print connection was interrupted. Please check with kitchen before resending to avoid duplicate tickets.";
+      const warning = "Print connection was interrupted. Please check with kitchen before resending.";
       setKotPrintWarning(warning);
       setKotPrintStatus({
         success: false,
-        message: "Could not reach local print connector on port 4318",
+        message: e.message || warning,
       });
     } finally {
       setPrintingKot(false);

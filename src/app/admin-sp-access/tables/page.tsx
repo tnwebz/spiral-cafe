@@ -582,16 +582,37 @@ export default function AdminTablesPage() {
                       </p>
                     </div>
 
-                    <div className="pt-2 border-t border-zinc-200/60 flex items-center justify-between">
+                    <div className="pt-2 border-t border-zinc-200/60 flex items-center justify-between gap-1.5">
                       <div>
                         <span className="text-[9px] text-zinc-400 uppercase tracking-wider block">Total Bill</span>
                         <span className="font-heading font-black text-sm text-[#CA340A] font-mono">
                           ₹{ord.grandTotal}
                         </span>
                       </div>
-                      <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-white/90 border border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-2xs">
-                        View &amp; Settle &rarr;
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {color !== "GREEN" && (
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const res = await PrinterClient.dispatchPrivateKotPrint(ord.id);
+                              if (res.success) {
+                                fetchPrivateOrders();
+                              } else {
+                                alert(res.message);
+                              }
+                            }}
+                            className="px-2 py-1 rounded-xl text-[10px] font-bold bg-[#CA340A] hover:bg-[#A82806] text-white shadow-xs transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                            title="Print KOT to Kitchen immediately"
+                          >
+                            <Printer size={11} />
+                            <span>KOT</span>
+                          </button>
+                        )}
+                        <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-white/90 border border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-2xs">
+                          Settle &rarr;
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );

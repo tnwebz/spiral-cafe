@@ -418,6 +418,113 @@ export class PrinterClient {
   }
 
   /**
+   * Dispatch Private Order KOT directly from browser to local connector (port 4318)
+   * Sends to 80mm kitchen printer with top "*** PRIVATE ORDER ***" banner,
+   * with automatic fallback to 58mm counter USB printer if kitchen printer is offline.
+   */
+  static async dispatchPrivateKotPrint(orderId: string): Promise<KotPrintResult> {
+    try {
+      // 1. Fetch authoritative KOT payload from backend
+      const prepRes = await fetch("/api/admin/private-orders/kot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, action: "PREPARE" }),
+      });
+
+      if (!prepRes.ok) {
+        const err = await prepRes.json().catch(() => ({}));
+        throw new Error(err.error || `Server failed to prepare private KOT (HTTP ${prepRes.status})`);
+      }
+
+      const { attemptId, kotPayload } = await prepRes.json();
+      if (!kotPayload) {
+        throw new Error("No KOT payload returned from server.");
+      }
+
+      // 2. Transmit directly from browser to local connector (80mm kitchen printer)
+      let connectorRes: Response | null = null;
+      let printResult: any = null;
+      try {
+        connectorRes = await fetch(`${CONNECTOR_BASE_URL}/printer/print-private-kot`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer spiral_kot_sig_7f8a9b2c3d4e5f6018273645",
+          },
+          body: JSON.stringify({
+            attemptId,
+            kotPayload,
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+        printResult = await connectorRes.json().catch(() => ({}));
+      } catch (netErr: any) {
+        // Connector is completely unreachable on port 4318
+        return {
+          success: false,
+          attemptId,
+          kotId: kotPayload.kotId,
+          outcome: "FAILED",
+          message: "Print connector is offline or unreachable on port 4318.",
+        };
+      }
+
+      // 3. If primary 80mm kitchen printer succeeded:
+      if (connectorRes && connectorRes.ok && printResult?.success) {
+        await fetch("/api/admin/private-orders/kot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId, action: "CONFIRM", kotId: kotPayload.kotId }),
+        }).catch(() => {});
+
+        return {
+          success: true,
+          attemptId,
+          kotId: kotPayload.kotId,
+          outcome: "CONFIRMED",
+          message: printResult.message || `Private KOT sent to Kitchen CN811-UEWB (${kotPayload.destination || "COUNTER"})! 🖨️✅`,
+        };
+      }
+
+      // 4. Kitchen Ethernet printer was unreachable or busy -> Attempt Emergency Counter KOT print (58mm USB)
+      try {
+        const counterRes = await this.printKotAtCounter(kotPayload);
+        if (counterRes.success) {
+          await fetch("/api/admin/private-orders/kot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId, action: "CONFIRM", kotId: kotPayload.kotId, printedAtCounter: true }),
+          }).catch(() => {});
+
+          return {
+            success: true,
+            attemptId,
+            kotId: kotPayload.kotId,
+            outcome: "CONFIRMED",
+            message: "Kitchen printer offline — Emergency KOT printed at Counter USB printer! 🖨️⚠️",
+          };
+        }
+      } catch {}
+
+      return {
+        success: false,
+        attemptId,
+        kotId: kotPayload.kotId,
+        outcome: "FAILED",
+        message: printResult?.error || printResult?.message || "Failed to print to Kitchen Printer.",
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        attemptId: `att_err_${Date.now()}`,
+        kotId: `PRV-${orderId}`,
+        outcome: "FAILED",
+        message: err.message || "Failed to dispatch private KOT print.",
+      };
+    }
+  }
+
+  /**
    * Print 58mm test bill on counter printer
    */
   static async printTestCustomerBill(): Promise<{ success: boolean; message: string; durationMs?: number }> {

@@ -93,38 +93,33 @@ export default function PrivateOrderDetailModal({
     setBanner(null);
 
     try {
-      const res = await fetch("/api/admin/private-orders/kot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: currentOrder.id }),
-      });
-      const data = await res.json();
+      const result = await PrinterClient.dispatchPrivateKotPrint(currentOrder.id);
 
-      if (data.success && data.printed) {
+      if (result.success) {
         setBanner({
           type: "SUCCESS",
-          message: data.message || "Kitchen KOT printed successfully! Order is in PREPARING.",
+          message: result.message || "Kitchen KOT printed successfully! Order is in PREPARING. 🖨️✅",
         });
         setCurrentOrder((prev: any) =>
           prev
             ? {
                 ...prev,
-                notes: `${prev.notes || ""} [KOT_CONFIRMED:ROUND_1]`,
+                notes: `${prev.notes || ""} [KOT_CONFIRMED:ROUND_1_AT_${Date.now()}]`,
                 status: "PREPARING",
               }
             : null
         );
         onOrderUpdated();
       } else {
-        const warning =
-          data.warning ||
-          "Kitchen printer was unreachable. Check that the connector app is running.";
-        setBanner({ type: "WARNING", message: warning });
+        setBanner({
+          type: "WARNING",
+          message: result.message || "Kitchen printer was unreachable. Check that connector app is running.",
+        });
       }
     } catch (err: any) {
       setBanner({
         type: "ERROR",
-        message: err.message || "Failed to reach server to dispatch KOT.",
+        message: err.message || "Failed to reach printer to dispatch KOT.",
       });
     } finally {
       setSendingKot(false);
