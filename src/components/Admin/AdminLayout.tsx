@@ -126,7 +126,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { label: "Tables Floor", href: "/admin/tables", icon: Grid2X2 },
     { label: "Billing Lists (Orders)", href: "/admin/orders", icon: ShoppingBag },
     { label: "Sales & Analytics", href: "/admin/analytics", icon: TrendingUp },
-    { label: "Dashboard Overview", href: "/admin", icon: LayoutDashboard },
+    { label: "Dashboard Overview", href: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Menu Management", href: "/admin/menu", icon: UtensilsCrossed },
     { label: "Inventory", href: "/admin/inventory", icon: FileSpreadsheet },
     { label: "Customers", href: "/admin/customers", icon: Users },
@@ -136,7 +136,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const activePageTitle =
     navItems.find(
-      (item) => pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href))
+      (item) => pathname === item.href || (item.href !== "/admin/tables" && pathname.startsWith(item.href))
     )?.label || "Table Floor Operations";
 
   return (
@@ -165,8 +165,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             onClick={() => setSidebarOpen(false)}
             className="flex items-center gap-3.5"
           >
-            <div className="relative w-11 h-11 rounded-xl bg-[#FFF9F5] p-1.5 flex items-center justify-center shadow-md shrink-0">
-              <Image src="/logo.png" alt="Spiral Cafe" width={32} height={32} className="object-contain" />
+            <div className="relative w-11 h-11 rounded-xl bg-white border border-white/20 p-1.5 flex items-center justify-center shadow-md shrink-0">
+              <Image src="/logo.png" alt="Spiral Cafe" width={32} height={32} className="object-contain" priority />
             </div>
             <div>
               <h1 className="font-heading font-extrabold text-lg tracking-tight text-[#FFF9F5]">
@@ -204,7 +204,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
-              (item.href !== "/admin" && pathname.startsWith(item.href));
+              (item.href !== "/admin/tables" && pathname.startsWith(item.href));
             const Icon = item.icon;
 
             return (
@@ -318,8 +318,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </button>
 
             <div className="flex items-center gap-3 truncate ml-1">
-              <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#CA340A] p-1 flex items-center justify-center text-white shrink-0 shadow-xs">
-                <Image src="/logo.png" alt="Spiral Cafe" width={22} height={22} className="object-contain" />
+              <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white border border-[#CA340A]/20 p-1 flex items-center justify-center shrink-0 shadow-xs">
+                <Image src="/logo.png" alt="Spiral Cafe" width={26} height={26} className="object-contain" priority />
               </div>
               <div className="truncate">
                 <h2 className="font-heading font-extrabold text-sm sm:text-base text-[#2C1710] flex items-center gap-2 truncate leading-tight">

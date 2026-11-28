@@ -6,10 +6,10 @@ export async function middleware(req: NextRequest) {
 
   // 1. Allow login page and public assets freely
   if (pathname === "/admin/login") {
-    // If user is already authenticated and visits /admin/login, redirect to /admin
+    // If user is already authenticated and visits /admin/login, redirect to /admin/tables
     const session = await verifyAdminSession(req);
     if (session.authenticated) {
-      return NextResponse.redirect(new URL("/admin", req.url));
+      return NextResponse.redirect(new URL("/admin/tables", req.url));
     }
     return NextResponse.next();
   }
@@ -20,7 +20,7 @@ export async function middleware(req: NextRequest) {
 
     if (!session.authenticated) {
       const loginUrl = new URL("/admin/login", req.url);
-      if (pathname !== "/admin") {
+      if (pathname !== "/admin" && pathname !== "/admin/tables") {
         loginUrl.searchParams.set("redirect", pathname);
       }
       return NextResponse.redirect(loginUrl);

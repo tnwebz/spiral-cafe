@@ -42,7 +42,7 @@
       "name": "POS Tables Grid",
       "short_name": "Tables",
       "description": "Live floor tables management and order billing",
-      "url": "/admin",
+      "url": "/admin/tables",
       "icons": [
         {
           "src": "/icons/icon-192x192.png",

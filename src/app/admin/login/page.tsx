@@ -101,8 +101,8 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-md bg-white border border-[#CA340A]/15 rounded-3xl shadow-xl p-6 sm:p-8">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="relative w-16 h-16 rounded-2xl bg-[#3A1710] p-2 mx-auto mb-3 flex items-center justify-center shadow-md">
-            <Image src="/logo.png" alt="Spiral Cafe" width={48} height={48} className="object-contain" />
+          <div className="relative w-16 h-16 rounded-2xl bg-white border border-[#CA340A]/20 p-2 mx-auto mb-3 flex items-center justify-center shadow-md">
+            <Image src="/logo.png" alt="Spiral Cafe" width={48} height={48} className="object-contain" priority />
           </div>
           <h1 className="font-heading font-extrabold text-2xl text-[#2C1710] tracking-tight">
             Spiral Cafe
