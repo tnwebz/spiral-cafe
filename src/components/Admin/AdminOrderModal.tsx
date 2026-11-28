@@ -435,31 +435,31 @@ export default function AdminOrderModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 md:p-6 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-3 md:p-4 animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[96vw] h-[92vh] lg:w-[86vw] lg:h-[86vh] max-w-[1650px] max-h-[920px] bg-[#FAF6F0] rounded-3xl border border-[#CA340A]/20 shadow-2xl flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in zoom-in-95 duration-150">
+      <div className="w-[98vw] h-[96vh] max-w-none max-h-none bg-[#FAF6F0] rounded-3xl border border-[#CA340A]/20 shadow-2xl flex flex-col overflow-hidden text-[#2C1710] font-sans animate-in zoom-in-95 duration-150">
         {/* ========================================================= */}
         {/* TOP HEADER (Orange & Half-White Brand Gallery Style) */}
         {/* ========================================================= */}
-        <header className="h-14 bg-[#FFF9F5] border-b border-[#CA340A]/15 flex items-center justify-between shrink-0 shadow-2xs z-20">
+        <header className="h-16 bg-[#FFF9F5] border-b border-[#CA340A]/15 flex items-center justify-between shrink-0 shadow-2xs z-20">
           {/* Left: Brand / Table Info (Pinned to match left category bar width) */}
-          <div className="w-52 sm:w-60 h-full bg-[#2C1710] text-[#FFF9F5] px-4 flex items-center justify-between border-r border-[#CA340A]/20 shrink-0">
-            <div className="flex items-center gap-2.5 truncate">
-              <div className="w-8 h-8 rounded-lg bg-[#CA340A] flex items-center justify-center text-white shrink-0 shadow-xs">
-                {isSeparateTakeaway ? <ShoppingBag size={17} /> : <UtensilsCrossed size={17} />}
+          <div className="w-56 sm:w-64 h-full bg-[#2C1710] text-[#FFF9F5] px-4 sm:px-5 flex items-center justify-between border-r border-[#CA340A]/20 shrink-0">
+            <div className="flex items-center gap-3 truncate">
+              <div className="w-9 h-9 rounded-xl bg-[#CA340A] flex items-center justify-center text-white shrink-0 shadow-xs">
+                {isSeparateTakeaway ? <ShoppingBag size={18} /> : <UtensilsCrossed size={18} />}
               </div>
               <div className="truncate">
-                <span className="font-heading font-black text-xs tracking-wider block text-white truncate uppercase">
+                <span className="font-heading font-black text-xs sm:text-sm tracking-wider block text-white truncate uppercase">
                   {isSeparateTakeaway
                     ? existingOrderNumber
-                      ? `TAKEAWAY #${existingOrderNumber}`
-                      : "TAKEAWAY"
+                    ? `TAKEAWAY #${existingOrderNumber}`
+                    : "TAKEAWAY"
                     : `TABLE ${defaultTableNumber}`}
                 </span>
-                <span className="text-[10px] text-[#E2C7BA] font-semibold block truncate">
+                <span className="text-[11px] text-[#E2C7BA] font-semibold block truncate">
                   {existingOrderNumber ? "Add Order / Items" : "Manual Order"}
                 </span>
               </div>
@@ -467,15 +467,15 @@ export default function AdminOrderModal({
           </div>
 
           {/* Center: Search Product Bar */}
-          <div className="flex-1 max-w-2xl px-4 flex items-center gap-3">
+          <div className="flex-1 max-w-3xl px-4 sm:px-6 flex items-center gap-3">
             <div className="relative flex-1">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search Product..."
-                className="w-full pl-10 pr-4 py-2 bg-white hover:bg-white border border-[#CA340A]/20 rounded-xl text-xs sm:text-sm font-semibold text-[#2C1710] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#CA340A] focus:border-[#CA340A] transition-all shadow-2xs"
+                className="w-full pl-11 pr-4 py-2.5 bg-white hover:bg-white border border-[#CA340A]/20 rounded-xl text-xs sm:text-sm font-semibold text-[#2C1710] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#CA340A] focus:border-[#CA340A] transition-all shadow-2xs"
                 autoFocus
               />
               {searchQuery && (
@@ -484,7 +484,7 @@ export default function AdminOrderModal({
                   onClick={() => setSearchQuery("")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-0.5 cursor-pointer"
                 >
-                  <X size={14} />
+                  <X size={15} />
                 </button>
               )}
             </div>
@@ -493,27 +493,27 @@ export default function AdminOrderModal({
             <button
               type="button"
               onClick={() => setShowCustomProductForm(!showCustomProductForm)}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 showCustomProductForm
                   ? "bg-[#CA340A] text-white shadow-xs"
                   : "bg-white hover:bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/30"
               }`}
               title="Add custom off-menu product"
             >
-              <Plus size={14} />
+              <Plus size={15} />
               <span className="hidden sm:inline">+ Custom Item</span>
             </button>
           </div>
 
           {/* Right: Close Button matching POS layout (Square box) */}
-          <div className="h-full flex items-center pr-3">
+          <div className="h-full flex items-center pr-3 sm:pr-4">
             <button
               onClick={onClose}
-              className="w-10 h-10 rounded-xl bg-[#2C1710] hover:bg-[#CA340A] text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
+              className="w-11 h-11 rounded-xl bg-[#2C1710] hover:bg-[#CA340A] text-white flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95"
               aria-label="Close manual order"
               title="Close Manual Order (ESC)"
             >
-              <X size={20} />
+              <X size={22} />
             </button>
           </div>
         </header>
@@ -548,23 +548,23 @@ export default function AdminOrderModal({
           {/* ------------------------------------------------------- */}
           {/* COLUMN 1: CATEGORIES SIDEBAR (Exact POS Theme) */}
           {/* ------------------------------------------------------- */}
-          <aside className="w-52 sm:w-60 bg-[#FFF9F5] flex flex-col h-full shrink-0 border-r border-[#CA340A]/15 overflow-y-auto py-2 pr-1">
-            <div className="space-y-1">
+          <aside className="w-56 sm:w-64 bg-[#FFF9F5] flex flex-col h-full shrink-0 border-r border-[#CA340A]/15 overflow-y-auto py-3 pr-1.5">
+            <div className="space-y-1.5">
               {categories.map((cat) => {
                 const isActive = activeCategory === cat;
                 return (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`w-full text-left font-black tracking-wide text-xs uppercase transition-all flex items-center justify-between cursor-pointer ${
+                    className={`w-full text-left font-black tracking-wide text-xs sm:text-sm uppercase transition-all flex items-center justify-between cursor-pointer ${
                       isActive
-                        ? "bg-[#CA340A] text-white py-3.5 px-4 rounded-r-2xl shadow-md shadow-[#CA340A]/20 font-black translate-x-1"
-                        : "text-[#52525b] hover:text-[#2C1710] hover:bg-[#FFF0EB] py-3 px-4 rounded-r-xl font-bold"
+                        ? "bg-[#CA340A] text-white py-3.5 sm:py-4 px-4 sm:px-5 rounded-r-2xl shadow-md shadow-[#CA340A]/20 font-black translate-x-1"
+                        : "text-[#52525b] hover:text-[#2C1710] hover:bg-[#FFF0EB] py-3 sm:py-3.5 px-4 sm:px-5 rounded-r-xl font-bold"
                     }`}
                   >
                     <span className="truncate">{cat}</span>
                     {isActive && (
-                      <span className="w-2 h-2 rounded-full bg-white shrink-0 ml-1" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-white shrink-0 ml-1.5" />
                     )}
                   </button>
                 );
@@ -575,7 +575,7 @@ export default function AdminOrderModal({
           {/* ------------------------------------------------------- */}
           {/* COLUMN 2: PRODUCTS GRID (Middle expansive canvas) */}
           {/* ------------------------------------------------------- */}
-          <main className="flex-1 bg-[#FAF6F0] h-full overflow-y-auto p-4 sm:p-5 flex flex-col">
+          <main className="flex-1 bg-[#FAF6F0] h-full overflow-y-auto p-4 sm:p-6 flex flex-col">
           {/* Custom Product Inline Creator Form (When expanded) */}
           {showCustomProductForm && (
             <form
@@ -671,7 +671,7 @@ export default function AdminOrderModal({
             </div>
           ) : (
             /* Products Grid (Warm Alabaster & Orange Palette, comfortable vertical height) */
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
               {filteredItems.map((dish) => {
                 const dineInQty = getDishDineInQty(dish.id);
                 const parcelQty = getDishParcelQty(dish.id);
@@ -683,7 +683,7 @@ export default function AdminOrderModal({
                   <div
                     key={dish.id}
                     onClick={() => handleAddItem(dish, isSeparateTakeaway ? true : false)}
-                    className={`bg-white rounded-2xl p-3.5 sm:p-4 border transition-all duration-150 flex flex-col justify-between min-h-[128px] cursor-pointer select-none group relative ${
+                    className={`bg-white rounded-2xl p-4 sm:p-5 border transition-all duration-150 flex flex-col justify-between min-h-[142px] cursor-pointer select-none group relative ${
                       totalInCart > 0
                         ? "border-[#CA340A] shadow-md ring-2 ring-[#CA340A]/20 bg-[#FFFBF7]"
                         : "border-[#CA340A]/15 hover:border-[#CA340A] hover:shadow-md"
@@ -691,7 +691,7 @@ export default function AdminOrderModal({
                   >
                     {/* Top Right Floating Quantity Indicator Badge */}
                     {totalInCart > 0 && (
-                      <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#CA340A] text-white text-[11px] font-black flex items-center justify-center shadow-md border-2 border-white z-10 animate-in zoom-in-75 duration-150">
+                      <span className="absolute -top-2.5 -right-2.5 min-w-[24px] h-[24px] px-1.5 rounded-full bg-[#CA340A] text-white text-xs font-black flex items-center justify-center shadow-md border-2 border-white z-10 animate-in zoom-in-75 duration-150">
                         {totalInCart}
                       </span>
                     )}
@@ -700,13 +700,13 @@ export default function AdminOrderModal({
                     <div>
                       <div className="flex items-start justify-between gap-1.5">
                         <h4
-                          className="font-bold text-xs sm:text-sm text-[#2C1710] leading-snug line-clamp-2 group-hover:text-[#CA340A] transition-colors"
+                          className="font-bold text-sm sm:text-base text-[#2C1710] leading-snug line-clamp-2 group-hover:text-[#CA340A] transition-colors"
                           title={dish.name}
                         >
                           {dish.name}
                         </h4>
                         <span
-                          className={`w-2 h-2 rounded-full shrink-0 mt-1 ${
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${
                             isVeg ? "bg-emerald-600" : "bg-rose-600"
                           }`}
                           title={isVeg ? "Pure Veg" : "Non-Veg"}
@@ -715,8 +715,8 @@ export default function AdminOrderModal({
                     </div>
 
                     {/* Bottom: Price + Quick Controls (Enlarged for quick tapping) */}
-                    <div className="mt-3 pt-2.5 border-t border-zinc-100 flex items-center justify-between gap-1.5">
-                      <span className="font-heading font-black text-sm sm:text-base text-[#CA340A] tracking-tight shrink-0">
+                    <div className="mt-3.5 pt-3 border-t border-zinc-100 flex items-center justify-between gap-2">
+                      <span className="font-heading font-black text-base sm:text-lg text-[#CA340A] tracking-tight shrink-0">
                         ₹{dish.price}
                       </span>
 
@@ -725,15 +725,15 @@ export default function AdminOrderModal({
                         <button
                           type="button"
                           onClick={() => handleAddItem(dish, true)}
-                          className={`h-7 px-2.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 whitespace-nowrap ${
+                          className={`h-8 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 whitespace-nowrap ${
                             (isSeparateTakeaway ? totalInCart : parcelQty) > 0
                               ? "bg-[#FFF0EB] text-[#CA340A] border border-[#CA340A]/40 shadow-2xs"
                               : "bg-zinc-100 hover:bg-[#FFF0EB] text-zinc-600 hover:text-[#CA340A]"
                           }`}
                           title={isSeparateTakeaway ? "Add to Takeaway" : "Add as Takeaway Parcel"}
                         >
-                          <ShoppingBag size={13} className="shrink-0" />
-                          <span className="text-[11px] whitespace-nowrap">{isSeparateTakeaway ? "Add Parcel" : "Parcel"}</span>
+                          <ShoppingBag size={14} className="shrink-0" />
+                          <span className="text-xs whitespace-nowrap">{isSeparateTakeaway ? "Add Parcel" : "Parcel"}</span>
                         </button>
                       </div>
                     </div>
@@ -747,7 +747,7 @@ export default function AdminOrderModal({
         {/* ------------------------------------------------------- */}
         {/* COLUMN 3: ORDER SUMMARY & BILLING DOCK (Right) */}
         {/* ------------------------------------------------------- */}
-        <aside className="w-80 lg:w-96 bg-white border-l border-[#CA340A]/15 flex flex-col h-full shrink-0 shadow-lg z-10">
+        <aside className="w-84 sm:w-96 lg:w-[400px] xl:w-[430px] bg-white border-l border-[#CA340A]/15 flex flex-col h-full shrink-0 shadow-lg z-10">
           {/* Cart Header */}
           <div className="p-4 border-b border-[#CA340A]/15 bg-[#FFF9F5] flex items-center justify-between shrink-0">
             <div>
