@@ -4,9 +4,11 @@ import { verifyAdminSession } from "@/lib/auth";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. Block/redirect legacy /admin access completely
+  // 1. Seamlessly redirect legacy /admin access directly to /admin-sp-access/tables
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    return NextResponse.redirect(new URL("/", req.url));
+    const target = pathname.replace(/^\/admin/, "/admin-sp-access");
+    const destination = target === "/admin-sp-access" ? "/admin-sp-access/tables" : target;
+    return NextResponse.redirect(new URL(destination, req.url));
   }
 
   // 2. Allow login page and public assets freely
