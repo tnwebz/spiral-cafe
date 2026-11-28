@@ -103,6 +103,21 @@ export async function POST(req: NextRequest) {
       .replace(/\|/g, "")
       .trim();
 
+    const isPrivateOrder = Boolean(
+      order.orderType === "PRIVATE" ||
+        (order.notes || "").includes("[ORDER_TYPE:PRIVATE]") ||
+        (order.orderNumber || "").startsWith("PRV-")
+    );
+    const purposeMatch = (order.notes || "").match(/\[PRIVATE_PURPOSE:([A-Z_]+)\]/);
+    const privatePurpose = order.privatePurpose || (purposeMatch ? purposeMatch[1] : undefined);
+    const privateNoteMatch = (order.notes || "").match(/\[PRIVATE_NOTE:([^\]]+)\]/);
+    const mergedSpecialInstructions = [
+      privateNoteMatch ? privateNoteMatch[1].trim() : "",
+      cleanInstructions,
+    ]
+      .filter((s, idx, arr) => Boolean(s) && arr.indexOf(s) === idx)
+      .join(" | ");
+
     const kotPayload = {
       kotId,
       orderNumber,
@@ -111,10 +126,12 @@ export async function POST(req: NextRequest) {
       terminalName,
       dateStr,
       timeStr,
+      isPrivateOrder,
+      privatePurpose,
       items,
       totalItems,
       totalQuantity,
-      specialInstructions: cleanInstructions || undefined,
+      specialInstructions: mergedSpecialInstructions || undefined,
     };
 
     const timestamp = Date.now();

@@ -78,58 +78,86 @@ export default function PrintDesignShowcase() {
 
   // Plaintext generator for copy / raw ESC/POS view
   const getKitchenKotText = (): string => {
-    const W = 32;
+    const W = 48;
     const div = "-".repeat(W);
-    let out = `Table No: ${displayTable}\nDate: ${dateInput} 10:56:45 pm\nTerminal : Billing 1\n${div}\n`;
-    out += `Item                         Qty\n${div}\n`;
+    let out = `Table No: ${displayTable}\nDate: ${dateInput} 10:56:45 pm          Order: #${orderNumInput}\nTerminal : Billing 1\n${div}\n`;
+    out += `ITEM${" ".repeat(W - 7)}QTY\n${div}\n`;
     currentItems.forEach((it) => {
-      const tag = it.isParcel || isAllTakeaway ? " (Parcel)" : "";
+      const tag = it.isParcel || isAllTakeaway ? " - (Parcel)" : " - (Dine In)";
       const fullName = `${it.name}${tag}`;
       const qtyStr = String(it.quantity);
       const pad = Math.max(1, W - fullName.length - qtyStr.length);
       out += `${fullName}${" ".repeat(pad)}${qtyStr}\n`;
     });
-    out += `${div}\nTotal Items: ${totalItems}${" ".repeat(Math.max(1, W - 14 - 13))}Total Qty: ${totalQuantity}\n`;
+    out += `${div}\nTotal Items: ${totalItems}${" ".repeat(Math.max(1, W - 13 - String(totalItems).length - 11 - String(totalQuantity).length))}Total Qty: ${totalQuantity}\n`;
     if (hasSpecialRequest && specialRequest) {
-      out += `${div}\nSPECIAL REQUEST:\n"${specialRequest}"\n`;
+      out += `${div}\nSpecial Request:\n"${specialRequest}"\n`;
     }
     return out;
   };
 
   const getCounterKotText = (): string => {
-    return getKitchenKotText();
+    const W = 32;
+    const div = "-".repeat(W);
+    let out = `Table No: ${displayTable}\nDate: ${dateInput} 10:56:45 pm\nTerminal : Billing 1\n${div}\n`;
+    out += `ITEM${" ".repeat(W - 7)}QTY\n${div}\n`;
+    currentItems.forEach((it) => {
+      const tag = it.isParcel || isAllTakeaway ? " - (Parcel)" : " - (Dine In)";
+      const fullName = `${it.name}${tag}`;
+      const qtyStr = String(it.quantity);
+      const pad = Math.max(1, W - fullName.length - qtyStr.length);
+      out += `${fullName}${" ".repeat(pad)}${qtyStr}\n`;
+    });
+    out += `${div}\nTotal Items: ${totalItems}${" ".repeat(Math.max(1, W - 13 - String(totalItems).length - 11 - String(totalQuantity).length))}Total Qty: ${totalQuantity}\n`;
+    if (hasSpecialRequest && specialRequest) {
+      out += `${div}\nSpecial Request:\n"${specialRequest}"\n`;
+    }
+    return out;
   };
 
   const getCounterBillText = (): string => {
     const W = 32;
     const div = "-".repeat(W);
-    const doubleDiv = "=".repeat(W);
-    let out = `Estimate             Spiral Cafe\n${div}\n`;
-    out += `TABLE: ${displayTable}   |   DATE: ${dateInput}\n${div}\n`;
-    out += `Item         Qty  Pr.(Rs) Amt(Rs)\n${div}\n`;
+    let out = `          Spiral Cafe\n${div}\n`;
+    const tablePart = `TABLE: ${displayTable}`;
+    const datePart = `DATE: ${dateInput}`;
+    out += `${tablePart}${" ".repeat(Math.max(1, W - tablePart.length - datePart.length))}${datePart}\n${div}\n`;
+    out += `Item          Qty   Rate     Amt\n${div}\n`;
     currentItems.forEach((it) => {
-      const pr = it.price.toFixed(2).padStart(7, " ");
-      const amt = (it.price * it.quantity).toFixed(2).padStart(8, " ");
+      const pr = it.price.toFixed(2).padStart(6, " ");
+      const amt = (it.price * it.quantity).toFixed(2).padStart(7, " ");
       const qty = String(it.quantity).padStart(3, " ");
-      const tag = it.isParcel || isAllTakeaway ? "(Parcel)" : "(Dine In)";
-      const fullName = `${it.name} ${tag}`;
-      if (fullName.length <= 13) {
-        out += `${fullName.padEnd(13, " ")} ${qty} ${pr} ${amt}\n`;
-      } else {
-        out += `${fullName.substring(0, 13)} ${qty} ${pr} ${amt}\n`;
-        out += `${fullName.substring(13)}\n`;
+      const rightCol = `${qty} ${pr} ${amt}`;
+      const firstMax = Math.max(8, W - rightCol.length - 1);
+      const displayName = isMixed && it.isParcel ? `${it.name} (P)` : it.name;
+      const words = displayName.split(/\s+/);
+      let firstLine = "";
+      let used = 0;
+      for (const w of words) {
+        if (!firstLine) {
+          firstLine = w.length <= firstMax ? w : w.substring(0, firstMax);
+          used = 1;
+          if (w.length > firstMax) break;
+        } else if ((firstLine + " " + w).length <= firstMax) {
+          firstLine += " " + w;
+          used++;
+        } else break;
       }
+      out += `${firstLine.padEnd(firstMax, " ")} ${rightCol}\n`;
+      const rem = words.slice(used).join(" ");
+      if (rem) out += `${rem}\n`;
     });
     out += `${div}\n`;
-    out += `Total Qty${" ".repeat(Math.max(1, W - 9 - String(totalQuantity).length))}${totalQuantity}\n`;
+    const totItemsStr = `Total Items: ${totalItems}`;
+    const totQtyStr = `Total Qty: ${totalQuantity}`;
+    out += `${totItemsStr}${" ".repeat(Math.max(1, W - totItemsStr.length - totQtyStr.length))}${totQtyStr}\n`;
     out += `Total Summary${" ".repeat(Math.max(1, W - 13 - subtotal.toFixed(2).length))}${subtotal.toFixed(2)}\n`;
-    out += `GST Tax (5%)${" ".repeat(Math.max(1, W - 12 - gstTax.toFixed(2).length))}${gstTax.toFixed(2)}\n`;
+    out += `GST Tax${" ".repeat(Math.max(1, W - 7 - gstTax.toFixed(2).length))}${gstTax.toFixed(2)}\n`;
     if (packagingFee > 0) {
       out += `Packaging Fee${" ".repeat(Math.max(1, W - 13 - packagingFee.toFixed(2).length))}${packagingFee.toFixed(2)}\n`;
     }
-    out += `${doubleDiv}\nGRAND TOTAL${" ".repeat(Math.max(1, W - 11 - `Rs ${grandTotal.toFixed(2)}`.length))}Rs ${grandTotal.toFixed(2)}\n`;
-    out += `Payment Mode: ${paymentMode}\n`;
-    out += `- - - - - - - - - - - - - - - - \n`;
+    const grandVal = `Rs ${grandTotal.toFixed(2)}`;
+    out += `${div}\nGRAND TOTAL:${" ".repeat(Math.max(1, W - 12 - grandVal.length))}${grandVal}\n${div}\n`;
     out += `     Thanks visit again!!!\n`;
     return out;
   };

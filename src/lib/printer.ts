@@ -48,41 +48,91 @@ export class ThermalReceiptFormatter {
   static generatePlaintextReceipt(data: ReceiptData): string {
     const divider = "-".repeat(this.LINE_WIDTH);
 
-    const cleanTable = (data.tableNumber || "A1").toUpperCase();
+    const rawTable = (data.tableNumber || "A1").toUpperCase();
+    const cleanTable = rawTable === "GIVE ON COUNTER" ? "COUNTER" : rawTable;
     const tablePart = `TABLE: ${cleanTable}`;
     const datePart = `DATE: ${data.date}`;
-    const topSp = Math.max(1, this.LINE_WIDTH - tablePart.length - datePart.length);
-    const tableDateLine = `${tablePart}${" ".repeat(topSp)}${datePart}`;
+    const tableDateLine =
+      tablePart.length + 1 + datePart.length <= this.LINE_WIDTH
+        ? this.formatLine(tablePart, datePart, this.LINE_WIDTH)
+        : `${tablePart}\n${datePart}`;
 
     const lines: string[] = [
       this.centerText("Spiral Cafe"),
       divider,
       tableDateLine,
       divider,
-      "Item         Qty  Pr.(Rs) Amt(Rs)",
+      "Item          Qty   Rate     Amt",
       divider,
     ];
 
-    data.items.forEach((item) => {
+    const normalized = (data.items || []).map((item) => {
+      const lower = item.name.toLowerCase();
+      const isItemParcel = lower.includes("(parcel)") || lower.includes("[parcel]") || cleanTable === "TAKEAWAY";
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
+        .replace(/\s*-\s*\(dine in\)/gi, "")
         .replace(/\s*\(parcel\)/gi, "")
         .replace(/\s*\(dine in\)/gi, "")
+        .replace(/\s*\[parcel\]/gi, "")
+        .replace(/\s*\[dine in\]/gi, "")
         .trim();
-      const isItemParcel = item.name.toLowerCase().includes("(parcel)") || cleanTable === "TAKEAWAY";
-      const tag = isItemParcel ? "(Parcel)" : "(Dine In)";
+      return { item, cleanName, isItemParcel };
+    });
+
+    const isMixedServing =
+      normalized.some((x) => x.isItemParcel) &&
+      normalized.some((x) => !x.isItemParcel) &&
+      cleanTable !== "TAKEAWAY";
+
+    normalized.forEach(({ item, cleanName, isItemParcel }) => {
+      const displayName =
+        isMixedServing || (cleanTable !== "TAKEAWAY" && isItemParcel)
+          ? isItemParcel
+            ? `${cleanName} (P)`
+            : cleanName
+          : cleanName;
 
       const qtyStr = String(item.quantity).padStart(3, " ");
-      const prStr = item.unitPrice.toFixed(2).padStart(7, " ");
+      const prRaw =
+        item.unitPrice >= 1000 && Number.isInteger(item.unitPrice)
+          ? String(item.unitPrice)
+          : item.unitPrice.toFixed(2);
+      const prStr = prRaw.padStart(6, " ");
       const amtStr = item.lineTotal.toFixed(2).padStart(7, " ");
       const rightCol = `${qtyStr} ${prStr} ${amtStr}`;
+      const firstColMax = Math.max(8, this.LINE_WIDTH - rightCol.length - 1);
 
-      const namePart = cleanName.length > 12 ? cleanName.substring(0, 12) : cleanName.padEnd(12, " ");
-      lines.push(`${namePart} ${rightCol}`);
-      if (cleanName.length > 12) {
-        lines.push(cleanName.substring(12));
+      const words = displayName.split(/\s+/);
+      let firstLine = "";
+      let used = 0;
+      for (const w of words) {
+        if (!firstLine) {
+          firstLine = w.length <= firstColMax ? w : w.substring(0, firstColMax);
+          used = 1;
+          if (w.length > firstColMax) break;
+        } else if ((firstLine + " " + w).length <= firstColMax) {
+          firstLine += " " + w;
+          used++;
+        } else {
+          break;
+        }
       }
-      lines.push(`  ${tag}`);
+
+      lines.push(`${firstLine.padEnd(firstColMax, " ")} ${rightCol}`);
+      const rem = words.slice(used).join(" ");
+      if (rem) {
+        let cur = "";
+        for (const w of rem.split(/\s+/)) {
+          if (!cur) cur = w;
+          else if ((cur + " " + w).length <= this.LINE_WIDTH) cur += " " + w;
+          else {
+            lines.push(cur);
+            cur = w;
+          }
+        }
+        if (cur) lines.push(cur);
+      }
     });
 
     lines.push(divider);
@@ -91,27 +141,24 @@ export class ThermalReceiptFormatter {
     const totalItems = data.items.length;
     const totItemsStr = `Total Items: ${totalItems}`;
     const totQtyStr = `Total Qty: ${totalQty}`;
-    const qtySpaces = Math.max(1, this.LINE_WIDTH - totItemsStr.length - totQtyStr.length);
-    lines.push(`${totItemsStr}${" ".repeat(qtySpaces)}${totQtyStr}`);
+    if (totItemsStr.length + 1 + totQtyStr.length <= this.LINE_WIDTH) {
+      lines.push(this.formatLine(totItemsStr, totQtyStr, this.LINE_WIDTH));
+    } else {
+      lines.push(totItemsStr, totQtyStr);
+    }
 
-    const subVal = data.subtotal.toFixed(2);
-    const subSp = Math.max(1, this.LINE_WIDTH - "Total Summary".length - subVal.length);
-    lines.push(`Total Summary${" ".repeat(subSp)}${subVal}`);
+    lines.push(this.formatLine("Total Summary", data.subtotal.toFixed(2), this.LINE_WIDTH));
 
     if (data.tax && data.tax > 0) {
-      const taxVal = data.tax.toFixed(2);
-      const taxSp = Math.max(1, this.LINE_WIDTH - "GST Tax".length - taxVal.length);
-      lines.push(`GST Tax${" ".repeat(taxSp)}${taxVal}`);
+      lines.push(this.formatLine("GST Tax", data.tax.toFixed(2), this.LINE_WIDTH));
     }
 
     if (data.packagingFee && data.packagingFee > 0) {
-      const packVal = data.packagingFee.toFixed(2);
-      const packSp = Math.max(1, this.LINE_WIDTH - "Packaging Fee".length - packVal.length);
-      lines.push(`Packaging Fee${" ".repeat(packSp)}${packVal}`);
+      lines.push(this.formatLine("Packaging Fee", data.packagingFee.toFixed(2), this.LINE_WIDTH));
     }
 
     lines.push(divider);
-    lines.push(`GRAND TOTAL: Rs ${data.grandTotal.toFixed(2)}`);
+    lines.push(this.formatLine("GRAND TOTAL:", `Rs ${data.grandTotal.toFixed(2)}`, this.LINE_WIDTH));
     lines.push(divider);
 
     lines.push(this.centerText("Thanks visit again!!!"));

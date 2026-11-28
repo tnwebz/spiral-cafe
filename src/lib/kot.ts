@@ -11,6 +11,7 @@ export interface KotData {
   dateStr: string;
   timeStr: string;
   isPrivateOrder?: boolean;
+  privatePurpose?: string;
   isTakeaway?: boolean;
   isMixed?: boolean;
   items: Array<{
@@ -25,10 +26,10 @@ export interface KotData {
 
 /**
  * High-visibility, de-cluttered KOT Receipt Engine
- * Width: 32 columns standard (compact/58mm) or 42 columns (80mm)
+ * Width: 48 columns (80mm CN811-UEWB) or 32 columns (58mm POS58 Counter)
  */
 export class KotReceiptEngine {
-  private static LINE_WIDTH = 32;
+  private static LINE_WIDTH = 48;
 
   static formatLine(left: string, right: string, width = this.LINE_WIDTH): string {
     const spaceCount = Math.max(1, width - left.length - right.length);
@@ -76,17 +77,29 @@ export class KotReceiptEngine {
     return lines.length > 0 ? lines : [text.substring(0, maxWidth)];
   }
 
-  static formatPlainSlip(data: KotData): string {
-    const width = 32;
+  static formatPlainSlip(data: KotData, width = this.LINE_WIDTH): string {
     const divider = "-".repeat(width);
 
     const lines: string[] = [];
+    if (data.isPrivateOrder) {
+      const purposeClean = data.privatePurpose
+        ? ` (${String(data.privatePurpose).toUpperCase().replace(/_/g, " ")})`
+        : "";
+      lines.push(`*** PRIVATE ORDER${purposeClean} ***`);
+    }
     lines.push(`Table No: ${data.tableNumber}`);
 
     const dateTimeStr = data.timeStr
       ? `${(data.dateStr || "").replace(/-/g, "/")} ${data.timeStr.toLowerCase()}`
       : (data.dateStr || "").replace(/-/g, "/");
-    lines.push(`Date: ${dateTimeStr}`);
+    if (width >= 44 && data.orderNumber) {
+      lines.push(this.formatLine(`Date: ${dateTimeStr}`, `Order: #${data.orderNumber}`, width));
+    } else {
+      lines.push(`Date: ${dateTimeStr}`);
+      if (data.orderNumber && data.isPrivateOrder) {
+        lines.push(`Order: #${data.orderNumber}`);
+      }
+    }
     lines.push(`Terminal : ${data.terminalName || "Billing 1"}`);
 
     if (data.round && data.round > 1) {
@@ -94,13 +107,14 @@ export class KotReceiptEngine {
     }
 
     lines.push(divider);
-    lines.push(this.formatLine("Item", "Qty", width));
+    lines.push(this.formatLine("ITEM", "QTY", width));
     lines.push(divider);
 
     data.items.forEach((item) => {
       const isItemParcel =
         item.name.toLowerCase().includes("(parcel)") ||
-        (item.notes || "").toLowerCase().includes("parcel");
+        (item.notes || "").toLowerCase().includes("parcel") ||
+        String(data.tableNumber).toUpperCase() === "TAKEAWAY";
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
         .replace(/\s*-\s*\(dine in\)/gi, "")
@@ -109,7 +123,13 @@ export class KotReceiptEngine {
         .replace(/\s*\[parcel\]/gi, "")
         .replace(/\s*\[dine in\]/gi, "")
         .trim();
-      const displayName = isItemParcel ? `${cleanName} (Parcel)` : cleanName;
+      const displayName = data.isPrivateOrder
+        ? isItemParcel
+          ? `${cleanName} - (Parcel)`
+          : cleanName
+        : isItemParcel
+        ? `${cleanName} - (Parcel)`
+        : `${cleanName} - (Dine In)`;
       const qtyStr = String(item.quantity);
       const maxFirstLine = width - qtyStr.length - 1;
       const wrapped = this.wrapText(displayName, maxFirstLine);
@@ -138,7 +158,7 @@ export class KotReceiptEngine {
     if (data.specialInstructions && data.specialInstructions.trim()) {
       const cleanInst = data.specialInstructions.trim().replace(/^"+|"+$/g, "");
       lines.push(divider);
-      lines.push("SPECIAL REQUEST:");
+      lines.push("Special Request:");
       lines.push(`"${cleanInst}"`);
     }
 
@@ -146,13 +166,11 @@ export class KotReceiptEngine {
   }
 
   /**
-   * Generates standard ESC/POS binary command string for 58mm thermal receipt printer
-   * Formatted to match the approved physical reference design (Image 2).
+   * Generates standard ESC/POS binary command string (48 cols for 80mm kitchen, 32 cols for 58mm counter)
    */
-  static generateEscPosCommands(data: KotData): string {
+  static generateEscPosCommands(data: KotData, width = this.LINE_WIDTH): string {
     const ESC = "\x1B";
     const GS = "\x1D";
-    const width = 32;
     const divider = "-".repeat(width) + "\n";
 
     let commands = "";
@@ -166,38 +184,62 @@ export class KotReceiptEngine {
     commands += `${ESC}2`;     // Default line spacing
     commands += `${ESC}a\x00`; // Align Left
 
-    // 3. Table No: <tableNumber> (Bold, Double size GS ! 0x11)
-    commands += `${GS}!\x11`;
+    // 2b. Private order banner if applicable
+    if (data.isPrivateOrder) {
+      const purposeClean = data.privatePurpose
+        ? ` (${String(data.privatePurpose).toUpperCase().replace(/_/g, " ")})`
+        : "";
+      commands += `${ESC}a\x01`;
+      commands += `${GS}B\x01`;
+      commands += `${ESC}E\x01`;
+      commands += ` *** PRIVATE ORDER${purposeClean} *** \n`;
+      commands += `${GS}B\x00`;
+      commands += `${ESC}E\x00`;
+      commands += `${ESC}a\x00`;
+    }
+
+    // 3. Table No: <tableNumber> (Bold, proportional Double size GS ! 0x11 when fits)
+    const tableHeading = `Table No: ${data.tableNumber}`;
     commands += `${ESC}E\x01`;
-    commands += `Table No: ${data.tableNumber}\n`;
-    commands += `${GS}!\x00`;
+    if (tableHeading.length * 2 <= width) {
+      commands += `${GS}!\x11`;
+      commands += `${tableHeading}\n`;
+      commands += `${GS}!\x00`;
+    } else {
+      commands += `${tableHeading}\n`;
+    }
     commands += `${ESC}E\x00`;
 
-    // 4. Date & Terminal (Bold, Normal size 1x1)
-    commands += `${ESC}E\x01`;
+    // 4. Date & Terminal (Normal size 1x1)
     const dateTimeStr = data.timeStr
       ? `${(data.dateStr || "").replace(/-/g, "/")} ${data.timeStr.toLowerCase()}`
       : (data.dateStr || "").replace(/-/g, "/");
-    commands += `Date: ${dateTimeStr}\n`;
+    if (width >= 44 && data.orderNumber) {
+      commands += `${this.formatLine(`Date: ${dateTimeStr}`, `Order: #${data.orderNumber}`, width)}\n`;
+    } else {
+      commands += `Date: ${dateTimeStr}\n`;
+    }
     commands += `Terminal : ${data.terminalName || "Billing 1"}\n`;
 
     if (data.round && data.round > 1) {
       commands += `Round: ${data.round} (Add-on)\n`;
     }
-    commands += `${ESC}E\x00`;
 
     // 5. Divider
     commands += divider;
 
-    // 6. Header: Item                         Qty (Title Case)
-    commands += `${this.formatLine("Item", "Qty", width)}\n`;
+    // 6. Header: ITEM                         QTY (Bold)
+    commands += `${ESC}E\x01`;
+    commands += `${this.formatLine("ITEM", "QTY", width)}\n`;
+    commands += `${ESC}E\x00`;
     commands += divider;
 
     // 7. Items in Bold
     data.items.forEach((item) => {
       const isItemParcel =
         item.name.toLowerCase().includes("(parcel)") ||
-        (item.notes || "").toLowerCase().includes("parcel");
+        (item.notes || "").toLowerCase().includes("parcel") ||
+        String(data.tableNumber).toUpperCase() === "TAKEAWAY";
       const cleanName = item.name
         .replace(/\s*-\s*\(parcel\)/gi, "")
         .replace(/\s*-\s*\(dine in\)/gi, "")
@@ -206,7 +248,13 @@ export class KotReceiptEngine {
         .replace(/\s*\[parcel\]/gi, "")
         .replace(/\s*\[dine in\]/gi, "")
         .trim();
-      const displayName = isItemParcel ? `${cleanName} (Parcel)` : cleanName;
+      const displayName = data.isPrivateOrder
+        ? isItemParcel
+          ? `${cleanName} - (Parcel)`
+          : cleanName
+        : isItemParcel
+        ? `${cleanName} - (Parcel)`
+        : `${cleanName} - (Dine In)`;
 
       commands += `${ESC}!\x00`; // Reset print mode: Font A, 1x1, un-stretched
       commands += `${ESC}M\x00`; // Font A
@@ -257,15 +305,15 @@ export class KotReceiptEngine {
       commands += `${GS}!\x00`;
       commands += `${ESC}E\x01`;
       commands += `${ESC}G\x01`;
-      commands += `SPECIAL REQUEST:\n`;
+      commands += `Special Request:\n`;
       commands += `${ESC}G\x00`;
       commands += `${ESC}E\x00`;
       commands += `"${cleanInst}"\n`;
     }
 
     // Minimal paper feed (2 lines) and cut
-    commands += `\n\n`;
-    commands += `${GS}V\x00`;
+    commands += `${ESC}d\x02`;
+    commands += `${GS}V\x42\x00`;
 
     return commands;
   }
@@ -325,7 +373,15 @@ export function buildKotData(
     (order.notes || "").includes("[TAKEAWAY]") ||
     (order.notes || "").includes("[PARCEL]")
   );
-  const isPrivateOrder = Boolean(options?.isPrivateOrder || (order as any).isPrivate);
+  const isPrivateOrder = Boolean(
+    options?.isPrivateOrder ||
+      (order as any).isPrivate ||
+      order.orderType === "PRIVATE" ||
+      (order.notes || "").includes("[ORDER_TYPE:PRIVATE]") ||
+      (order.orderNumber || "").startsWith("PRV-")
+  );
+  const purposeMatch = (order.notes || "").match(/\[PRIVATE_PURPOSE:([A-Z_]+)\]/);
+  const privatePurpose = order.privatePurpose || (purposeMatch ? purposeMatch[1] : undefined);
 
   const hasParcel = itemsToPrint.some((it) => it.name.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel"));
   const hasDineIn = itemsToPrint.some((it) => !it.name.toLowerCase().includes("(parcel)") && !(it.notes || "").toLowerCase().includes("parcel"));
@@ -335,6 +391,13 @@ export function buildKotData(
     .replace(/\[[^\]]+\]/g, "")
     .replace(/\|/g, "")
     .trim();
+  const privateNoteMatch = (order.notes || "").match(/\[PRIVATE_NOTE:([^\]]+)\]/);
+  const mergedInstructions = [
+    privateNoteMatch ? privateNoteMatch[1].trim() : "",
+    cleanSpecialInstructions,
+  ]
+    .filter((s, idx, arr) => Boolean(s) && arr.indexOf(s) === idx)
+    .join(" | ");
 
   return {
     kotId,
@@ -347,8 +410,9 @@ export function buildKotData(
     timeStr,
     isTakeaway,
     isPrivateOrder,
+    privatePurpose,
     isMixed,
-    specialInstructions: cleanSpecialInstructions || undefined,
+    specialInstructions: mergedInstructions || undefined,
     items: itemsToPrint.map((it) => {
       let itemName = it.name;
       const isItemParcel = itemName.toLowerCase().includes("(parcel)") || (it.notes || "").toLowerCase().includes("parcel");

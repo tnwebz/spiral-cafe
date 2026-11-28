@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/Admin/AdminLayout";
 import CollectCashModal from "@/components/Admin/CollectCashModal";
 import ThermalReceiptModal from "@/components/Admin/ThermalReceipt";
@@ -27,13 +26,6 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
-  const router = useRouter();
-
-  // Redirect admin access directly to Tables screen as requested
-  useEffect(() => {
-    router.replace("/admin/tables");
-  }, [router]);
-
   const [data, setData] = useState<{
     kpis: {
       todaySales: number;

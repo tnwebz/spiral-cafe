@@ -47,18 +47,32 @@ export async function POST(req: NextRequest) {
         ? `TABLE ${order.tableNumber.toUpperCase()}`
         : "GIVE ON COUNTER";
 
+    const cleanNoteInstructions = (order.notes || "")
+      .replace(/\[[^\]]+\]/g, "")
+      .replace(/\|/g, "")
+      .trim();
+    const specialInstructions = [order.privateNote?.trim(), cleanNoteInstructions]
+      .filter((s, idx, arr) => Boolean(s) && arr.indexOf(s) === idx)
+      .join(" | ");
+
     const kotPayload = {
       kotId,
       orderNumber: order.orderNumber,
       purpose: order.privatePurpose || "STAFF",
+      isPrivateOrder: true,
       destination: dest,
       terminalName: "Billing 1",
-      dateStr: new Date().toLocaleDateString("en-IN"),
-      timeStr: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+      dateStr: new Date().toLocaleDateString("en-GB"),
+      timeStr: new Date().toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }),
       items,
       totalItems,
       totalQuantity,
-      specialInstructions: order.privateNote || undefined,
+      specialInstructions: specialInstructions || undefined,
     };
 
     const attemptId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
