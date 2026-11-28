@@ -103,7 +103,7 @@ export default function HeroBanner({
             Explore Menu
           </Link>
           <Link
-            href="/offers"
+            href="/menu?category=combos"
             className="px-4 py-2 rounded-full text-xs md:text-sm font-heading font-bold text-cream/90 hover:text-cream hover:bg-white/15 transition-all"
           >
             Combos

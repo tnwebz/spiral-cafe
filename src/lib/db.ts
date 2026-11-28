@@ -64,7 +64,7 @@ export const DEFAULT_CONFIG: CafeConfig = {
   adminPasswordHash: crypto.createHash("sha256").update("spiral2026").digest("hex"),
   cafeName: "Spiral Cafe",
   cafeAddress: "Opposite Government Hospital, CSI Mahimai Illam, Alagesan Nagar, Chengalpattu, Tamil Nadu 603001",
-  cafePhone: "+91 98765 43210",
+  cafePhone: "+91 96291 81283",
   gstNumber: "33AAAAA0000A1Z5",
   currencySymbol: "₹",
 };

@@ -1,173 +1,21 @@
 "use client";
 
-import { motion } from "framer-motion";
-import BottomNav from "@/components/BottomNav";
-import { Tag, Sparkles, Flame, Check } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-
-const combos = [
-  {
-    title: "The Smash & Dip Combo",
-    price: 349,
-    originalPrice: 450,
-    tag: "Most Popular",
-    items: ["1 Oklahoma Chicken / Mushroom Smash", "1 Drippy Cheese Fries", "1 Iced Latte or Mango Passion Cooler"],
-    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=600&auto=format&fit=crop",
-  },
-  {
-    title: "Rooftop Wings & Sando Feast",
-    price: 599,
-    originalPrice: 780,
-    tag: "Best Value for 2",
-    items: ["1 Garlic Parmesan Wings (6 pcs)", "1 Southside Chick / French Onion Sando", "1 Loaded AF Fries", "2 Shakes or Coolers"],
-    image: "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?q=80&w=600&auto=format&fit=crop",
-  },
-  {
-    title: "Sando & Cold Brew Delight",
-    price: 299,
-    originalPrice: 410,
-    tag: "Sunset Special",
-    items: ["1 Mushroom & Mayhem or Egg & Melt Sando", "1 Americano or Peach Iced Tea"],
-    image: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?q=80&w=600&auto=format&fit=crop",
-  },
-];
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function OffersPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/menu?category=combos");
+  }, [router]);
+
   return (
-    <main className="min-h-screen bg-background pb-28 md:pb-16 pt-4">
-      {/* Top Desktop Navigation Header */}
-      <div className="hidden md:flex items-center justify-between px-6 lg:px-8 py-3 max-w-6xl xl:max-w-7xl mx-auto border-b border-border/60 mb-6">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="relative w-10 h-10 rounded-full bg-primary/10 p-1 border border-primary/20 flex items-center justify-center overflow-hidden shadow-xs group-hover:scale-105 transition-transform">
-            <Image src="/logo.png" alt="Spiral Cafe" width={34} height={34} className="object-contain" />
-          </div>
-          <div>
-            <h1 className="font-heading font-extrabold text-xl text-foreground leading-none group-hover:text-primary transition-colors">
-              Spiral Cafe
-            </h1>
-            <span className="text-[11px] text-[#8C5E51] font-semibold">Special Combos &amp; Offers</span>
-          </div>
-        </Link>
-
-        <nav className="flex items-center gap-2">
-          <Link
-            href="/"
-            className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
-          >
-            Home
-          </Link>
-          <Link
-            href="/menu"
-            className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
-          >
-            Menu
-          </Link>
-          <Link
-            href="/offers"
-            className="px-4 py-1.5 rounded-xl text-xs font-heading font-bold bg-primary text-cream shadow-xs"
-          >
-            Combos
-          </Link>
-          <Link
-            href="/contact"
-            className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
-          >
-            Visit Us
-          </Link>
-        </nav>
+    <div className="min-h-screen bg-[#FFF9F5] flex items-center justify-center p-6 text-center">
+      <div className="animate-pulse space-y-2">
+        <div className="w-10 h-10 border-3 border-[#CA340A] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs font-heading font-bold text-[#8C5E51]">Opening Special Combos...</p>
       </div>
-
-      <div className="max-w-3xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Brand Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-8 flex flex-col items-center"
-        >
-          <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/20 p-1 flex items-center justify-center mb-3">
-            <Image src="/logo.png" alt="Spiral Cafe" width={48} height={48} className="object-contain" />
-          </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-bold uppercase tracking-wider mb-2">
-            <Tag size={12} /> Exclusive Combos
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-heading font-extrabold text-foreground mb-2">
-            Spiral Specials &amp; Combos
-          </h1>
-          <p className="text-muted-foreground text-sm max-w-md">
-            Save big on our handcrafted cafe combinations and rooftop party platters.
-          </p>
-        </motion.div>
-
-        {/* Combos Grid */}
-        <div className="flex flex-col gap-6">
-          {combos.map((combo, idx) => (
-            <motion.div
-              key={combo.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: idx * 0.1, duration: 0.5 }}
-              className="bg-card rounded-3xl overflow-hidden border border-border/80 shadow-md flex flex-col sm:flex-row group"
-            >
-              {/* Image Preview */}
-              <div className="relative w-full sm:w-48 h-44 sm:h-auto bg-muted shrink-0 overflow-hidden">
-                <Image
-                  src={combo.image}
-                  alt={combo.title}
-                  fill
-                  className="object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent sm:hidden" />
-                <span className="absolute top-3 left-3 bg-primary text-cream text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-md">
-                  {combo.tag}
-                </span>
-              </div>
-
-              {/* Details */}
-              <div className="p-5 flex flex-col justify-between flex-1 gap-4">
-                <div>
-                  <h3 className="font-heading font-bold text-lg sm:text-xl text-foreground">
-                    {combo.title}
-                  </h3>
-                  
-                  <div className="mt-3 flex flex-col gap-1.5">
-                    {combo.items.map((it, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-                        <div className="w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                          <Check size={10} strokeWidth={3} />
-                        </div>
-                        <span>{it}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-border/60">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-sans font-extrabold text-2xl text-primary">
-                      ₹{combo.price}
-                    </span>
-                    <span className="font-sans text-xs font-medium text-muted-foreground line-through">
-                      ₹{combo.originalPrice}
-                    </span>
-                  </div>
-
-                  <Link
-                    href="/menu"
-                    className="px-4 py-2 bg-primary hover:bg-primary-dark text-cream text-xs font-bold rounded-full transition-all shadow-sm active:scale-95"
-                  >
-                    Explore Menu
-                  </Link>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-      
-      <BottomNav />
-    </main>
+    </div>
   );
 }

@@ -20,7 +20,9 @@ import {
   AlertCircle,
   Tag,
   Star,
+  Package,
 } from "lucide-react";
+import CreateComboModal from "@/components/Admin/CreateComboModal";
 
 export default function AdminMenuPage() {
   const [items, setItems] = useState<DynamicMenuItem[]>([]);
@@ -31,6 +33,7 @@ export default function AdminMenuPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingItem, setDeletingItem] = useState<DynamicMenuItem | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [isCreateComboOpen, setIsCreateComboOpen] = useState(false);
 
   const fetchMenu = useCallback(async () => {
     try {
@@ -164,6 +167,16 @@ export default function AdminMenuPage() {
               <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
             </button>
 
+            <button
+              type="button"
+              onClick={() => setIsCreateComboOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-heading font-extrabold shadow-md transition-all active:scale-95 cursor-pointer"
+              title="Create a bundled combo package"
+            >
+              <Package size={15} />
+              <span>+ CREATE COMBO PACKAGE</span>
+            </button>
+
             <Link
               href="/admin/menu/new"
               className="flex items-center gap-2 px-4 py-2.5 bg-[#CA340A] hover:bg-[#A82806] text-white rounded-xl text-xs font-heading font-extrabold shadow-md transition-all active:scale-95 cursor-pointer"
@@ -272,10 +285,19 @@ export default function AdminMenuPage() {
 
                       {/* Category */}
                       <td className="py-3 px-4 font-semibold text-[#52525b]">
-                        <div className="flex items-center gap-1.5">
-                          <FoodIcon nameOrId={item.categoryId || item.categoryName} className="w-4 h-4 shrink-0" />
-                          <span>{item.categoryName}</span>
-                        </div>
+                        {item.categoryId === "combos" ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                              <Package size={11} className="text-amber-700" />
+                              <span>COMBO PACKAGE</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <FoodIcon nameOrId={item.categoryId || item.categoryName} className="w-4 h-4 shrink-0" />
+                            <span>{item.categoryName}</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Diet & Badge */}
@@ -408,6 +430,14 @@ export default function AdminMenuPage() {
           </div>
         </div>
       )}
+
+      {/* CREATE COMBO PACKAGE MODAL */}
+      <CreateComboModal
+        isOpen={isCreateComboOpen}
+        onClose={() => setIsCreateComboOpen(false)}
+        menuItems={items}
+        onComboCreated={fetchMenu}
+      />
     </AdminLayout>
   );
 }

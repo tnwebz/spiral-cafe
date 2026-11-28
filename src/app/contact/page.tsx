@@ -21,12 +21,12 @@ const contactDetails = [
   {
     icon: Phone,
     title: "Call / Reservations",
-    value: "+91 98765 43210",
+    value: "+91 96291 81283",
   },
   {
     icon: Mail,
     title: "Email Support",
-    value: "contact@spiralcafe.in",
+    value: "spiralcafesp@gmail.com",
   },
 ];
 
@@ -71,7 +71,7 @@ export default function ContactPage() {
             Menu
           </Link>
           <Link
-            href="/offers"
+            href="/menu?category=combos"
             className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
           >
             Combos
@@ -189,7 +189,7 @@ export default function ContactPage() {
               <FaInstagram size={22} />
             </a>
             <a
-              href="https://wa.me/919876543210"
+              href="https://wa.me/919629181283"
               target="_blank"
               rel="noopener noreferrer"
               className="w-12 h-12 bg-cream text-emerald-600 hover:bg-beige transition-all rounded-full flex items-center justify-center shadow-md active:scale-95"

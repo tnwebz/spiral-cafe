@@ -6,7 +6,7 @@ import { Star, Flame, ChefHat, Sparkles, Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
 
-export type BadgeType = "veg" | "non-veg" | "bestseller" | "chef-choice" | "new" | "spicy";
+export type BadgeType = "veg" | "non-veg" | "bestseller" | "chef-choice" | "new" | "spicy" | "popular";
 
 export interface MenuItemCardProps {
   id?: string;
@@ -84,6 +84,11 @@ export default function MenuItemCard({
           {badges.includes("new") && (
             <span className="flex items-center gap-1 bg-accent text-cream text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-md">
               <Sparkles size={10} /> New
+            </span>
+          )}
+          {badges.includes("popular") && (
+            <span className="flex items-center gap-1 bg-amber-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-md">
+              <Flame size={10} /> Popular
             </span>
           )}
           {badges.includes("spicy") && (

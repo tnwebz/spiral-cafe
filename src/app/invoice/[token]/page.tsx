@@ -111,7 +111,7 @@ export default function CustomerInvoicePage() {
             <span>{cafe?.address || "Opposite Government Hospital, Chengalpattu, Tamil Nadu"}</span>
           </p>
           <p className="text-[11px] text-[#52525b] mt-1 font-mono">
-            GSTIN: <strong>{cafe?.gstNumber || "33AAAAA0000A1Z5"}</strong> • Ph: {cafe?.phone || "+91 98765 43210"}
+            GSTIN: <strong>{cafe?.gstNumber || "33AAAAA0000A1Z5"}</strong> • Ph: {cafe?.phone || "+91 96291 81283"}
           </p>
         </div>
 

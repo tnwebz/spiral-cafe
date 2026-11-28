@@ -30,6 +30,7 @@ export const CATEGORY_OPTIONS = [
   { id: "shakes", name: "Shakes" },
   { id: "speciality", name: "Speciality" },
   { id: "baristazz-special", name: "Baristazz Special" },
+  { id: "combos", name: "Special Combos" },
 ];
 
 export default function AddMenuItemPage() {

@@ -122,7 +122,6 @@ export default function Home() {
                 }
                 title="Explore Categories"
                 subtitle="Discover our handcrafted cafe favorites"
-                showCombosOption={true}
               />
             </div>
           </>

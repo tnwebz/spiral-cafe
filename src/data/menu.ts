@@ -1090,5 +1090,56 @@ export const menuData: MenuCategory[] = [
         "description": "Crisp botanical tonic water stirred with fresh cucumber ribbons and lime peel."
       }
     ]
+  },
+  {
+    "id": "combos",
+    "name": "Special Combos",
+    "icon": "🍱",
+    "heroImage": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?q=80&w=800&auto=format&fit=crop",
+    "description": "Value-packed combo packages with multiple dishes handcrafted for sharing.",
+    "items": [
+      {
+        "id": "combo-1",
+        "name": "The Smash & Dip Combo",
+        "price": 349,
+        "originalPrice": 450,
+        "rating": 4.9,
+        "reviewsCount": 380,
+        "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=600&auto=format&fit=crop",
+        "badges": [
+          "non-veg",
+          "bestseller"
+        ],
+        "description": "Includes: 1 Oklahoma Chicken / Mushroom Smash • 1 Drippy Cheese Fries • 1 Iced Latte or Cooler"
+      },
+      {
+        "id": "combo-2",
+        "name": "Rooftop Wings & Sando Feast",
+        "price": 599,
+        "originalPrice": 780,
+        "rating": 4.9,
+        "reviewsCount": 420,
+        "image": "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?q=80&w=600&auto=format&fit=crop",
+        "badges": [
+          "non-veg",
+          "chef-choice"
+        ],
+        "description": "Includes: 1 Garlic Parmesan Wings (6 pcs) • 1 Southside Chick / French Onion Sando • 1 Loaded AF Fries • 2 Shakes or Coolers"
+      },
+      {
+        "id": "combo-3",
+        "name": "Sando & Cold Brew Delight",
+        "price": 299,
+        "originalPrice": 410,
+        "rating": 4.8,
+        "reviewsCount": 290,
+        "image": "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?q=80&w=600&auto=format&fit=crop",
+        "badges": [
+          "veg",
+          "popular"
+        ],
+        "description": "Includes: 1 Mushroom & Mayhem or Egg & Melt Sando • 1 Americano or Peach Iced Tea"
+      }
+    ]
   }
 ];

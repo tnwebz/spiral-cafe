@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, UtensilsCrossed, Clock, Tag, MapPin } from "lucide-react";
+import { Home, UtensilsCrossed, Clock, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
 
@@ -66,18 +66,6 @@ export default function BottomNav() {
           </button>
         )}
 
-        <Link
-          href="/offers"
-          className={cn(
-            "flex flex-col items-center justify-center gap-1 min-w-[54px] py-1 px-2 rounded-2xl transition-all duration-200",
-            pathname.startsWith("/offers") ? "text-[#B73F1D] font-bold" : "text-[#8C5E51] hover:text-[#4A2117]"
-          )}
-        >
-          <div className={cn("p-1.5 rounded-xl transition-all", pathname.startsWith("/offers") && "bg-[#B73F1D]/10")}>
-            <Tag size={19} strokeWidth={pathname.startsWith("/offers") ? 2.5 : 1.9} />
-          </div>
-          <span className="text-[10px] font-semibold tracking-tight leading-none">Combos</span>
-        </Link>
 
         <Link
           href="/contact"

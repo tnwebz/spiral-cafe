@@ -441,7 +441,7 @@ function MenuContent() {
                 Menu
               </Link>
               <Link
-                href="/offers"
+                href="/menu?category=combos"
                 className="px-3.5 py-1.5 rounded-xl text-xs font-heading font-bold text-[#8C5E51] hover:text-[#4A2117] hover:bg-muted/60 transition-colors"
               >
                 Combos
